@@ -1,7 +1,3 @@
-# [mcp-local harness] feature: gitignore-complemento | plano: 811367b7 | 2026-08-03 13:37:06
-# Gitignore completo cobrindo: mcp-local, Python, Node/frontend, Docker, testes e segredos
-# Ferramenta de apoio ao desenvolvimento (repo proprio, nao faz parte do produto)
-mcp-local/
 
 # Ambientes virtuais Python
 .venv/
