@@ -1,0 +1,12 @@
+# Ambiente virtual criado pelo uv
+.venv/
+
+# Backups automáticos gerados pelo start.py
+*.json.bak
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Configuração local de IDE (opcional)
+.vscode/
