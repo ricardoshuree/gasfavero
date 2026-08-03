@@ -10,3 +10,16 @@ __pycache__/
 
 # Configuração local de IDE (opcional)
 .vscode/
+
+# ============================================================
+# Harness de controle de mudanças (novo)
+# ============================================================
+# mcp_state.json guarda os planos de mudança (pending/approved/rejected).
+# É estado transitório de sessão de trabalho — não precisa ir pro histórico
+# do Git, então fica de fora.
+mcp_state.json
+
+# mcp_audit.jsonl é o log append-only de todo evento do harness (propose,
+# approve, reject, write). Ao contrário do state, ESTE ARQUIVO É VERSIONADO
+# de propósito — é o histórico de auditoria de quem pediu o quê. Por isso
+# NÃO está listado aqui. Não adicione mcp_audit.jsonl a este .gitignore.
