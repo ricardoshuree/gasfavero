@@ -6,16 +6,29 @@ uso com o Claude Desktop. Cada projeto (ex: `erp-distribuidora`,
 com um `config.yaml` próprio. Isso permite que vários projetos rodem em
 paralelo, cada um aparecendo com um nome distinto dentro do Claude Desktop.
 
+Toda escrita de arquivo passa por um **harness de controle de mudanças**:
+nenhuma alteração acontece sem um plano prévio (feature + arquivos
+envolvidos) aprovado explicitamente. Veja a seção
+[Harness de controle de mudanças](#harness-de-controle-de-mudanças) abaixo.
+
 ## Estrutura
 
 ```
 mcp-local-erp/
-├── config.yaml      # nome do projeto e raiz de arquivos que o servidor enxerga
-├── server.py         # define as ferramentas (read_file, write_file, list_dir)
-├── start.py          # registra este servidor no Claude Desktop
-├── pyproject.toml    # dependências (fastmcp, pyyaml, colorama)
+├── config.yaml         # nome do projeto e raiz de arquivos que o servidor enxerga
+├── server.py            # define as ferramentas (read_file, write_file, list_dir, harness)
+├── change_control.py    # implementação do harness: planos, aprovação, log de auditoria
+├── start.py             # registra este servidor no Claude Desktop
+├── pyproject.toml       # dependências (fastmcp, pyyaml, psutil)
+├── mcp_audit.jsonl       # log append-only de todo evento do harness (versionado no Git)
+├── mcp_state.json        # planos pendentes/aprovados (transitório — não versionado)
 └── README.md
 ```
+
+`mcp_state.json` e `mcp_audit.jsonl` ficam **sempre dentro desta pasta**
+(`mcp-local-erp/`), nunca dentro do projeto que o servidor gerencia — mesmo
+quando `root_path` aponta para fora dela. Veja o porquê em
+[Arquivos gerados pelo harness](#arquivos-gerados-pelo-harness).
 
 ---
 
@@ -64,8 +77,20 @@ Isso cria um `.venv` local e instala tudo conforme o `pyproject.toml`.
 Edite o `config.yaml` antes de registrar:
 
 ```yaml
-project_name: mcp-local-erp   # nome único — é o que aparece no Claude Desktop
-root_path: ../                 # pasta raiz do projeto que este servidor pode ler/escrever
+project_name: mcp-local-erp    # nome único — é o que aparece no Claude Desktop
+environment: dev                # dev | prod — identifica o ambiente na auditoria
+root_path: ../                  # pasta raiz do projeto que este servidor pode ler/escrever
+allowed_extensions:              # extensões que write_file tem permissão de gravar
+  - .py
+  - .tsx
+  - .ts
+  - .json
+  - .yaml
+  - .md
+blocked_dirs:                     # diretórios nunca acessíveis, nem para leitura
+  - node_modules
+  - .git
+  - .venv
 ```
 
 `mcp-local-erp` é o nome padrão de fábrica do pacote. Ao colocar esta pasta
@@ -73,6 +98,11 @@ dentro de um projeto específico (`erp-distribuidora`, `erp-consultorio`,
 `erp-confeccao`...), troque `project_name` para um nome único por projeto —
 é o que diferencia os servidores quando mais de um estiver rodando ao mesmo
 tempo no Claude Desktop.
+
+`root_path` define o escopo de `read_file` / `list_dir` / `write_file` — ou
+seja, o projeto que este servidor enxerga e pode alterar. Isso é
+propositalmente diferente de onde o harness guarda seu próprio estado (ver
+seção seguinte).
 
 ---
 
@@ -129,6 +159,118 @@ definido em `project_name`.
 
 ---
 
+## Harness de controle de mudanças
+
+Nenhuma escrita acontece "direto". Toda alteração de arquivo passa
+obrigatoriamente por um plano prévio, revisado por você, antes de o
+conteúdo ser gravado. Isso dá rastreabilidade clara do propósito de cada
+mudança e impede que várias alterações aconteçam sem revisão.
+
+### O processo, passo a passo
+
+```
+ ┌──────────────────────────┐
+ │ 1. propose_change         │  Claude declara: feature, descrição do
+ │    (Claude chama)         │  propósito, e a lista exata de paths que
+ │                           │  serão criados/alterados.
+ └────────────┬──────────────┘
+              │  grava plano com status "pending"
+              │  em mcp_state.json (dentro de mcp-local-erp/)
+              ▼
+ ┌──────────────────────────┐
+ │ 2. revisão humana          │  Você lê o plano exibido na conversa:
+ │    (você decide)          │  feature, arquivos, propósito.
+ └────────────┬──────────────┘
+              │
+      ┌───────┴────────┐
+      │                │
+   aprovado          rejeitado
+      │                │
+      ▼                ▼
+ ┌───────────────┐  ┌───────────────────┐
+ │ 3. approve_    │  │ reject_change      │
+ │    change      │  │ (Claude chama)      │
+ │ (Claude chama) │  │ plano vira          │
+ │ plano vira     │  │ "rejected" — fim    │
+ │ "approved"     │  └───────────────────┘
+ └───────┬────────┘
+         ▼
+ ┌────────────────────────────────────┐
+ │ 4. write_file(rel_path, content,    │
+ │    plan_id, feature, description)   │
+ │                                     │
+ │  Antes de gravar, verifica:         │
+ │    - rel_path é um arquivo interno  │
+ │      reservado do harness? recusa   │
+ │    - plan_id existe?                │
+ │    - status == "approved"?          │
+ │    - rel_path está na lista de      │
+ │      files do plano?                │
+ │                                     │
+ │  Se qualquer checagem falhar        │
+ │  → recusa com erro, nada é gravado. │
+ │                                     │
+ │  Se tudo OK:                        │
+ │    - injeta comentário de           │
+ │      rastreabilidade no topo do     │
+ │      arquivo (feature, plano, data) │
+ │    - grava o arquivo (dentro de     │
+ │      ROOT, o projeto gerenciado)    │
+ │    - registra o evento em           │
+ │      mcp_audit.jsonl (dentro de     │
+ │      mcp-local-erp/)                │
+ └────────────────────────────────────┘
+```
+
+### Ferramentas do harness
+
+| Ferramenta MCP | Quando usar | Efeito |
+|---|---|---|
+| `propose_change(feature, description, files)` | Antes de qualquer alteração | Cria plano `pending`, devolve `plan_id` |
+| `approve_change(plan_id)` | Depois que você aprovar na conversa | Plano vira `approved` |
+| `reject_change(plan_id)` | Se você recusar o plano proposto | Plano vira `rejected` |
+| `list_pending_changes(status)` | Para conferir o que está pendente/aprovado/rejeitado | Lista os planos filtrados por status |
+| `write_file(rel_path, content, plan_id, feature, description)` | Só depois do plano aprovado | Grava o arquivo com comentário de rastreabilidade; recusa se o plano não cobrir `rel_path` |
+| `read_file(rel_path)` | A qualquer momento | Leitura livre, sem exigir plano (não altera nada) |
+| `list_dir(rel_path)` | A qualquer momento | Leitura livre da árvore de arquivos |
+
+### Arquivos gerados pelo harness
+
+- **`mcp_state.json`** — os planos e seus status (`pending` / `approved` /
+  `rejected`) e quais escritas cada plano já cobriu. Não é versionado
+  (está no `.gitignore`): é estado de trabalho, não histórico.
+- **`mcp_audit.jsonl`** — log append-only, uma linha JSON por evento
+  (`propose`, `approve`, `reject`, `write`), com timestamp. **Este arquivo
+  é versionado** — é o seu histórico auditável de quem pediu e aprovou o
+  quê, mesmo depois de o plano ter saído do `mcp_state.json`.
+
+Os dois arquivos vivem sempre em `HARNESS_ROOT`
+(`Path(__file__).parent` em `server.py`, ou seja, a própria pasta
+`mcp-local-erp/`) — **não** em `ROOT` (`root_path` do `config.yaml`, que é
+o projeto gerenciado, ex: `erp-distribuidora/`). Essa separação é
+intencional: `ROOT` muda de projeto para projeto e pode até apontar para
+fora desta pasta, mas o bookkeeping do harness precisa ficar contido e
+previsível, sempre no mesmo lugar, independente de onde `root_path` aponte.
+Por isso também `write_file` recusa qualquer tentativa de gravar em um
+arquivo chamado `mcp_state.json` ou `mcp_audit.jsonl` — mesmo com plano
+aprovado — para que o próprio fluxo de aprovação não possa corromper seu
+próprio estado.
+
+### Exemplo de recusa (proteção funcionando)
+
+Se o Claude tentar escrever em um arquivo fora do escopo aprovado:
+
+```
+ValueError: Arquivo 'app/models/pagamento.py' não está no escopo
+declarado do plano 'a1b2c3d4' (['server.py', 'change_control.py']).
+Proponha um novo plano cobrindo este arquivo.
+```
+
+Isso é o comportamento esperado: qualquer expansão de escopo exige um novo
+plano — e uma nova aprovação sua.
+
+---
+
 ## Reaproveitando em projetos futuros
 
 Esta pasta é autocontida — nada nela depende de algo externo. Para usar em
@@ -171,6 +313,15 @@ executável do `uv` no seu próprio PATH (que pode ser mais restrito que o
 do terminal). O `start.py` já resolve o caminho absoluto do `uv`
 automaticamente; se o aviso aparecer na tela, rode `where uv` e confirme
 o caminho manualmente no `claude_desktop_config.json`.
+
+**`write_file` recusa com "Plano não encontrado" ou "não aprovado":** o
+harness está funcionando como esperado — chame `propose_change` (e,
+depois da sua aprovação, `approve_change`) antes de tentar escrever.
+
+**`write_file` recusa dizendo que o arquivo é "interno do harness":**
+também esperado — `mcp_state.json` e `mcp_audit.jsonl` nunca podem ser
+alvo de `write_file`, mesmo com plano aprovado; são gerenciados só pelas
+funções internas de `change_control.py`.
 
 ---
 
