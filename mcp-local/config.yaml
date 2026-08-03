@@ -1,0 +1,16 @@
+# Para inicializar diariamente o MCP, execute: uv run start.py
+
+project_name: mcp-local-erp    # nome distinto por instância
+environment: dev
+root_path: ../                 # raiz do projeto que este MCP enxerga
+allowed_extensions:
+  - .py
+  - .tsx
+  - .ts
+  - .json
+  - .yaml
+  - .md
+blocked_dirs:
+  - node_modules
+  - .git
+  - .venv
