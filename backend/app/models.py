@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: gestao-roles-crud | plano: 9728719f | 2026-08-04 18:30:08
-# Adiciona user_count a RolePublic (contagem de usuários vinculados, usada pela UI antes de apagar) e os models RoleCreate/RoleUpdate para o novo CRUD de roles
+# [mcp-local harness] feature: fix-role-delete-cascade | plano: 880b7b1a | 2026-08-04 19:07:48
+# Adiciona cascade_delete=True em Role.user_roles, Role.permissions e Module.permissions -- corrige o 503 no DELETE de roles/módulos com vínculos, usando o mesmo padrão já usado em User.items/User.roles
 import uuid
 from datetime import UTC, datetime
 
@@ -21,8 +21,19 @@ class Role(SQLModel, table=True):
     name: str = Field(unique=True, max_length=100)
     description: str | None = Field(default=None, max_length=255)
 
-    user_roles: list["UserRole"] = Relationship(back_populates="role")
-    permissions: list["RolePermission"] = Relationship(back_populates="role")
+    # cascade_delete=True -- sem isso, o SQLAlchemy tenta zerar a FK das
+    # linhas filhas (role_permission.role_id / user_role.role_id) antes
+    # de apagar a Role, e como essa FK é parte da chave primária (NOT
+    # NULL), a operação quebra com IntegrityError sempre que a role tem
+    # ao menos uma permissão ou usuário vinculado (bug encontrado em
+    # teste real: DELETE /roles/{id} retornava 503 para roles com
+    # RolePermission cadastrado, mas funcionava para roles "vazias").
+    user_roles: list["UserRole"] = Relationship(
+        back_populates="role", cascade_delete=True
+    )
+    permissions: list["RolePermission"] = Relationship(
+        back_populates="role", cascade_delete=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +45,9 @@ class Module(SQLModel, table=True):
     name: str = Field(unique=True, max_length=100)
     description: str | None = Field(default=None, max_length=255)
 
-    permissions: list["RolePermission"] = Relationship(back_populates="module")
+    permissions: list["RolePermission"] = Relationship(
+        back_populates="module", cascade_delete=True
+    )
 
 
 # ---------------------------------------------------------------------------
