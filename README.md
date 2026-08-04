@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-infra-checklist-update-2 | plano: 4419a545 | 2026-08-03 22:36:31
-Checklist item 6 marcado, dívida técnica de percent-encoding documentada
+[mcp-local harness] feature: docs-dockerfile-warning | plano: dcfb9694 | 2026-08-03 23:18:32
+Documenta o problema do Dockerfile monorepo e a correção de forçar Railpack no Railway
 -->
 # gasfavero
 
@@ -36,6 +36,7 @@ erp-gasfavero/
 │   │   ├── api/routes/         ← endpoints FastAPI
 │   │   ├── core/               ← config, db, security
 │   │   └── models.py           ← todos os modelos SQLModel
+│   ├── Dockerfile              ← NÃO usar no Railway (ver seção de infra)
 │   └── tests/
 │       └── rbac/               ← testes de RBAC (SQLite, sem Docker)
 ├── frontend/
@@ -174,6 +175,20 @@ os passos são concluídos.
   `backend/app/core/config.py` para aplicar `urllib.parse.quote_plus`
   na senha antes de montar a URI, evitando essa armadilha nos próximos
   ERPs independente de como a senha for gerada.
+- **`backend/Dockerfile` não deve ser usado no Railway**: esse arquivo
+  veio do `fastapi/full-stack-fastapi-template` original e builda
+  **frontend e backend juntos numa única imagem** (estágio Bun compila
+  o React, copia pro estágio Python, serve tudo de um container só) —
+  o contexto de build esperado é a raiz do repositório, não `backend/`.
+  Isso contraria a arquitetura decidida (Vercel para frontend, Railway
+  só para backend, deploys independentes). O Railway detecta esse
+  Dockerfile automaticamente e tenta usá-lo em vez do Railpack, o que
+  quebra o build. **Correção**: em Railway → Settings → Build →
+  Builder, forçar manualmente `Railpack` em vez de `Dockerfile`. O
+  arquivo em si foi mantido no repo (não removido) por poder ser útil
+  no futuro caso o projeto migre para deploy single-container via
+  Docker Compose — mas hoje é um artefato órfão em relação ao deploy
+  real usado.
 
 ### Checklist
 
@@ -218,6 +233,8 @@ os passos são concluídos.
 No `.env` local e nas variáveis de ambiente do Railway (backend):
 
 ```env
+PROJECT_NAME=gasfavero
+STACK_NAME=gasfavero
 SUPABASE_URL=https://<seu-projeto>.supabase.co
 SUPABASE_ANON_KEY=<publishable-key>
 SUPABASE_SERVICE_ROLE_KEY=<secret-key>
@@ -247,8 +264,16 @@ definidas nas migrations herdadas do `erp-core-template`. O
 
 1. Acesse https://railway.app e conecte a conta GitHub
 2. New Project → Deploy from GitHub repo → `ricardoshuree/gasfavero`
-3. Configure as variáveis de ambiente (mesmas do `.env`, ver acima)
-4. Root directory do deploy: `backend/`
+3. No serviço criado, em **Settings → Source → Root Directory**,
+   define `backend`
+4. Em **Settings → Build → Builder**, force `Railpack` — o Railway
+   detecta o `backend/Dockerfile` automaticamente e tenta usá-lo, o
+   que quebra o build (ver dívida técnica acima)
+5. Em **Settings → Deploy → Custom Start Command**:
+   `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+6. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
+   **Variables → Raw Editor**
+7. **Networking → Generate Domain** para obter a URL pública
 
 ---
 
