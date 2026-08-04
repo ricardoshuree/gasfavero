@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-supabase-auth-migration | plano: 39dd17b5 | 2026-08-04 00:46:04
-Documenta a migracao para Supabase Auth feita autonomamente, passos manuais pendentes, e o plano de Vercel para quando o usuario retornar
+[mcp-local harness] feature: docs-readme-template-portability | plano: fde3cd13 | 2026-08-04 10:28:39
+Reescreve README com status atualizado (tudo testado e funcionando) e nova secao central de portabilidade para o erp-core-template
 -->
 # gasfavero
 
@@ -10,10 +10,14 @@ com o [`mcp-local`](https://github.com/ricardoshuree/mcp-local) embarcado
 como subtree em `mcp-local/` — monólito autocontido, sem dependência de
 outros projetos ativos.
 
-**Status**: backend em produção no Railway, respondendo em
-`https://backend-gasfavero.up.railway.app/docs`. Migração de auth para
-Supabase (login Google) implementada em código mas **NÃO commitada nem
-testada ponta a ponta** — ver seção dedicada abaixo antes de mexer.
+**Status**: backend em produção no Railway
+(`https://backend-gasfavero.up.railway.app/docs`), frontend em produção
+na Vercel (`https://gasfavero.vercel.app`). **RBAC e Supabase Auth (login
+local + Google OAuth) testados de ponta a ponta em produção e
+funcionando.** Este README documenta a jornada completa — inclusive os
+bugs encontrados e corrigidos — para servir de base ao backport pro
+`erp-core-template` (ver seção dedicada abaixo) e como checklist para os
+próximos ERPs (`erp-consultorio`, confecção).
 
 ---
 
@@ -24,7 +28,7 @@ testada ponta a ponta** — ver seção dedicada abaixo antes de mexer.
 | Backend | Python 3.14, FastAPI, SQLModel, Alembic, Argon2 |
 | Frontend | React, TypeScript, Tailwind CSS, shadcn/ui, TanStack Router |
 | Banco | PostgreSQL via Supabase (produção) / SQLite in-memory (testes) |
-| Auth | Supabase Auth (Email + Google OAuth) |
+| Auth | Supabase Auth (Email + Google OAuth) — testado e funcionando |
 | Deploy | Vercel (frontend) + Railway (backend, via Dockerfile) |
 | CI/CD | GitHub Actions |
 | Dev | uv, mcp-local (embarcado, servidor MCP isolado deste projeto) |
@@ -39,28 +43,112 @@ erp-gasfavero/
 │   ├── app/
 │   │   ├── alembic/versions/   ← migrations de banco (inclui RBAC)
 │   │   ├── api/routes/         ← endpoints FastAPI
-│   │   ├── core/               ← config, db, security, supabase_auth (novo)
-│   │   └── models.py           ← todos os modelos SQLModel
-│   ├── Dockerfile              ← usado no Railway (backend isolado, ver infra)
+│   │   ├── core/               ← config, db, security, supabase_auth
+│   │   └── models.py           ← todos os modelos SQLModel (inclui RBAC)
+│   ├── Dockerfile              ← usado no Railway (backend isolado)
 │   ├── Dockerfile.monorepo-unused ← NÃO usar (builda frontend+backend juntos)
-│   ├── .python-version         ← 3.14, duplicado da raiz (ver seção de infra)
-│   └── tests/
-│       └── rbac/               ← testes de RBAC (SQLite, sem Docker)
+│   ├── .python-version         ← 3.14, duplicado da raiz (Railpack precisa)
+│   └── tests/rbac/              ← testes de RBAC (SQLite, sem Docker)
 ├── frontend/
+│   ├── vite.config.ts          ← outDir: "dist" (NÃO o default do template original)
+│   ├── vercel.json             ← rewrite catch-all p/ SPA routing
 │   └── src/
-│       ├── components/Sidebar/ ← menu lateral dinâmico por role
 │       ├── hooks/
 │       │   ├── useAuth.ts      ← autenticação (local + Google/Supabase)
-│       │   └── usePermissions.ts ← permissões por módulo
-│       ├── lib/supabase.ts     ← cliente Supabase (novo, só auth)
-│       └── routes/             ← páginas do app
-├── .github/workflows/
-│   └── test-rbac.yml           ← CI: roda testes RBAC a cada push/PR
-├── .env.example                ← variáveis necessárias (sem valores reais)
-├── activate.ps1                ← ativa venv do backend no Windows/VS Code
-└── mcp-local/                  ← servidor MCP deste projeto (versionado, subtree)
-    └── config.yaml             ← project_name: mcp-erp-gasfavero
+│       │   └── usePermissions.ts ← permissões por módulo (usa OpenAPI.BASE)
+│       ├── lib/supabase.ts     ← cliente Supabase (só auth, dados via backend)
+│       └── routes/login.tsx    ← form local + botão "Continuar com Google"
+├── .github/workflows/test-rbac.yml ← CI: roda testes RBAC a cada push/PR
+├── .env.example                 ← variáveis necessárias (sem valores reais)
+├── activate.ps1                 ← ativa venv do backend no Windows/VS Code
+└── mcp-local/                   ← servidor MCP deste projeto (versionado, subtree)
+    └── config.yaml               ← project_name: mcp-erp-gasfavero
 ```
+
+---
+
+## ⭐ O que é portável pro `erp-core-template` vs. o que fica só aqui
+
+Esta seção existe pra guiar o backport. Regra geral: **vai pro template
+tudo que é comportamento/arquitetura reaproveitável; fica aqui tudo que
+é credencial ou identidade deste ERP específico.**
+
+### Vai pro template (arquivos inteiros ou trechos específicos)
+
+| Arquivo | O que levar | Por quê é genérico |
+|---|---|---|
+| `backend/pyproject.toml` | Dependência `cryptography` adicionada em `dependencies` | `PyJWKClient` (usado por `supabase_auth.py`) exige `cryptography` pra validar assinaturas ES256/RS256. Sem isso, qualquer ERP que ativar Supabase Auth quebra em runtime. |
+| `backend/app/core/config.py` | Campos `SUPABASE_URL: str`, `SUPABASE_ANON_KEY: str \| None`, `SUPABASE_SERVICE_ROLE_KEY: str \| None` na classe `Settings` | Sem isso, `Settings()` não expõe esses valores como atributo (mesmo estando no `.env`, porque `extra="ignore"`), e `supabase_auth.py` quebra com `AttributeError` **no import do módulo** — derruba o backend inteiro no boot. Foi o bug mais sério desta sessão (CrashLoop no Railway). |
+| `backend/app/core/supabase_auth.py` | Arquivo inteiro (novo) | Verificação de JWT do Supabase via JWKS, sem segredo compartilhado. Reaproveitável 100%, não tem nada específico do gasfavero. |
+| `backend/app/api/deps.py` | Lógica de `get_current_user` com fallback aditivo (JWT local → JWT Supabase) e `_get_or_create_user_from_supabase` | Auto-provisiona usuário local por e-mail quando login é via Google, sem role nenhuma (admin atribui depois). Comportamento correto para qualquer ERP. |
+| `backend/app/models.py` | Models de RBAC (`Role`, `Module`, `RolePermission`, `UserRole`, `ModulePermission`, `UserPermissions`) — **conferir se o template já tem, evitar duplicar** | Já nasceu no template numa sessão anterior (tag `v1.0.0`); confirmar que a versão do template está alinhada com a do gasfavero antes de sobrescrever. |
+| `backend/app/core/db.py` | Seed idempotente (`DEFAULT_ROLES`, `DEFAULT_MODULES`, `init_db`) — mesma ressalva acima | Idem — provavelmente já existe no template, só validar consistência. |
+| `backend/app/alembic/versions/..._add_rbac_tables.py` | Migration RBAC — **cuidado com `down_revision`** | Só copiar se o template ainda não tiver; se tiver, comparar hash de revisão em vez de sobrescrever, para não quebrar a cadeia de migrations. |
+| `frontend/vite.config.ts` | `build.outDir: "dist"` (em vez do `../backend/app/frontend` herdado do template original) | O template original assume deploy single-container (FastAPI servindo o frontend). Nossa arquitetura é Vercel+Railway separados — outDir errado é a causa raiz de "Deployment Failed" na Vercel. **Esse é o bug mais fácil de repetir sem perceber.** |
+| `frontend/vercel.json` | Arquivo inteiro (novo): rewrite catch-all `/(.*)"→ "/index.html"` | Toda SPA com client-side routing (TanStack Router, React Router, etc.) precisa disso, senão qualquer rota acessada direto (refresh, link direto) retorna 404 da própria Vercel. |
+| `frontend/src/lib/supabase.ts` | Arquivo inteiro (novo) | Cliente Supabase JS só para auth. Reaproveitável 100%. |
+| `frontend/src/hooks/useAuth.ts` | `loginWithGoogle()`, `useSupabaseSessionSync()` | Sincroniza sessão Supabase com o mesmo `localStorage["access_token"]` do resto do app — nenhum outro código precisa saber qual método de login foi usado. |
+| `frontend/src/hooks/usePermissions.ts` | Uso de `OpenAPI.BASE` em vez de `fetch("/api/v1/...")` relativo | Caminho relativo só funciona se frontend e backend estiverem no mesmo domínio. Em qualquer arquitetura Vercel+Railway (domínios diferentes), a chamada relativa sempre falha silenciosamente. |
+| `frontend/src/routes/login.tsx` | Botão "Continuar com Google" acima do form existente | Puramente de UI, sem nada específico do gasfavero. |
+| `frontend/package.json` | Dependência `@supabase/supabase-js` | — |
+
+### Fica de fora do template (específico deste projeto, nunca commitar/portar)
+
+| Item | Onde vive | Por quê é local |
+|---|---|---|
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (valores reais) | `.env` local + Variables do Railway | Projeto Supabase é um por ERP. |
+| `BACKEND_CORS_ORIGINS` (valor real: `https://gasfavero.vercel.app,...`) | Variables do Railway + `.env` local | Domínio Vercel é único por ERP. |
+| Site URL / Redirect URLs configurados no Supabase Auth | Painel do Supabase (`Authentication → URL Configuration`) | Não é código — é configuração de infraestrutura, um Supabase por ERP. |
+| Client ID / Client Secret do Google OAuth | Painel do Supabase (`Authentication → Providers → Google`) | Um projeto GCP por ERP (isolamento de credenciais). |
+| `POSTGRES_*`, `FIRST_SUPERUSER*`, `SECRET_KEY` | `.env` local + Variables do Railway | Óbvio — credenciais reais nunca vão pro template. |
+| Nome do domínio Railway (`backend-gasfavero.up.railway.app`) | Configuração do Railway | Um domínio por ERP. |
+| Módulos de negócio específicos (ex: futuros `vendas`, `estoque-gas`) | Migrations locais deste repo | Módulos de RBAC específicos do domínio de negócio do gás, não fazem sentido num template genérico. |
+
+### ⚠️ Pegadinhas de configuração (não aparecem em `git diff`, mas quebram tudo)
+
+Estas não são bugs de código — são passos de configuração manual que
+**qualquer novo ERP vai precisar repetir**, porque vivem fora do
+versionamento (painéis do Supabase/Railway/Vercel). Documentado aqui
+porque foi a parte mais cara (em tempo) de debugar hoje:
+
+1. **Provider Google no Supabase vem desabilitado por padrão.** Mesmo
+   com o projeto GCP configurado corretamente, `Authentication →
+   Providers → Google` precisa ser explicitamente ativado (toggle
+   "Enable Sign in with Google") com Client ID e Client Secret colados
+   nos campos — sem isso, o botão de login redireciona mas o Google
+   OAuth nunca completa.
+2. **Site URL do Supabase Auth nasce como `http://localhost:3000`.**
+   Precisa ser trocado pro domínio real de produção
+   (`Authentication → URL Configuration → Site URL`).
+3. **Redirect URLs allowlist nasce vazia.** Adicionar pelo menos o
+   domínio de produção e, se quiser cobrir preview deployments da
+   Vercel, um wildcard tipo `https://<projeto>-*-<time>.vercel.app`.
+4. **`BACKEND_CORS_ORIGINS` não é preenchido automaticamente em lugar
+   nenhum.** Sem essa env var no Railway apontando pro domínio real da
+   Vercel, toda chamada do frontend falha com "Network Error" genérico
+   no browser — **mesmo que o backend responda 200 normalmente** (o
+   navegador bloqueia a resposta antes dela chegar no JS por falta de
+   header CORS; só aparece no log do servidor, nunca no da requisição
+   que falhou).
+5. **Depois do primeiro deploy do backend, rodar migrations + seed
+   manualmente é obrigatório** — não acontece sozinho:
+   ```powershell
+   cd backend
+   uv run alembic upgrade head
+   uv run python -m app.initial_data
+   ```
+6. **`mcp-local`'s `write_file` NUNCA deve ser usado em arquivos
+   `.json`** (`package.json`, `vercel.json`, `tsconfig.json`, etc.). A
+   ferramenta injeta automaticamente um comentário de rastreabilidade
+   no formato `# ...` no topo do arquivo — que é inválido em JSON
+   (JSON não suporta comentários) e quebra o parse no build da Vercel
+   (`Could not read package.json: Unexpected token '#'`). Sempre editar
+   `.json` via comando de terminal (PowerShell `Get-Content`/`Set-Content`
+   ou editor), nunca via MCP write.
+7. **Renomear um projeto na Vercel não migra o domínio automaticamente.**
+   O domínio antigo (`<nome-antigo>.vercel.app`) continua sendo o de
+   produção até você editar manualmente em `Settings → Domains` e
+   escolher se quer redirect (307) do domínio antigo pro novo ou removê-lo.
 
 ---
 
@@ -75,95 +163,48 @@ RolePermission → matriz role × módulo com can_read e can_edit
 UserRole       → associação usuário × role
 ```
 
-Roles e módulos padrão criados automaticamente na primeira inicialização:
+Roles e módulos padrão criados automaticamente na primeira inicialização
+(idempotente, seguro rodar N vezes):
 - **Roles**: `admin` (leitura + edição), `editor` (leitura + edição), `viewer` (somente leitura)
 - **Módulos**: `usuarios`, `configuracoes`
 
-O menu lateral do frontend é renderizado dinamicamente com base nas
-permissões do usuário logado. Para adicionar um novo módulo específico
-do negócio (ex: `vendas`, `estoque-gas`):
-1. Crie a migration Alembic inserindo o módulo na tabela `module`
-2. Adicione a entrada em `frontend/src/components/Sidebar/AppSidebar.tsx`
-   no array `MODULE_ITEMS` com o mesmo nome de módulo
+Proteção de rota no backend via `require_module_permission(module_name,
+need_edit=False)` (factory de `Depends` em `deps.py`) — superusuários
+passam direto, os demais precisam de `RolePermission.can_read`/`can_edit`
+no módulo. No frontend, `usePermissions()` consome
+`GET /api/v1/users/me/permissions` e expõe `canRead(module)` /
+`canEdit(module)` para gatear UI e menu lateral.
+
+Para adicionar um novo módulo específico do negócio (ex: `vendas`,
+`estoque-gas`):
+1. Crie a migration Alembic inserindo o módulo na tabela `module` (ou
+   adicione em `DEFAULT_MODULES` em `db.py` se for um módulo padrão)
+2. Proteja as rotas correspondentes com `require_module_permission("vendas")`
+3. Adicione a entrada correspondente no menu lateral do frontend
 
 ---
 
-## Migração para Supabase Auth (login Google) — trabalho em andamento
+## Autenticação — local + Google OAuth (Supabase Auth)
 
-**IMPORTANTE: nada disso foi commitado ou pushado.** São edições locais
-feitas via MCP enquanto você estava fora — sentam no disco como
-alterações não commitadas até você revisar. Como o Railway só faz
-auto-deploy em push pra `main`, a produção atual não foi tocada.
+Testado e funcionando em produção. Fluxo:
 
-### O que foi implementado
+- **Login local** (e-mail/senha): `POST /api/v1/login/access-token`
+  gera um JWT assinado com `SECRET_KEY` local — fluxo original do
+  template, inalterado.
+- **Login Google**: `useAuth().loginWithGoogle()` chama
+  `supabase.auth.signInWithOAuth({ provider: "google", redirectTo:
+  window.location.origin })`. O Supabase redireciona pro Google, volta
+  com o consent, e a sessão resultante é sincronizada com
+  `localStorage["access_token"]` via `useSupabaseSessionSync()`.
+- **Backend**: `get_current_user` em `deps.py` tenta decodificar o
+  token como JWT local primeiro; se falhar, tenta validar como JWT do
+  Supabase via JWKS (`verify_supabase_token`, em `supabase_auth.py`).
+  Um usuário Google que ainda não existe localmente é criado por
+  e-mail, **sem role nenhuma** — um admin precisa atribuir role
+  manualmente pela tela "Usuários" antes do usuário ter qualquer
+  permissão além do próprio perfil.
 
-- **`backend/app/core/supabase_auth.py`** (novo): verifica JWTs
-  emitidos pelo Supabase Auth via JWKS (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
-  — sem precisar de segredo compartilhado, só a `SUPABASE_URL` que já
-  está configurada.
-- **`backend/app/api/deps.py`**: `get_current_user` agora tenta o JWT
-  local primeiro (fluxo original, `FIRST_SUPERUSER` e qualquer login
-  por senha continuam funcionando sem mudança nenhuma) e, só se isso
-  falhar, tenta validar como token do Supabase. Um usuário autenticado
-  via Google que ainda não existe localmente é criado por e-mail, **sem
-  nenhuma role atribuída** — precisa de um admin atribuir role antes de
-  ter qualquer permissão além do próprio perfil.
-- **`frontend/src/lib/supabase.ts`** (novo): cliente Supabase JS, só
-  para autenticação — dados de negócio continuam passando pelo backend.
-- **`frontend/src/hooks/useAuth.ts`**: adiciona `loginWithGoogle()` e
-  um listener que sincroniza a sessão do Supabase com o mesmo
-  `localStorage["access_token"]` que o resto do app já usa — nenhum
-  outro arquivo (client OpenAPI, `usePermissions`, etc.) precisou mudar.
-- **`frontend/src/routes/login.tsx`**: botão "Continuar com Google"
-  acima do form de e-mail/senha existente, que continua intacto.
-- **`frontend/package.json`**: adiciona `@supabase/supabase-js`.
-
-### O que falta — passos manuais antes de usar
-
-1. **`backend/pyproject.toml`** — não pôde ser editado (extensão `.toml`
-   bloqueada pelo filtro do `mcp-local`, mesma trava de segurança já
-   documentada pro `.env`). Adicionar manualmente à lista de
-   `dependencies`:
-   ```toml
-   "cryptography>=42.0.0,<45.0.0",
-   ```
-   (necessário pro `PyJWKClient` verificar assinaturas ES256)
-2. **`frontend/.env.example`** — também não pôde ser criado (mesmo
-   motivo, extensão `.example`). Adicionar manualmente ao `.env` real
-   do frontend (`frontend/.env`, criar se não existir):
-   ```env
-   VITE_API_URL=http://localhost:8000
-   VITE_SUPABASE_URL=<mesma SUPABASE_URL do backend>
-   VITE_SUPABASE_ANON_KEY=<mesma SUPABASE_ANON_KEY do backend>
-   ```
-3. **Instalar as dependências novas**:
-   ```powershell
-   cd backend
-   uv sync
-   cd ../frontend
-   bun install   # ou npm install
-   ```
-4. **Testar localmente antes de commitar**: sobe backend e frontend
-   local (`uv run uvicorn app.main:app --reload` +
-   `bun dev`/`npm run dev`), clica em "Continuar com Google" na tela de
-   login, confirma que:
-   - O redirect pro Google e de volta funciona
-   - Um `User` novo aparece na tabela `user` do Postgres (Supabase
-     Table Editor) com o e-mail correto
-   - `GET /api/v1/users/me` responde com esse usuário
-   - Login local (e-mail/senha, `FIRST_SUPERUSER`) continua funcionando
-     normalmente — não deve ter regressão nenhuma
-5. **Conferir os claims do payload real**: `supabase_auth.py` assume
-   que o payload tem `email` e opcionalmente
-   `user_metadata.full_name` — não validado contra um token real do
-   Supabase nesta sessão. Se o login falhar com "Token do Supabase sem
-   claim de email" ou erro parecido, inspecionar o payload decodificado
-   (`jwt.io` com o token, sem verificar assinatura, só pra olhar os
-   claims) e ajustar `_get_or_create_user_from_supabase` em `deps.py`.
-6. **Só depois disso tudo validado**: `git add`, `git commit`,
-   `git push` — lembrando que o push aciona auto-deploy no Railway.
-7. **Atribuir roles** pros usuários que logarem via Google — hoje
-   entram sem nenhuma, só com acesso ao próprio perfil.
+Nenhuma mudança de comportamento no login local — zero regressão.
 
 ---
 
@@ -194,6 +235,14 @@ API: http://localhost:8000 — Docs: http://localhost:8000/docs
 
 ### Frontend
 
+Crie `frontend/.env` (não commitado) com:
+
+```env
+VITE_API_URL=http://localhost:8000
+VITE_SUPABASE_URL=<mesma SUPABASE_URL do backend>
+VITE_SUPABASE_ANON_KEY=<mesma SUPABASE_ANON_KEY do backend>
+```
+
 ```bash
 cd frontend
 npm install   # ou: bun install
@@ -211,9 +260,10 @@ pytest tests/rbac/ -v   # roda sem banco externo (SQLite in-memory)
 
 ---
 
-## Setup de infraestrutura — Supabase + Google OAuth + Railway
+## Setup de infraestrutura — Supabase + Google OAuth + Railway + Vercel
 
-Checklist do processo de provisionamento deste ERP.
+Checklist completo do provisionamento deste ERP — todos os itens já
+concluídos e validados em produção.
 
 ### Checklist
 
@@ -224,12 +274,12 @@ Checklist do processo de provisionamento deste ERP.
 - [x] 5. Preencher `.env` local com as credenciais
 - [x] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
 - [x] 7. Criar projeto no Railway e conectar ao repositório GitHub
-- [x] 8. Configurar variáveis de ambiente no Railway
+- [x] 8. Configurar variáveis de ambiente no Railway (inclui `BACKEND_CORS_ORIGINS`)
 - [x] 9. Validar deploy do backend em produção — `/docs` respondendo
-- [ ] 10. Frontend no Vercel — precisa de você (login/OAuth com GitHub
-      não pode ser feito sem sua confirmação em tempo real)
-- [ ] 11. Migração Supabase Auth (Google) — código pronto, falta
-      instalar deps, testar e commitar (ver seção dedicada acima)
+- [x] 10. Frontend no Vercel — deployado, domínio `gasfavero.vercel.app`
+- [x] 11. Login local testado ponta a ponta em produção
+- [x] 12. Login Google testado ponta a ponta em produção
+- [x] 13. RBAC validado (rota "Usuários" protegida, permissões corretas)
 
 ### Decisões tomadas
 
@@ -247,8 +297,11 @@ Checklist do processo de provisionamento deste ERP.
   ativado (toda tabela nova nasce fechada por padrão, sem policy
   explícita ninguém acessa via API) e `Automatically expose new tables`
   desativado (backend acessa o Postgres diretamente via SQLModel/Alembic,
-  não pela API REST autogerada — não há necessidade de expor tabelas
-  por esse caminho).
+  não pela API REST autogerada). O RBAC de fato é aplicado em nível de
+  aplicação (FastAPI `Depends`), não via Postgres RLS — o backend
+  conecta como usuário `postgres` (bypassa RLS por padrão no Supabase),
+  então RLS aqui serve como camada extra de defesa contra acesso
+  direto via API REST autogerada, não como enforcement primário.
 - **Conexão Postgres**: via **Session pooler** (porta 5432, host
   `aws-0-sa-east-1.pooler.supabase.com`), não Transaction pooler nem
   conexão direta — o Railway mantém o processo `uvicorn` rodando de
@@ -257,26 +310,32 @@ Checklist do processo de provisionamento deste ERP.
   precisa, só proxeando via IPv4.
 - **Google OAuth consent screen**: criado em modo **Testing** (não
   verificado publicamente) — suficiente para uso interno do ERP.
-  Antes de testar o login de fato, é preciso adicionar os e-mails que
-  vão logar em **Google Auth Platform → Audience → Test users**,
-  senão o Google recusa o login mesmo com client ID/secret corretos.
+  É preciso adicionar os e-mails que vão logar em **Google Auth
+  Platform → Audience → Test users**, senão o Google recusa o login
+  mesmo com client ID/secret corretos.
 - **Rotação de credenciais**: durante o setup, a senha do Postgres, a
   `service_role` key do Supabase e o Client Secret do Google OAuth
-  passaram em texto puro pelo chat de configuração. Todas foram
-  rotacionadas após o uso. Lição para os próximos ERPs: preferir
-  descrever "copiei o valor" a colar o valor em si na conversa, mesmo
-  com um assistente — evita rotação reativa.
+  passaram em texto puro pelo chat de configuração em algum momento.
+  Todas foram rotacionadas após o uso. Lição para os próximos ERPs:
+  preferir descrever "copiei o valor" a colar o valor em si na
+  conversa, mesmo com um assistente — evita rotação reativa.
 - **Bug de percent-encoding na senha do Postgres**: o `config.py`
   herdado do `erp-core-template` monta a URI de conexão concatenando
   `POSTGRES_USER:POSTGRES_PASSWORD@POSTGRES_SERVER` sem escapar
   caracteres especiais. Uma senha com símbolos como `@`, `#`, `!`, `&`
   quebra o parser da URI. Contorno usado: senha do banco só com
   caracteres alfanuméricos. **Dívida técnica**: aplicar
-  `urllib.parse.quote_plus` na senha em `backend/app/core/config.py`.
+  `urllib.parse.quote_plus` na senha em `backend/app/core/config.py`
+  — candidato a fix também portável pro template.
 - **Nome do serviço e domínio no Railway**: renomeados de `frontend`
   (erro de digitação original) para `backend`, e o domínio público de
   `frontend-production-35d5.up.railway.app` para
   `backend-gasfavero.up.railway.app`.
+- **Nome do projeto e domínio na Vercel**: renomeado de
+  `gasfavero-frontend` para `gasfavero` (URL mais curta e fácil de
+  digitar/acessar: `gasfavero.vercel.app`). O domínio antigo
+  (`gasfavero-frontend.vercel.app`) foi mantido com redirect 307 pro
+  novo, em vez de removido — evita quebrar links já compartilhados.
 
 ### Deploy no Railway — o caminho até funcionar
 
@@ -325,17 +384,25 @@ etapa intermediária tem uma lição para os próximos ERPs:
    `CMD` do Dockerfile**, e como não passa por shell, `$PORT` chegava
    literal (`--port $PORT` sem expandir) em vez do número real. Corrigido
    limpando o campo por completo — o `CMD` do Dockerfile assume.
-8. **Último erro**: `RuntimeError: Frontend directory '.../frontend'
-   does not exist`. O `backend/app/main.py` chama
-   `app.frontend("/", directory=FRONTEND_DIR)` — método do FastAPI que
+8. **`RuntimeError: Frontend directory '.../frontend' does not
+   exist`**: `backend/app/main.py` chamava `app.frontend("/",
+   directory=FRONTEND_DIR)` incondicionalmente — método do FastAPI que
    monta os estáticos do frontend direto no backend, pensado pro modelo
    single-container original. Como o frontend não é buildado neste
    Dockerfile (fica no Vercel, separado), o diretório nunca existe, e
-   esse método específico lança exceção fatal em vez de ignorar
-   silenciosamente. **Correção**: chamada tornada condicional à
-   existência do diretório (`if FRONTEND_DIR.exists(): ...`), preserva
-   a opção de deploy single-container no futuro sem quebrar o deploy
-   atual isolado.
+   esse método lançava exceção fatal em vez de ignorar silenciosamente.
+   **Correção**: chamada tornada condicional à existência do diretório
+   (`if FRONTEND_DIR.exists(): ...`).
+9. **`AttributeError: 'Settings' object has no attribute
+   'SUPABASE_URL'`** — CrashLoop completo do backend depois de ativar
+   Supabase Auth. Causa: `SUPABASE_URL` estava no `.env` e nas
+   Variables do Railway, mas nunca foi declarado como campo da classe
+   `Settings` em `config.py` — como `extra="ignore"`, o pydantic-settings
+   simplesmente descartava o valor em vez de expor como atributo, e
+   `supabase_auth.py` quebrava ao tentar `settings.SUPABASE_URL` no
+   import do módulo, derrubando o app inteiro no boot. **Correção**:
+   campos `SUPABASE_URL: str`, `SUPABASE_ANON_KEY: str | None`,
+   `SUPABASE_SERVICE_ROLE_KEY: str | None` adicionados explicitamente.
 
 **Configuração final do serviço no Railway:**
 - Nome do serviço: `backend`
@@ -344,8 +411,33 @@ etapa intermediária tem uma lição para os próximos ERPs:
 - Builder: `Dockerfile` (auto-detectado, `backend/Dockerfile`)
 - Custom Build Command: vazio (definido no Dockerfile)
 - Custom Start Command: vazio (definido no Dockerfile via `CMD`)
-- Variáveis de ambiente: 13 variáveis via **Variables → Raw Editor**
-  (ver seção 3 abaixo)
+- Variáveis de ambiente: via **Variables → Raw Editor**, incluindo
+  `BACKEND_CORS_ORIGINS` com os domínios reais da Vercel
+
+### Deploy na Vercel — o caminho até funcionar
+
+Dois bugs de configuração, ambos silenciosos (build "passava" mas o
+resultado não funcionava):
+
+1. **`vite.config.ts` com `outDir: "../backend/app/frontend"`**
+   (herdado do template original, pensado pro modelo single-container).
+   O `vite build` rodava com sucesso e gerava os assets, mas em um
+   diretório que a Vercel não sabia procurar — ela espera
+   `frontend/dist` por padrão. Erro: `No Output Directory named "dist"
+   found after the Build completed`. **Correção**: `outDir: "dist"`.
+2. **Sem `vercel.json`, rotas da SPA acessadas diretamente (não pela
+   raiz) retornavam 404** — `/login` direto no navegador (ou refresh
+   da página) batia num arquivo físico inexistente. **Correção**:
+   `vercel.json` com rewrite catch-all:
+   ```json
+   { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+   ```
+3. **`package.json` com comentário `#` inválido no topo**, injetado
+   automaticamente pela ferramenta de escrita do `mcp-local` numa
+   sessão anterior (ver pegadinha #6 na seção de portabilidade acima) —
+   quebrava o parse JSON no build: `Could not read package.json:
+   Unexpected token '#'`. Corrigido via terminal (nunca reescrever
+   `.json` via MCP write).
 
 ### 1. Criar projeto no Supabase
 
@@ -370,10 +462,22 @@ etapa intermediária tem uma lição para os próximos ERPs:
    Web application
 4. Em **Authorized redirect URIs**, adicione:
    `https://<seu-projeto>.supabase.co/auth/v1/callback`
-5. No Supabase: **Authentication → Providers → Google** → cole o
-   Client ID e Client Secret gerados
+5. Em **Google Auth Platform → Audience → Test users**, adicione os
+   e-mails que vão logar (obrigatório enquanto o consent screen estiver
+   em modo Testing)
+6. No Supabase: **Authentication → Sign In / Providers → Google** →
+   ativar o toggle "Enable Sign in with Google" → colar Client ID e
+   Client Secret → Save
 
-### 3. Variáveis de ambiente
+### 3. Configurar URLs de autenticação no Supabase
+
+Em **Authentication → URL Configuration**:
+- **Site URL**: `https://<seu-dominio>.vercel.app`
+- **Redirect URLs**: adicionar `https://<seu-dominio>.vercel.app` e,
+  opcionalmente, um wildcard para preview deployments
+  (`https://<projeto>-*-<time>.vercel.app`)
+
+### 4. Variáveis de ambiente
 
 No `.env` local e nas variáveis de ambiente do Railway (backend):
 
@@ -391,9 +495,18 @@ POSTGRES_PASSWORD=<senha-do-banco, sem caracteres especiais por ora>
 SECRET_KEY=<gerado com secrets.token_urlsafe(32), fixo>
 FIRST_SUPERUSER=<email do admin inicial>
 FIRST_SUPERUSER_PASSWORD=<senha forte>
+BACKEND_CORS_ORIGINS=https://<seu-dominio>.vercel.app
 ```
 
-### 4. Aplicar migrations (RBAC incluso)
+Na Vercel (frontend), variáveis de ambiente do projeto:
+
+```env
+VITE_API_URL=https://<seu-backend>.up.railway.app
+VITE_SUPABASE_URL=<mesma SUPABASE_URL do backend>
+VITE_SUPABASE_ANON_KEY=<mesma SUPABASE_ANON_KEY do backend>
+```
+
+### 5. Aplicar migrations (RBAC incluso)
 
 ```powershell
 cd backend
@@ -403,9 +516,11 @@ uv run python -m app.initial_data
 
 As tabelas `role`, `module`, `role_permission` e `user_role` já estão
 definidas nas migrations herdadas do `erp-core-template`. O
-`initial_data` cria o superusuário e popula os roles/módulos padrão.
+`initial_data` cria o superusuário e popula os roles/módulos padrão —
+idempotente, seguro rodar de novo a qualquer momento (ex: depois de
+resetar o banco).
 
-### 5. Railway (backend)
+### 6. Railway (backend)
 
 1. Acesse https://railway.app e conecte a conta GitHub
 2. New Project → Deploy from GitHub repo → `ricardoshuree/gasfavero`
@@ -415,7 +530,7 @@ definidas nas migrations herdadas do `erp-core-template`. O
    detectá-lo e usá-lo automaticamente como builder
 5. **Settings → Build/Deploy**: deixe Custom Build Command e Custom
    Start Command vazios — tudo já está definido no Dockerfile
-6. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
+6. Configure as variáveis de ambiente (ver seção 4 acima) via
    **Variables → Raw Editor**
 7. **Networking → Generate Domain**, depois customize o subdomínio
    (ex: `backend-gasfavero`) clicando direto no campo de domínio
@@ -423,30 +538,24 @@ definidas nas migrations herdadas do `erp-core-template`. O
    serviço (abre edição inline — não fica em Settings)
 9. Valide em `<dominio>/docs` que a API responde
 
-### 6. Vercel (frontend) — próximo passo, precisa de você
-
-Não pode ser concluído sem sua presença: o login no Vercel passa por
-autorização OAuth do GitHub, que exige confirmação sua em tempo real.
-Quando voltar:
+### 7. Vercel (frontend)
 
 1. Acesse https://vercel.com e faça login com GitHub (autoriza o
    acesso ao repositório quando solicitado)
-2. New Project → importa `ricardoshuree/gasfavero`
+2. New Project → importa o repositório do ERP
 3. **Root Directory**: `frontend`
 4. Framework preset: Vite (deve detectar automaticamente)
-5. Variáveis de ambiente (mesmas do `frontend/.env`, ver seção da
-   migração Supabase acima):
-   - `VITE_API_URL` → `https://backend-gasfavero.up.railway.app`
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+5. Variáveis de ambiente (ver seção 4 acima)
 6. Deploy
-7. Depois do deploy: volta no Google Cloud Console e adiciona a URL do
-   Vercel em **Authorized JavaScript origins** do OAuth Client (hoje só
-   tem o redirect URI do Supabase, não a URL do frontend em si)
-8. Também adicionar a URL do Vercel em `all_cors_origins` do backend
-   (variável `BACKEND_CORS_ORIGINS` ou equivalente em
-   `backend/app/core/config.py` — conferir o nome exato) para o
-   frontend conseguir chamar a API sem erro de CORS
+7. Confirme que `frontend/vite.config.ts` tem `outDir: "dist"` e que
+   `frontend/vercel.json` existe (ver "Deploy na Vercel" acima) — sem
+   isso o deploy falha ou fica quebrado silenciosamente
+8. Se quiser um domínio mais curto, renomeie o projeto em
+   **Settings → General → Project Name**, depois vá em
+   **Settings → Domains → Edit** no domínio `.vercel.app` gerado e
+   ajuste manualmente (renomear o projeto não migra o domínio sozinho)
+9. Volte no Google Cloud Console e Supabase e atualize as URLs com o
+   domínio final (ver seções 2 e 3 acima)
 
 ---
 
@@ -481,4 +590,7 @@ Este repositório foi derivado do `erp-core-template` (fork do
 via merge com histórico preservado (`--allow-unrelated-histories`), com
 o `mcp-local` incorporado via `git subtree`. Segue o mesmo padrão de
 isolamento planejado para os próximos ERPs (`dragrafavero` e o da
-confecção).
+confecção). A jornada completa de RBAC + Supabase Auth documentada
+neste README está sendo portada de volta pro `erp-core-template` (ver
+seção de portabilidade acima), para que os próximos ERPs herdem tudo
+isso pronto e validado.
