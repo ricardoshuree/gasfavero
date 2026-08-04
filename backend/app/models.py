@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: rbac-crud-permission-matrix | plano: 3c4333ee | 2026-08-04 13:42:03
-# RolePermission e ModulePermission migrados de can_read/can_edit para can_create/can_read/can_update/can_delete
+# [mcp-local harness] feature: rbac-permission-matrix-and-produtos | plano: 5220fc65 | 2026-08-04 14:12:45
+# Adiciona models da matriz de permissoes (ModulePublic, ModulePermissionMatrix, etc)
 import uuid
 from datetime import UTC, datetime
 
@@ -126,6 +126,51 @@ class UserRolesUpdate(SQLModel):
 
 
 # ---------------------------------------------------------------------------
+# RBAC — Response models (tela de administração da matriz de
+# permissões: Módulo x Role x Ação CRUD)
+# ---------------------------------------------------------------------------
+
+class ModulePublic(SQLModel):
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+
+
+class ModulesPublic(SQLModel):
+    data: list[ModulePublic]
+
+
+class RolePermissionEntry(SQLModel):
+    """Uma linha da matriz: o que uma role específica pode fazer no
+    módulo (zerado se ainda não houver RolePermission cadastrado)."""
+    role_id: uuid.UUID
+    role_name: str
+    can_create: bool
+    can_read: bool
+    can_update: bool
+    can_delete: bool
+
+
+class ModulePermissionMatrix(SQLModel):
+    module: ModulePublic
+    entries: list[RolePermissionEntry]
+
+
+class RolePermissionUpdate(SQLModel):
+    role_id: uuid.UUID
+    can_create: bool = False
+    can_read: bool = False
+    can_update: bool = False
+    can_delete: bool = False
+
+
+class ModulePermissionMatrixUpdate(SQLModel):
+    """Corpo de PUT /modules/{module_id}/permissions -- grava a
+    matriz inteira do módulo de uma vez (upsert por role)."""
+    entries: list[RolePermissionUpdate]
+
+
+# ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
 
@@ -198,7 +243,10 @@ class UsersPublicWithRoles(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# Item (mantido do template original)
+# Item (mantido do template original -- endpoint/tabela seguem se
+# chamando "item"/"items" internamente, mas no gasfavero representam
+# o catálogo de Produtos; nome técnico e nome de negócio divergem de
+# propósito, ver frontend/src/routes/_layout/produtos.tsx)
 # ---------------------------------------------------------------------------
 
 class ItemBase(SQLModel):

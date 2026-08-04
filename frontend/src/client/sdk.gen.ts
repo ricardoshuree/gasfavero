@@ -3,12 +3,13 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse } from './types.gen';
+import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse } from './types.gen';
 
 export class ItemsService {
     /**
      * Read Items
-     * Retrieve items.
+     * Lista o catálogo de produtos -- compartilhado entre todos os
+     * usuários com permissão de leitura no módulo 'produtos'.
      * @param data The data for the request.
      * @param data.skip
      * @param data.limit
@@ -31,7 +32,9 @@ export class ItemsService {
     
     /**
      * Create Item
-     * Create new item.
+     * Create new item. owner_id é preservado só como trilha de
+     * auditoria (quem cadastrou) -- não é mais usado para controle de
+     * acesso, isso agora é feito pelo módulo RBAC "produtos".
      * @param data The data for the request.
      * @param data.requestBody
      * @returns ItemPublic Successful Response
@@ -206,6 +209,69 @@ export class LoginService {
             path: {
                 email: data.email
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class ModulesService {
+    /**
+     * Read Modules
+     * Lista todos os módulos RBAC cadastrados.
+     * @returns ModulesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readModules(): CancelablePromise<ModulesReadModulesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/modules/'
+        });
+    }
+    
+    /**
+     * Read Module Permissions
+     * Matriz de permissões do módulo: uma linha por role existente, com
+     * os 4 flags CRUD (zerados se a role ainda não tem RolePermission
+     * para este módulo).
+     * @param data The data for the request.
+     * @param data.moduleId
+     * @returns ModulePermissionMatrix Successful Response
+     * @throws ApiError
+     */
+    public static readModulePermissions(data: ModulesReadModulePermissionsData): CancelablePromise<ModulesReadModulePermissionsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/modules/{module_id}/permissions',
+            path: {
+                module_id: data.moduleId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Module Permissions
+     * Grava a matriz de permissões do módulo de uma vez -- upsert por
+     * role (cria a linha se não existir, atualiza os 4 flags se existir).
+     * @param data The data for the request.
+     * @param data.moduleId
+     * @param data.requestBody
+     * @returns ModulePermissionMatrix Successful Response
+     * @throws ApiError
+     */
+    public static updateModulePermissions(data: ModulesUpdateModulePermissionsData): CancelablePromise<ModulesUpdateModulePermissionsResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/modules/{module_id}/permissions',
+            path: {
+                module_id: data.moduleId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }

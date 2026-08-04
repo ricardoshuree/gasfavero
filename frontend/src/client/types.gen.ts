@@ -52,6 +52,29 @@ export type ModulePermission = {
     can_delete: boolean;
 };
 
+export type ModulePermissionMatrix = {
+    module: ModulePublic;
+    entries: Array<RolePermissionEntry>;
+};
+
+/**
+ * Corpo de PUT /modules/{module_id}/permissions -- grava a
+ * matriz inteira do módulo de uma vez (upsert por role).
+ */
+export type ModulePermissionMatrixUpdate = {
+    entries: Array<RolePermissionUpdate>;
+};
+
+export type ModulePublic = {
+    id: string;
+    name: string;
+    description?: (string | null);
+};
+
+export type ModulesPublic = {
+    data: Array<ModulePublic>;
+};
+
 export type NewPassword = {
     token: string;
     new_password: string;
@@ -62,6 +85,27 @@ export type PrivateUserCreate = {
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+/**
+ * Uma linha da matriz: o que uma role específica pode fazer no
+ * módulo (zerado se ainda não houver RolePermission cadastrado).
+ */
+export type RolePermissionEntry = {
+    role_id: string;
+    role_name: string;
+    can_create: boolean;
+    can_read: boolean;
+    can_update: boolean;
+    can_delete: boolean;
+};
+
+export type RolePermissionUpdate = {
+    role_id: string;
+    can_create?: boolean;
+    can_read?: boolean;
+    can_update?: boolean;
+    can_delete?: boolean;
 };
 
 /**
@@ -228,6 +272,21 @@ export type LoginRecoverPasswordHtmlContentData = {
 };
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
+
+export type ModulesReadModulesResponse = (ModulesPublic);
+
+export type ModulesReadModulePermissionsData = {
+    moduleId: string;
+};
+
+export type ModulesReadModulePermissionsResponse = (ModulePermissionMatrix);
+
+export type ModulesUpdateModulePermissionsData = {
+    moduleId: string;
+    requestBody: ModulePermissionMatrixUpdate;
+};
+
+export type ModulesUpdateModulePermissionsResponse = (ModulePermissionMatrix);
 
 export type PrivateCreateUserData = {
     requestBody: PrivateUserCreate;

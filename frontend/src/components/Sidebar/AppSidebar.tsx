@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: frontend-rbac | plano: 3800c8da | 2026-08-03 15:41:37
-// AppSidebar dinâmico — itens de menu filtrados por canRead do módulo correspondente
+// [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:15:56
+// Sidebar: Items vira Cadastro do Produto (modulo produtos), adiciona item Permissoes pra superuser
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -7,12 +7,13 @@
  *   - Dashboard
  *
  * Itens controlados por módulo (visíveis se can_read):
- *   - Items        → módulo "items"  (exemplo do template original)
- *   - Usuários     → módulo "usuarios"
- *   - Configurações → módulo "configuracoes"
+ *   - Cadastro do Produto → módulo "produtos" (gasfavero-específico)
+ *   - Usuários            → módulo "usuarios"
+ *   - Configurações       → módulo "configuracoes"
  *
  * Itens exclusivos de superuser:
  *   - Admin        → apenas is_superuser
+ *   - Permissões   → apenas is_superuser (matriz Role x Módulo x Ação)
  *
  * Para adicionar um novo módulo num ERP filho:
  *   1. Cadastre o módulo no banco (migration ou seed)
@@ -21,10 +22,11 @@
  */
 
 import {
-  Briefcase,
+  Box,
   Home,
   Package,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react"
 
@@ -49,13 +51,14 @@ const FIXED_ITEMS: Item[] = [
 // Mapeamento de módulo → item de menu
 // O campo "module" deve coincidir exatamente com o nome do módulo no banco
 const MODULE_ITEMS: Array<Item & { module: string }> = [
-  { module: "items",         icon: Briefcase, title: "Items",         path: "/items" },
+  { module: "produtos",      icon: Box,       title: "Cadastro do Produto", path: "/produtos" },
   { module: "usuarios",      icon: Users,     title: "Usuários",      path: "/admin" },
   { module: "configuracoes", icon: Settings,  title: "Configurações", path: "/settings" },
 ]
 
-// Item exclusivo de superuser (acesso administrativo completo)
+// Itens exclusivos de superuser (acesso administrativo completo)
 const ADMIN_ITEM: Item = { icon: Package, title: "Admin", path: "/admin" }
+const PERMISSIONS_ITEM: Item = { icon: ShieldCheck, title: "Permissões", path: "/permissions" }
 
 export function AppSidebar() {
   const { user: currentUser } = useAuth()
@@ -69,7 +72,7 @@ export function AppSidebar() {
   const items: Item[] = [
     ...FIXED_ITEMS,
     ...moduleItems,
-    ...(currentUser?.is_superuser ? [ADMIN_ITEM] : []),
+    ...(currentUser?.is_superuser ? [ADMIN_ITEM, PERMISSIONS_ITEM] : []),
   ]
 
   return (
