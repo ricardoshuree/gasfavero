@@ -342,12 +342,15 @@ export class UsersService {
     
     /**
      * Read User Permissions
-     * Retorna os módulos e permissões efetivas do usuário logado.
+     * Retorna os módulos e permissões efetivas do usuário logado (CRUD
+     * completo: can_create, can_read, can_update, can_delete).
      *
-     * Superusuários recebem can_read=True e can_edit=True em todos os módulos
+     * Superusuários recebem todas as 4 ações True em todos os módulos
      * cadastrados, independente de roles atribuídos.
      *
-     * Usado pelo frontend para renderizar o menu lateral dinamicamente.
+     * Usado pelo frontend para renderizar o menu lateral dinamicamente
+     * (via can_read) e, futuramente, para gatear botões de criar/editar/
+     * apagar dentro de cada módulo.
      * @returns UserPermissions Successful Response
      * @throws ApiError
      */
@@ -528,7 +531,7 @@ export class UtilsService {
     /**
      * Diagnóstico de permissão RBAC (uso interno / testes)
      * Retorna 200 se o usuário autenticado tem a permissão solicitada
-     * no módulo informado.
+     * (create/read/update/delete) no módulo informado.
      *
      * Códigos possíveis:
      * 200 — permissão concedida

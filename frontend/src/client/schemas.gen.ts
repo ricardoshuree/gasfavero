@@ -225,19 +225,27 @@ export const ModulePermissionSchema = {
             ],
             title: 'Description'
         },
+        can_create: {
+            type: 'boolean',
+            title: 'Can Create'
+        },
         can_read: {
             type: 'boolean',
             title: 'Can Read'
         },
-        can_edit: {
+        can_update: {
             type: 'boolean',
-            title: 'Can Edit'
+            title: 'Can Update'
+        },
+        can_delete: {
+            type: 'boolean',
+            title: 'Can Delete'
         }
     },
     type: 'object',
-    required: ['module', 'can_read', 'can_edit'],
+    required: ['module', 'can_create', 'can_read', 'can_update', 'can_delete'],
     title: 'ModulePermission',
-    description: 'Permissão efetiva de um usuário em um módulo específico.'
+    description: 'Permissão efetiva de um usuário em um módulo específico (CRUD).'
 } as const;
 
 export const NewPasswordSchema = {

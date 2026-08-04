@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: rbac-role-assignment-backend | plano: fde7657e | 2026-08-04 12:36:00
-# Adiciona RolePublic, RolesPublic, UserRolesUpdate, UserPublicWithRoles, UsersPublicWithRoles -- suporte a atribuicao de roles RBAC via UI
+# [mcp-local harness] feature: rbac-crud-permission-matrix | plano: 3c4333ee | 2026-08-04 13:42:03
+# RolePermission e ModulePermission migrados de can_read/can_edit para can_create/can_read/can_update/can_delete
 import uuid
 from datetime import UTC, datetime
 
@@ -38,7 +38,11 @@ class Module(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# RBAC — RolePermission (matriz role x module)
+# RBAC — RolePermission (matriz role x module x ação)
+#
+# 4 ações CRUD independentes -- ex: uma role pode criar/editar mas não
+# apagar (o exemplo clássico de "Gerente"), o que não era possível
+# expressar com o antigo can_read/can_edit único.
 # ---------------------------------------------------------------------------
 
 class RolePermission(SQLModel, table=True):
@@ -50,8 +54,10 @@ class RolePermission(SQLModel, table=True):
     module_id: uuid.UUID = Field(
         foreign_key="module.id", primary_key=True, ondelete="CASCADE"
     )
+    can_create: bool = Field(default=False)
     can_read: bool = Field(default=False)
-    can_edit: bool = Field(default=False)
+    can_update: bool = Field(default=False)
+    can_delete: bool = Field(default=False)
 
     role: Role = Relationship(back_populates="permissions")
     module: Module = Relationship(back_populates="permissions")
@@ -80,11 +86,13 @@ class UserRole(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class ModulePermission(SQLModel):
-    """Permissão efetiva de um usuário em um módulo específico."""
+    """Permissão efetiva de um usuário em um módulo específico (CRUD)."""
     module: str
     description: str | None = None
+    can_create: bool
     can_read: bool
-    can_edit: bool
+    can_update: bool
+    can_delete: bool
 
 
 class UserPermissions(SQLModel):

@@ -41,13 +41,15 @@ export type Message = {
 };
 
 /**
- * Permissão efetiva de um usuário em um módulo específico.
+ * Permissão efetiva de um usuário em um módulo específico (CRUD).
  */
 export type ModulePermission = {
     module: string;
     description?: (string | null);
+    can_create: boolean;
     can_read: boolean;
-    can_edit: boolean;
+    can_update: boolean;
+    can_delete: boolean;
 };
 
 export type NewPassword = {
@@ -307,7 +309,7 @@ export type UtilsTestEmailResponse = (Message);
 export type UtilsHealthCheckResponse = (boolean);
 
 export type UtilsRbacCheckData = {
-    action: 'read' | 'edit';
+    action: 'create' | 'read' | 'update' | 'delete';
     moduleName: string;
 };
 
