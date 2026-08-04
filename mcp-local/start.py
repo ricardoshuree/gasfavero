@@ -1,3 +1,5 @@
+# [mcp-local harness] feature: add-restart-subcommand | plano: 96bfa24f | 2026-08-04 01:15:08
+# Adiciona subcomando restart que forca encerramento do server.py deste projeto mesmo com pai vivo
 """
 start.py — Garante que ESTE servidor MCP esteja registrado no Claude Desktop.
 
@@ -13,7 +15,16 @@ IMPORTANTE: feche o Claude Desktop por completo (bandeja do sistema, não só
 a janela) antes de rodar este script. Veja o README.md para detalhes.
 
 Uso:
-    uv run start.py
+    uv run start.py            # registro normal (padrão, comportamento antigo)
+    uv run start.py restart    # mata a instância ATUAL deste server.py, mesmo
+                                # com o processo pai (Claude Desktop) vivo, e
+                                # forca ele a subir de novo na proxima chamada
+                                # -- usado para recarregar config.yaml (ex:
+                                # allowed_extensions) sem fechar o app inteiro.
+                                # ATENCAO: se uma sessao do Claude estiver
+                                # usando este servidor agora, ela vai perder a
+                                # conexao. Pode ser preciso reativar o
+                                # conector manualmente (toggle off/on) depois.
 """
 
 import json
@@ -147,21 +158,16 @@ def get_claude_config_path() -> Path:
     return candidatos[0]
 
 
-def limpar_processos_zumbis() -> None:
+def _find_processos_deste_server() -> list:
     """
-    Encerra instâncias órfãs de server.py DESTE projeto — ou seja, cujo
-    processo pai original já morreu (ex: Claude Desktop fechado sem matar
-    o subprocesso MCP filho).
-
-    Critério de segurança: só mata processo cujo PPID não está mais vivo.
-    Se o pai ainda existe (o próprio Claude Desktop rodando), nunca mexe.
+    Retorna todas as instâncias de server.py DESTE projeto atualmente
+    rodando, vivas ou não -- sem filtrar por estado do pai. Usado tanto
+    pela limpeza de órfãos quanto pelo restart forçado.
     """
     try:
         import psutil
     except ImportError:
-        log_warn("psutil não encontrado — pulando checagem de processos órfãos.")
-        log_info("(opcional: já está nas dependências do pyproject.toml — rode 'uv sync')")
-        return
+        return []
 
     server_marker = str((HERE / "server.py").resolve()).lower()
 
@@ -178,6 +184,27 @@ def limpar_processos_zumbis() -> None:
             candidatos.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
+
+    return candidatos
+
+
+def limpar_processos_zumbis() -> None:
+    """
+    Encerra instâncias órfãs de server.py DESTE projeto — ou seja, cujo
+    processo pai original já morreu (ex: Claude Desktop fechado sem matar
+    o subprocesso MCP filho).
+
+    Critério de segurança: só mata processo cujo PPID não está mais vivo.
+    Se o pai ainda existe (o próprio Claude Desktop rodando), nunca mexe.
+    """
+    try:
+        import psutil
+    except ImportError:
+        log_warn("psutil não encontrado — pulando checagem de processos órfãos.")
+        log_info("(opcional: já está nas dependências do pyproject.toml — rode 'uv sync')")
+        return
+
+    candidatos = _find_processos_deste_server()
 
     if not candidatos:
         log_success("Nenhuma instância de server.py rodando (esperado com o Claude Desktop fechado).")
@@ -211,6 +238,63 @@ def limpar_processos_zumbis() -> None:
             except psutil.TimeoutExpired:
                 p.kill()
             log_success(f"PID {p.pid} encerrado (órfão real).")
+        except psutil.AccessDenied:
+            log_warn(f"PID {p.pid}: sem permissão para encerrar — feche manualmente.")
+        except psutil.NoSuchProcess:
+            log_success(f"PID {p.pid}: já havia encerrado sozinho.")
+        except Exception as e:
+            log_warn(f"PID {p.pid}: falha ao encerrar — {e}")
+
+
+def forcar_restart() -> None:
+    """
+    Mata QUALQUER instância de server.py deste projeto, mesmo com o
+    processo pai (Claude Desktop) vivo -- diferente de
+    limpar_processos_zumbis(), que só mexe em órfãos reais.
+
+    Objetivo: forçar a próxima chamada de ferramenta a subir um processo
+    novo, que relê config.yaml do zero (ex: allowed_extensions
+    atualizado). Não relança o processo sozinho -- quem faz isso é o
+    Claude Desktop, sob demanda, na próxima vez que precisar do servidor.
+
+    ATENÇÃO: se uma sessão do Claude estiver com este servidor conectado
+    agora, a chamada de ferramenta em andamento (ou a próxima) vai
+    falhar com erro de conexão. Pode ser necessário reativar o conector
+    manualmente (toggle off/on) na lista de conectores do Claude Desktop
+    depois de rodar isto -- não há garantia de reconexão automática.
+    """
+    try:
+        import psutil
+    except ImportError:
+        log_warn("psutil não encontrado — não consigo localizar o processo para matar.")
+        log_info("Rode 'uv sync' primeiro (psutil já está no pyproject.toml).")
+        return
+
+    candidatos = _find_processos_deste_server()
+
+    if not candidatos:
+        log_success("Nenhuma instância de server.py rodando agora — nada para reiniciar.")
+        return
+
+    for p in candidatos:
+        try:
+            ppid = p.ppid()
+            pai_vivo = ppid != 0 and psutil.pid_exists(ppid)
+        except Exception:
+            pai_vivo = False
+            ppid = None
+
+        inicio = datetime.fromtimestamp(p.info["create_time"]).strftime("%d/%m/%Y %H:%M:%S")
+        estado_pai = f"pai vivo (PID {ppid})" if pai_vivo else f"pai morto (PPID {ppid})"
+        log_warn(f"PID {p.pid} (iniciado em {inicio}) — {estado_pai} → encerrando à força")
+
+        try:
+            p.terminate()
+            try:
+                p.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                p.kill()
+            log_success(f"PID {p.pid} encerrado.")
         except psutil.AccessDenied:
             log_warn(f"PID {p.pid}: sem permissão para encerrar — feche manualmente.")
         except psutil.NoSuchProcess:
@@ -272,12 +356,26 @@ def ensure_registration(project_name: str) -> bool:
 
 
 def main():
+    args = sys.argv[1:]
+    modo_restart = len(args) > 0 and args[0] == "restart"
+
     cfg = load_project_config()
     project_name = cfg["project_name"]
 
     log_pair("Projeto:", project_name)
     log_pair("Pasta do servidor:", str(HERE))
     blank()
+
+    if modo_restart:
+        log_title("Forçando reinício do servidor MCP deste projeto...")
+        forcar_restart()
+        blank()
+        log_final(
+            "Processo encerrado. Se uma sessão do Claude estava conectada, "
+            "reative o conector manualmente (toggle off/on) se ela não "
+            "reconectar sozinha na próxima chamada de ferramenta."
+        )
+        return
 
     log_title("Verificando processos órfãos de server.py...")
     limpar_processos_zumbis()

@@ -10,6 +10,10 @@ allowed_extensions:
   - .json
   - .yaml
   - .md
+  - .toml
+  - .example
+  - .svg
+  - .html
 blocked_dirs:
   - node_modules
   - .git
