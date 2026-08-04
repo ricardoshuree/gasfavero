@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-readme-template-portability | plano: fde3cd13 | 2026-08-04 10:28:39
-Reescreve README com status atualizado (tudo testado e funcionando) e nova secao central de portabilidade para o erp-core-template
+[mcp-local harness] feature: docs-readme-closed-signup | plano: 847c0771 | 2026-08-04 12:05:59
+Atualiza README: sistema fechado documentado em todas as secoes relevantes, novo item na tabela de portabilidade (users.py), secao de Debitos tecnicos, checklist atualizado
 -->
 # gasfavero
 
@@ -14,8 +14,9 @@ outros projetos ativos.
 (`https://backend-gasfavero.up.railway.app/docs`), frontend em produção
 na Vercel (`https://gasfavero.vercel.app`). **RBAC e Supabase Auth (login
 local + Google OAuth) testados de ponta a ponta em produção e
-funcionando.** Este README documenta a jornada completa — inclusive os
-bugs encontrados e corrigidos — para servir de base ao backport pro
+funcionando, sistema fechado (só admin cadastra, ver seção de
+Autenticação).** Este README documenta a jornada completa — inclusive
+os bugs encontrados e corrigidos — para servir de base ao backport pro
 `erp-core-template` (ver seção dedicada abaixo) e como checklist para os
 próximos ERPs (`erp-consultorio`, confecção).
 
@@ -28,7 +29,7 @@ próximos ERPs (`erp-consultorio`, confecção).
 | Backend | Python 3.14, FastAPI, SQLModel, Alembic, Argon2 |
 | Frontend | React, TypeScript, Tailwind CSS, shadcn/ui, TanStack Router |
 | Banco | PostgreSQL via Supabase (produção) / SQLite in-memory (testes) |
-| Auth | Supabase Auth (Email + Google OAuth) — testado e funcionando |
+| Auth | Supabase Auth (Email + Google OAuth), sistema fechado — testado e funcionando |
 | Deploy | Vercel (frontend) + Railway (backend, via Dockerfile) |
 | CI/CD | GitHub Actions |
 | Dev | uv, mcp-local (embarcado, servidor MCP isolado deste projeto) |
@@ -42,7 +43,8 @@ erp-gasfavero/
 ├── backend/
 │   ├── app/
 │   │   ├── alembic/versions/   ← migrations de banco (inclui RBAC)
-│   │   ├── api/routes/         ← endpoints FastAPI
+│   │   ├── api/routes/
+│   │   │   └── users.py        ← inclui POST /signup (DESABILITADO, ver Autenticação)
 │   │   ├── core/               ← config, db, security, supabase_auth
 │   │   └── models.py           ← todos os modelos SQLModel (inclui RBAC)
 │   ├── Dockerfile              ← usado no Railway (backend isolado)
@@ -57,7 +59,9 @@ erp-gasfavero/
 │       │   ├── useAuth.ts      ← autenticação (local + Google/Supabase)
 │       │   └── usePermissions.ts ← permissões por módulo (usa OpenAPI.BASE)
 │       ├── lib/supabase.ts     ← cliente Supabase (só auth, dados via backend)
-│       └── routes/login.tsx    ← form local + botão "Continuar com Google"
+│       └── routes/
+│           ├── login.tsx               ← form local + botão "Continuar com Google"
+│           └── signup-b2c-disabled.tsx ← DESABILITADA, sem link na UI, reservada p/ B2C futuro
 ├── .github/workflows/test-rbac.yml ← CI: roda testes RBAC a cada push/PR
 ├── .env.example                 ← variáveis necessárias (sem valores reais)
 ├── activate.ps1                 ← ativa venv do backend no Windows/VS Code
@@ -78,18 +82,20 @@ tudo que é comportamento/arquitetura reaproveitável; fica aqui tudo que
 | Arquivo | O que levar | Por quê é genérico |
 |---|---|---|
 | `backend/pyproject.toml` | Dependência `cryptography` adicionada em `dependencies` | `PyJWKClient` (usado por `supabase_auth.py`) exige `cryptography` pra validar assinaturas ES256/RS256. Sem isso, qualquer ERP que ativar Supabase Auth quebra em runtime. |
-| `backend/app/core/config.py` | Campos `SUPABASE_URL: str`, `SUPABASE_ANON_KEY: str \| None`, `SUPABASE_SERVICE_ROLE_KEY: str \| None` na classe `Settings` | Sem isso, `Settings()` não expõe esses valores como atributo (mesmo estando no `.env`, porque `extra="ignore"`), e `supabase_auth.py` quebra com `AttributeError` **no import do módulo** — derruba o backend inteiro no boot. Foi o bug mais sério desta sessão (CrashLoop no Railway). |
+| `backend/app/core/config.py` | Campos `SUPABASE_URL: str`, `SUPABASE_ANON_KEY: str \| None`, `SUPABASE_SERVICE_ROLE_KEY: str \| None` na classe `Settings` | Sem isso, `Settings()` não expõe esses valores como atributo (mesmo estando no `.env`, porque `extra="ignore"`), e `supabase_auth.py` quebra com `AttributeError` **no import do módulo** — derruba o backend inteiro no boot. Foi o bug mais sério da sessão de deploy inicial (CrashLoop no Railway). |
 | `backend/app/core/supabase_auth.py` | Arquivo inteiro (novo) | Verificação de JWT do Supabase via JWKS, sem segredo compartilhado. Reaproveitável 100%, não tem nada específico do gasfavero. |
-| `backend/app/api/deps.py` | Lógica de `get_current_user` com fallback aditivo (JWT local → JWT Supabase) e `_get_or_create_user_from_supabase` | Auto-provisiona usuário local por e-mail quando login é via Google, sem role nenhuma (admin atribui depois). Comportamento correto para qualquer ERP. |
-| `backend/app/models.py` | Models de RBAC (`Role`, `Module`, `RolePermission`, `UserRole`, `ModulePermission`, `UserPermissions`) — **conferir se o template já tem, evitar duplicar** | Já nasceu no template numa sessão anterior (tag `v1.0.0`); confirmar que a versão do template está alinhada com a do gasfavero antes de sobrescrever. |
-| `backend/app/core/db.py` | Seed idempotente (`DEFAULT_ROLES`, `DEFAULT_MODULES`, `init_db`) — mesma ressalva acima | Idem — provavelmente já existe no template, só validar consistência. |
+| `backend/app/api/deps.py` | Lógica de `get_current_user` com fallback aditivo (JWT local → JWT Supabase) e `_get_user_from_supabase` — **sistema fechado**: rejeita (403) e-mail não cadastrado em vez de auto-criar usuário | Login Google só funciona pra quem já foi cadastrado por um admin. Comportamento correto por padrão para qualquer ERP — abrir auto-cadastro deve ser uma decisão explícita, não o default. |
+| `backend/app/api/routes/users.py` | Endpoint `POST /signup` **desabilitado** (retorna 403 sempre), lógica original preservada em comentário para reativação futura | Auto-cadastro público aberto por padrão é uma porta de entrada não controlada — qualquer ERP nasce fechado, abre só sob decisão consciente (ex: lançamento de canal B2C). |
+| `backend/app/models.py` | Models de RBAC (`Role`, `Module`, `RolePermission`, `UserRole`, `ModulePermission`, `UserPermissions`) — **conferir se o template já tem, evitar duplicar** | Já está no template desde a `v1.0.0`; confirmar que a versão do template está alinhada com a do gasfavero antes de sobrescrever. |
+| `backend/app/core/db.py` | Seed idempotente (`DEFAULT_ROLES`, `DEFAULT_MODULES`, `init_db`) — mesma ressalva acima | Idem — já existe no template, só validar consistência. |
 | `backend/app/alembic/versions/..._add_rbac_tables.py` | Migration RBAC — **cuidado com `down_revision`** | Só copiar se o template ainda não tiver; se tiver, comparar hash de revisão em vez de sobrescrever, para não quebrar a cadeia de migrations. |
-| `frontend/vite.config.ts` | `build.outDir: "dist"` (em vez do `../backend/app/frontend` herdado do template original) | O template original assume deploy single-container (FastAPI servindo o frontend). Nossa arquitetura é Vercel+Railway separados — outDir errado é a causa raiz de "Deployment Failed" na Vercel. **Esse é o bug mais fácil de repetir sem perceber.** |
+| `frontend/vite.config.ts` | `build.outDir: "dist"` (em vez do `../backend/app/frontend` herdado do template original) | O template original assume deploy single-container (FastAPI servindo o frontend). Nossa arquitetura é Vercel+Railway separados — outDir errado é a causa raiz de "Deployment Failed" na Vercel. |
 | `frontend/vercel.json` | Arquivo inteiro (novo): rewrite catch-all `/(.*)"→ "/index.html"` | Toda SPA com client-side routing (TanStack Router, React Router, etc.) precisa disso, senão qualquer rota acessada direto (refresh, link direto) retorna 404 da própria Vercel. |
 | `frontend/src/lib/supabase.ts` | Arquivo inteiro (novo) | Cliente Supabase JS só para auth. Reaproveitável 100%. |
 | `frontend/src/hooks/useAuth.ts` | `loginWithGoogle()`, `useSupabaseSessionSync()` | Sincroniza sessão Supabase com o mesmo `localStorage["access_token"]` do resto do app — nenhum outro código precisa saber qual método de login foi usado. |
 | `frontend/src/hooks/usePermissions.ts` | Uso de `OpenAPI.BASE` em vez de `fetch("/api/v1/...")` relativo | Caminho relativo só funciona se frontend e backend estiverem no mesmo domínio. Em qualquer arquitetura Vercel+Railway (domínios diferentes), a chamada relativa sempre falha silenciosamente. |
-| `frontend/src/routes/login.tsx` | Botão "Continuar com Google" acima do form existente | Puramente de UI, sem nada específico do gasfavero. |
+| `frontend/src/routes/login.tsx` | Botão "Continuar com Google" acima do form existente, **sem link de signup** | Puramente de UI, sem nada específico do gasfavero. |
+| `frontend/src/routes/signup-b2c-disabled.tsx` | Arquivo inteiro (renomeado de `signup.tsx`) | Mantém o formulário pronto para reativação futura de auto-cadastro (ex: canal B2C), sem expor a rota `/signup` padrão nem link na UI. |
 | `frontend/package.json` | Dependência `@supabase/supabase-js` | — |
 
 ### Fica de fora do template (específico deste projeto, nunca commitar/portar)
@@ -103,6 +109,7 @@ tudo que é comportamento/arquitetura reaproveitável; fica aqui tudo que
 | `POSTGRES_*`, `FIRST_SUPERUSER*`, `SECRET_KEY` | `.env` local + Variables do Railway | Óbvio — credenciais reais nunca vão pro template. |
 | Nome do domínio Railway (`backend-gasfavero.up.railway.app`) | Configuração do Railway | Um domínio por ERP. |
 | Módulos de negócio específicos (ex: futuros `vendas`, `estoque-gas`) | Migrations locais deste repo | Módulos de RBAC específicos do domínio de negócio do gás, não fazem sentido num template genérico. |
+| Lista de e-mails cadastrados (usuários reais) | Postgres do Supabase deste ERP | Cada ERP tem seus próprios usuários — nunca vai em código nem template. |
 
 ### ⚠️ Pegadinhas de configuração (não aparecem em `git diff`, mas quebram tudo)
 
@@ -149,6 +156,14 @@ porque foi a parte mais cara (em tempo) de debugar hoje:
    O domínio antigo (`<nome-antigo>.vercel.app`) continua sendo o de
    produção até você editar manualmente em `Settings → Domains` e
    escolher se quer redirect (307) do domínio antigo pro novo ou removê-lo.
+8. **Sistema fechado por padrão (desde a v2.2.0 do template): ninguém
+   se auto-cadastra.** Um usuário novo (local ou Google) só entra
+   depois de um admin criar a conta manualmente na tela "Usuários"
+   (`POST /users/`, protegido por superuser). Isso vale tanto pro login
+   Google (rejeita e-mail desconhecido com 403) quanto pro auto-cadastro
+   local (endpoint `/signup` desabilitado, ver seção de Autenticação).
+   **Ao cadastrar um novo usuário via Google, ele nasce sem role
+   nenhuma** — lembrar de atribuir role manualmente na mesma tela.
 
 ---
 
@@ -184,9 +199,10 @@ Para adicionar um novo módulo específico do negócio (ex: `vendas`,
 
 ---
 
-## Autenticação — local + Google OAuth (Supabase Auth)
+## Autenticação — local + Google OAuth (Supabase Auth), sistema fechado
 
-Testado e funcionando em produção. Fluxo:
+Testado e funcionando em produção. **Política: ninguém se auto-cadastra.
+Só um admin cria contas.** Fluxo:
 
 - **Login local** (e-mail/senha): `POST /api/v1/login/access-token`
   gera um JWT assinado com `SECRET_KEY` local — fluxo original do
@@ -199,12 +215,36 @@ Testado e funcionando em produção. Fluxo:
 - **Backend**: `get_current_user` em `deps.py` tenta decodificar o
   token como JWT local primeiro; se falhar, tenta validar como JWT do
   Supabase via JWKS (`verify_supabase_token`, em `supabase_auth.py`).
-  Um usuário Google que ainda não existe localmente é criado por
-  e-mail, **sem role nenhuma** — um admin precisa atribuir role
-  manualmente pela tela "Usuários" antes do usuário ter qualquer
-  permissão além do próprio perfil.
+  `_get_user_from_supabase` busca o usuário local por e-mail — **se
+  não existir, rejeita com 403** ("Este e-mail não está cadastrado no
+  sistema"), não cria automaticamente. Um usuário que já existe mas
+  ainda não tem role recebe acesso ao próprio perfil apenas, até um
+  admin atribuir role pela tela "Usuários".
+- **Auto-cadastro local desabilitado**: `POST /api/v1/users/signup`
+  retorna 403 sempre. A página correspondente no frontend foi renomeada
+  de `/signup` para `/signup-b2c-disabled`, sem link em nenhum lugar da
+  UI — só acessível por quem digitar a URL diretamente, e mesmo assim o
+  submit falha com a mensagem do backend. Lógica original preservada em
+  comentário em `users.py`, pronta pra reativação quando o canal de
+  vendas B2C (cliente final / comprador varejista) for lançado.
+- **Como cadastrar um usuário novo hoje**: um admin acessa a tela
+  "Usuários" e cria a conta manualmente (`POST /users/`, protegido por
+  superuser). Depois disso, esse e-mail pode logar tanto por senha
+  quanto por Google.
 
-Nenhuma mudança de comportamento no login local — zero regressão.
+Nenhuma mudança de comportamento no login local existente — zero
+regressão pros usuários já cadastrados.
+
+---
+
+## Débitos técnicos
+
+| # | Item | Status | Detalhe |
+|---|---|---|---|
+| 1 | Auto-cadastro aberto (login Google criava usuário pra qualquer e-mail; `/signup` local acessível a qualquer um) | ✅ **Resolvido** | Ver seção "Autenticação" acima. Corrigido e portado pro `erp-core-template` (`v2.2.0`). |
+| 2 | Percent-encoding na senha do Postgres — `config.py` monta a URI sem escapar caracteres especiais (`@`, `#`, `!`, `&` quebram) | 🔧 Aberto | Contorno atual: senha do banco só alfanumérica. Fix real: `urllib.parse.quote_plus` em `SQLALCHEMY_DATABASE_URI`. Candidato a portar pro template quando corrigido. |
+| 3 | `mypy --strict` com 4 avisos pré-existentes em `deps.py`/`users.py` (`.in_()` em coluna UUID, `dict` sem type args) | 🔧 Aberto, baixa prioridade | Falso-positivo conhecido do SQLModel com mypy strict. Não bloqueia CI (só `pytest` roda). Cosmético. |
+| 4 | CI gate não ativado (`test-rbac.yml` roda mas não é obrigatório pra merge) | 🔧 Aberto, baixa prioridade | GitHub → Settings → Branches → Require status checks. |
 
 ---
 
@@ -255,7 +295,7 @@ App: http://localhost:5173
 
 ```powershell
 cd backend
-pytest tests/rbac/ -v   # roda sem banco externo (SQLite in-memory)
+uv run pytest tests/rbac/ -v   # roda sem banco externo (SQLite in-memory)
 ```
 
 ---
@@ -280,6 +320,7 @@ concluídos e validados em produção.
 - [x] 11. Login local testado ponta a ponta em produção
 - [x] 12. Login Google testado ponta a ponta em produção
 - [x] 13. RBAC validado (rota "Usuários" protegida, permissões corretas)
+- [x] 14. Sistema fechado validado (signup local → 403, e-mail Google desconhecido → 403)
 
 ### Decisões tomadas
 
@@ -312,21 +353,17 @@ concluídos e validados em produção.
   verificado publicamente) — suficiente para uso interno do ERP.
   É preciso adicionar os e-mails que vão logar em **Google Auth
   Platform → Audience → Test users**, senão o Google recusa o login
-  mesmo com client ID/secret corretos.
+  mesmo com client ID/secret corretos. **Nota**: essa allowlist do
+  Google é uma camada extra, não a defesa principal — a defesa
+  primária é o backend rejeitar e-mail desconhecido (ver Autenticação).
 - **Rotação de credenciais**: durante o setup, a senha do Postgres, a
   `service_role` key do Supabase e o Client Secret do Google OAuth
   passaram em texto puro pelo chat de configuração em algum momento.
   Todas foram rotacionadas após o uso. Lição para os próximos ERPs:
   preferir descrever "copiei o valor" a colar o valor em si na
   conversa, mesmo com um assistente — evita rotação reativa.
-- **Bug de percent-encoding na senha do Postgres**: o `config.py`
-  herdado do `erp-core-template` monta a URI de conexão concatenando
-  `POSTGRES_USER:POSTGRES_PASSWORD@POSTGRES_SERVER` sem escapar
-  caracteres especiais. Uma senha com símbolos como `@`, `#`, `!`, `&`
-  quebra o parser da URI. Contorno usado: senha do banco só com
-  caracteres alfanuméricos. **Dívida técnica**: aplicar
-  `urllib.parse.quote_plus` na senha em `backend/app/core/config.py`
-  — candidato a fix também portável pro template.
+- **Bug de percent-encoding na senha do Postgres**: ver seção "Débitos
+  técnicos" acima.
 - **Nome do serviço e domínio no Railway**: renomeados de `frontend`
   (erro de digitação original) para `backend`, e o domínio público de
   `frontend-production-35d5.up.railway.app` para
@@ -445,8 +482,8 @@ resultado não funcionava):
 2. Novo projeto → nome `gasfavero`, região mais próxima do Brasil
    (`South America (São Paulo)`), plano Free
 3. Gere e guarde a senha do banco em local seguro — **prefira só
-   caracteres alfanuméricos** (ver dívida técnica de percent-encoding
-   acima) até o `config.py` ser corrigido
+   caracteres alfanuméricos** (ver "Débitos técnicos" acima) até o
+   `config.py` ser corrigido
 4. Em **Project Settings → API**, anote:
    - `Project URL` → `SUPABASE_URL`
    - Publishable key → `SUPABASE_ANON_KEY`
@@ -590,7 +627,7 @@ Este repositório foi derivado do `erp-core-template` (fork do
 via merge com histórico preservado (`--allow-unrelated-histories`), com
 o `mcp-local` incorporado via `git subtree`. Segue o mesmo padrão de
 isolamento planejado para os próximos ERPs (`dragrafavero` e o da
-confecção). A jornada completa de RBAC + Supabase Auth documentada
-neste README está sendo portada de volta pro `erp-core-template` (ver
-seção de portabilidade acima), para que os próximos ERPs herdem tudo
-isso pronto e validado.
+confecção). A jornada completa de RBAC + Supabase Auth + sistema
+fechado documentada neste README foi portada de volta pro
+`erp-core-template` (tags `v2.0.0`–`v2.2.0`), para que os próximos ERPs
+herdem tudo isso pronto e validado.
