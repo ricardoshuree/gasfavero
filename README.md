@@ -1,16 +1,14 @@
-<<<<<<< HEAD
-# gasfavero
-=======
 <!--
-[mcp-local harness] feature: docs | plano: d31a2728 | 2026-08-03 15:42:42
-README completo com stack, estrutura, como rodar localmente, Supabase Auth passo a passo, CI/CD e como derivar um novo ERP
+[mcp-local harness] feature: docs-infra-setup | plano: 12f50a12 | 2026-08-03 21:00:23
+README consolidado do gasfavero: conflito de merge resolvido + seção de processo de infra
 -->
-# erp-core-template
+# gasfavero
 
-Template base para sistemas ERP/CRM web, responsivos (desktop e mobile),
-com autenticação, controle de acesso por módulo (RBAC) e CI/CD integrado
-ao GitHub. Serve como marco zero para derivar instâncias de ERP isoladas
-por negócio.
+ERP do GAS Favero (controle de vendas). Instância isolada derivada do
+[`erp-core-template`](https://github.com/ricardoshuree/erp-core-template),
+com o [`mcp-local`](https://github.com/ricardoshuree/mcp-local) embarcado
+como subtree em `mcp-local/` — monólito autocontido, sem dependência de
+outros projetos ativos.
 
 ---
 
@@ -20,21 +18,21 @@ por negócio.
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLModel, Alembic, Argon2 |
 | Frontend | React, TypeScript, Tailwind CSS, shadcn/ui, TanStack Router |
-| Banco | PostgreSQL (produção) / SQLite in-memory (testes) |
-| Auth | JWT próprio (pronto para migrar para Supabase Auth) |
+| Banco | PostgreSQL via Supabase (produção) / SQLite in-memory (testes) |
+| Auth | Supabase Auth (Email + Google OAuth) |
 | Deploy | Vercel (frontend) + Railway (backend) |
 | CI/CD | GitHub Actions |
-| Dev | uv, Docker Compose (futuro), mcp-local-erp |
+| Dev | uv, mcp-local (embarcado, servidor MCP isolado deste projeto) |
 
 ---
 
 ## Estrutura
 
 ```
-erp-core-template/
+erp-gasfavero/
 ├── backend/
 │   ├── app/
-│   │   ├── alembic/versions/   ← migrations de banco
+│   │   ├── alembic/versions/   ← migrations de banco (inclui RBAC)
 │   │   ├── api/routes/         ← endpoints FastAPI
 │   │   ├── core/               ← config, db, security
 │   │   └── models.py           ← todos os modelos SQLModel
@@ -44,15 +42,15 @@ erp-core-template/
 │   └── src/
 │       ├── components/Sidebar/ ← menu lateral dinâmico por role
 │       ├── hooks/
-│       │   ├── useAuth.ts      ← autenticação JWT
+│       │   ├── useAuth.ts      ← autenticação
 │       │   └── usePermissions.ts ← permissões por módulo
 │       └── routes/             ← páginas do app
 ├── .github/workflows/
-│   ├── test-rbac.yml           ← CI: roda testes RBAC a cada push/PR
-│   └── ...                     ← outros workflows do template original
+│   └── test-rbac.yml           ← CI: roda testes RBAC a cada push/PR
 ├── .env.example                ← variáveis necessárias (sem valores reais)
 ├── activate.ps1                ← ativa venv do backend no Windows/VS Code
-└── mcp-local/                  ← servidor MCP local (ignorado pelo git)
+└── mcp-local/                  ← servidor MCP deste projeto (versionado, subtree)
+    └── config.yaml             ← project_name: mcp-erp-gasfavero
 ```
 
 ---
@@ -73,7 +71,8 @@ Roles e módulos padrão criados automaticamente na primeira inicialização:
 - **Módulos**: `usuarios`, `configuracoes`
 
 O menu lateral do frontend é renderizado dinamicamente com base nas
-permissões do usuário logado. Para adicionar um novo módulo num ERP filho:
+permissões do usuário logado. Para adicionar um novo módulo específico
+do negócio (ex: `vendas`, `estoque-gas`):
 1. Crie a migration Alembic inserindo o módulo na tabela `module`
 2. Adicione a entrada em `frontend/src/components/Sidebar/AppSidebar.tsx`
    no array `MODULE_ITEMS` com o mesmo nome de módulo
@@ -91,21 +90,19 @@ permissões do usuário logado. Para adicionar um novo módulo num ERP filho:
 ### Backend
 
 ```powershell
-# Na raiz do projeto
 cp .env.example .env
-# Edite .env com seus valores locais
+# Edite .env com os valores do Supabase (ver seção de infra abaixo)
 
 uv sync
-. .\activate.ps1          # ativa o venv (Windows)
+. .\activate.ps1
 
 cd backend
-uv run alembic upgrade head   # aplica as migrations
+uv run alembic upgrade head        # aplica as migrations (inclui RBAC)
 uv run python -m app.initial_data  # cria superuser e seed de roles/módulos
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-API disponível em: http://localhost:8000
-Documentação interativa: http://localhost:8000/docs
+API: http://localhost:8000 — Docs: http://localhost:8000/docs
 
 ### Frontend
 
@@ -115,7 +112,7 @@ npm install   # ou: bun install
 npm run dev   # ou: bun dev
 ```
 
-App disponível em: http://localhost:5173
+App: http://localhost:5173
 
 ### Testes
 
@@ -126,54 +123,87 @@ pytest tests/rbac/ -v   # roda sem banco externo (SQLite in-memory)
 
 ---
 
-## Configurar Supabase Auth (passo a passo — antes do deploy)
+## Setup de infraestrutura — Supabase + Google OAuth + Railway
 
-O template usa JWT próprio por padrão. Para migrar para Supabase Auth
-(que adiciona login com Google e gerenciamento de sessão hospedado):
+Checklist do processo de provisionamento deste ERP. Atualizado conforme
+os passos são concluídos.
+
+### Decisões tomadas
+
+- **Plano Supabase**: Free tier por enquanto (projeto ainda em setup, sem
+  uso real). Gatilho de upgrade para Pro ($25/mês/organização): **antes
+  de ir para produção com o cliente**, ou quando o 3º ERP precisar de
+  slot — o que vier primeiro. Free permite só 2 projetos ativos por
+  organização e pausa projetos após 7 dias sem requisições — inaceitável
+  em produção, mas adequado para desenvolvimento.
+- **Alocação dos 2 slots free**: `gasfavero` e `dragrafavero` (sujeito a
+  mudança). A confecção fica no slot pago desde o início.
+- **Ambiente**: só produção por enquanto, sem projeto Supabase de dev
+  separado (decisão para caber no free tier com múltiplos ERPs).
+
+### Checklist
+
+- [ ] 1. Criar projeto no Supabase (Postgres + Auth)
+- [ ] 2. Coletar `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] 3. Criar OAuth 2.0 Client ID no Google Cloud Console
+- [ ] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
+- [ ] 5. Preencher `.env` local com as credenciais
+- [ ] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
+- [ ] 7. Criar projeto no Railway e conectar ao repositório GitHub
+- [ ] 8. Configurar variáveis de ambiente no Railway
+- [ ] 9. Validar deploy do backend em produção
 
 ### 1. Criar projeto no Supabase
 
-1. Acesse https://supabase.com e crie uma conta
-2. Crie um novo projeto (um por instância de ERP, um por ambiente)
-3. Anote as três chaves em **Project Settings → API**:
+1. Acesse https://supabase.com/dashboard e crie/entre na conta
+2. Novo projeto → nome `gasfavero`, região mais próxima do Brasil
+   (`South America (São Paulo)`), plano Free
+3. Gere e guarde a senha do banco em local seguro (não é armazenada em
+   texto plano por nós — trate como segredo)
+4. Em **Project Settings → API**, anote:
    - `Project URL` → `SUPABASE_URL`
    - `anon public` → `SUPABASE_ANON_KEY`
    - `service_role secret` → `SUPABASE_SERVICE_ROLE_KEY`
 
-### 2. Configurar Google OAuth (opcional)
+### 2. Configurar Google OAuth
 
-1. Acesse https://console.cloud.google.com
-2. Crie um projeto → APIs & Services → Credentials → OAuth 2.0 Client ID
-3. Em Authorized redirect URIs adicione: `https://<seu-projeto>.supabase.co/auth/v1/callback`
-4. No Supabase: Authentication → Providers → Google → cole Client ID e Secret
+1. Acesse https://console.cloud.google.com/apis/credentials
+2. Crie um projeto (ou reaproveite um existente) → **APIs & Services →
+   Credentials → Create Credentials → OAuth 2.0 Client ID**
+3. Tipo de aplicação: Web application
+4. Em **Authorized redirect URIs**, adicione:
+   `https://<seu-projeto>.supabase.co/auth/v1/callback`
+5. No Supabase: **Authentication → Providers → Google** → cole o
+   Client ID e Client Secret gerados
 
-### 3. Adicionar variáveis de ambiente
+### 3. Variáveis de ambiente
 
-No `.env` local e nas variáveis de ambiente do Railway (backend) e Vercel (frontend):
+No `.env` local e nas variáveis de ambiente do Railway (backend):
 
 ```env
 SUPABASE_URL=https://<seu-projeto>.supabase.co
 SUPABASE_ANON_KEY=<chave-anon>
 SUPABASE_SERVICE_ROLE_KEY=<chave-service-role>
+DATABASE_URL=<connection-string-do-postgres-supabase>
 ```
 
-### 4. Substituir o fluxo de autenticação
+### 4. Aplicar migrations (RBAC incluso)
 
-Os arquivos a modificar estão marcados com o comentário
-`# TODO: substituir por Supabase Auth`:
+```powershell
+cd backend
+uv run alembic upgrade head
+```
 
-- `backend/app/api/deps.py` → `get_current_user`: trocar decodificação JWT
-  local pela verificação do token Supabase via `SUPABASE_SERVICE_ROLE_KEY`
-- `backend/app/api/routes/login.py` → remover endpoint de login próprio;
-  o Supabase passa a gerenciar login, registro e recuperação de senha
-- `frontend/src/hooks/useAuth.ts` → substituir `LoginService` pelo
-  cliente Supabase (`@supabase/supabase-js`)
+As tabelas `role`, `module`, `role_permission` e `user_role` já estão
+definidas nas migrations herdadas do `erp-core-template` — só rodar
+contra o Postgres do Supabase.
 
-### 5. Manter o RBAC intacto
+### 5. Railway (backend)
 
-As tabelas `role`, `module`, `role_permission` e `user_role` continuam
-no seu Postgres (via Supabase). Apenas a camada de autenticação muda —
-o RBAC permanece funcionando exatamente como está.
+1. Acesse https://railway.app e conecte a conta GitHub
+2. New Project → Deploy from GitHub repo → `ricardoshuree/gasfavero`
+3. Configure as variáveis de ambiente (mesmas do `.env`, ver acima)
+4. Root directory do deploy: `backend/`
 
 ---
 
@@ -191,38 +221,6 @@ GitHub → Settings → Branches → Add rule → `main` → marcar
 
 ---
 
-## Como derivar um novo ERP a partir deste template
-
-```bash
-# 1. Clone o template para uma nova pasta
-git clone https://github.com/ricardoshuree/erp-core-template.git erp-gasfavero
-cd erp-gasfavero
-
-# 2. Aponte para o novo repositório GitHub
-git remote set-url origin https://github.com/ricardoshuree/erp-gasfavero.git
-git push -u origin main
-
-# 3. Clone o mcp-local para desenvolvimento
-git clone https://github.com/ricardoshuree/mcp-local.git mcp-local
-cd mcp-local
-# Edite config.yaml: project_name = mcp-gasfavero
-uv sync
-uv run start.py   # registra no Claude Desktop
-
-# 4. Configure o .env com as credenciais do novo projeto
-cp .env.example .env
-
-# 5. Crie as migrations dos módulos específicos do negócio
-cd backend
-uv run alembic revision --autogenerate -m "add modulos erp-gasfavero"
-uv run alembic upgrade head
-```
-
-A partir daí, adicione os módulos e rotas específicos do negócio.
-O RBAC, auth, CI/CD e estrutura base já estão prontos.
-
----
-
 ## Plataformas de hospedagem
 
 | Serviço | Plataforma | O que cobre |
@@ -231,5 +229,13 @@ O RBAC, auth, CI/CD e estrutura base já estão prontos.
 | Backend | Railway | Deploy do FastAPI, auto-deploy via GitHub |
 | Banco + Auth | Supabase | PostgreSQL gerenciado, Auth, RLS |
 
-Deploy automático completo com Docker será configurado em etapa posterior.
->>>>>>> template/main
+---
+
+## Origem
+
+Este repositório foi derivado do `erp-core-template` (fork do
+[`fastapi/full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template))
+via merge com histórico preservado (`--allow-unrelated-histories`), com
+o `mcp-local` incorporado via `git subtree`. Segue o mesmo padrão de
+isolamento planejado para os próximos ERPs (`dragrafavero` e o da
+confecção).
