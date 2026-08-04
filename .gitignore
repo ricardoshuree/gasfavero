@@ -44,3 +44,5 @@ backend/app/frontend/
 .idea/
 
 backend/.commands
+
+mcp-local/mcp_audit.jsonl
