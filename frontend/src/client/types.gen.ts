@@ -88,6 +88,15 @@ export type PrivateUserCreate = {
 };
 
 /**
+ * Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
+ * 'motorista'). Nome deve ser único (validado no endpoint).
+ */
+export type RoleCreate = {
+    name: string;
+    description?: (string | null);
+};
+
+/**
  * Uma linha da matriz: o que uma role específica pode fazer no
  * módulo (zerado se ainda não houver RolePermission cadastrado).
  */
@@ -110,15 +119,32 @@ export type RolePermissionUpdate = {
 
 /**
  * Role RBAC exposta pra UI (não confundir com is_superuser).
+ *
+ * user_count vem sempre calculado pelo endpoint (não é uma coluna do
+ * banco) -- usado pela tela "Gerenciar Roles" pra avisar o superuser
+ * quantos usuários seriam desvinculados antes de confirmar um DELETE
+ * (a FK UserRole.role_id tem ondelete=CASCADE, então apagar a role
+ * desvincula silenciosamente se a UI não avisar antes).
  */
 export type RolePublic = {
     id: string;
     name: string;
     description?: (string | null);
+    user_count?: number;
 };
 
 export type RolesPublic = {
     data: Array<RolePublic>;
+};
+
+/**
+ * Corpo de PATCH /roles/{role_id} -- edição parcial (nome e/ou
+ * descrição). Renomear uma role não quebra nada além do óbvio: as
+ * permissões e vínculos de usuário são por role_id, não por nome.
+ */
+export type RoleUpdate = {
+    name?: (string | null);
+    description?: (string | null);
 };
 
 export type Token = {
@@ -295,6 +321,25 @@ export type PrivateCreateUserData = {
 export type PrivateCreateUserResponse = (UserPublic);
 
 export type RolesReadRolesResponse = (RolesPublic);
+
+export type RolesCreateRoleData = {
+    requestBody: RoleCreate;
+};
+
+export type RolesCreateRoleResponse = (RolePublic);
+
+export type RolesUpdateRoleData = {
+    requestBody: RoleUpdate;
+    roleId: string;
+};
+
+export type RolesUpdateRoleResponse = (RolePublic);
+
+export type RolesDeleteRoleData = {
+    roleId: string;
+};
+
+export type RolesDeleteRoleResponse = (Message);
 
 export type UsersReadUsersData = {
     limit?: number;

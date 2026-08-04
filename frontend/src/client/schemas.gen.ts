@@ -369,6 +369,34 @@ export const PrivateUserCreateSchema = {
     title: 'PrivateUserCreate'
 } as const;
 
+export const RoleCreateSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            maxLength: 100,
+            minLength: 1,
+            title: 'Name'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    required: ['name'],
+    title: 'RoleCreate',
+    description: `Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
+'motorista'). Nome deve ser único (validado no endpoint).`
+} as const;
+
 export const RolePermissionEntrySchema = {
     properties: {
         role_id: {
@@ -458,12 +486,58 @@ export const RolePublicSchema = {
                 }
             ],
             title: 'Description'
+        },
+        user_count: {
+            type: 'integer',
+            title: 'User Count',
+            default: 0
         }
     },
     type: 'object',
     required: ['id', 'name'],
     title: 'RolePublic',
-    description: 'Role RBAC exposta pra UI (não confundir com is_superuser).'
+    description: `Role RBAC exposta pra UI (não confundir com is_superuser).
+
+user_count vem sempre calculado pelo endpoint (não é uma coluna do
+banco) -- usado pela tela "Gerenciar Roles" pra avisar o superuser
+quantos usuários seriam desvinculados antes de confirmar um DELETE
+(a FK UserRole.role_id tem ondelete=CASCADE, então apagar a role
+desvincula silenciosamente se a UI não avisar antes).`
+} as const;
+
+export const RoleUpdateSchema = {
+    properties: {
+        name: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 100,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Name'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    title: 'RoleUpdate',
+    description: `Corpo de PATCH /roles/{role_id} -- edição parcial (nome e/ou
+descrição). Renomear uma role não quebra nada além do óbvio: as
+permissões e vínculos de usuário são por role_id, não por nome.`
 } as const;
 
 export const RolesPublicSchema = {

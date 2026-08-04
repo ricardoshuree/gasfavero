@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: rbac-permission-matrix-and-produtos | plano: 5220fc65 | 2026-08-04 14:12:45
-# Adiciona models da matriz de permissoes (ModulePublic, ModulePermissionMatrix, etc)
+# [mcp-local harness] feature: gestao-roles-crud | plano: 9728719f | 2026-08-04 18:30:08
+# Adiciona user_count a RolePublic (contagem de usuários vinculados, usada pela UI antes de apagar) e os models RoleCreate/RoleUpdate para o novo CRUD de roles
 import uuid
 from datetime import UTC, datetime
 
@@ -108,10 +108,33 @@ class UserPermissions(SQLModel):
 # ---------------------------------------------------------------------------
 
 class RolePublic(SQLModel):
-    """Role RBAC exposta pra UI (não confundir com is_superuser)."""
+    """Role RBAC exposta pra UI (não confundir com is_superuser).
+
+    user_count vem sempre calculado pelo endpoint (não é uma coluna do
+    banco) -- usado pela tela "Gerenciar Roles" pra avisar o superuser
+    quantos usuários seriam desvinculados antes de confirmar um DELETE
+    (a FK UserRole.role_id tem ondelete=CASCADE, então apagar a role
+    desvincula silenciosamente se a UI não avisar antes).
+    """
     id: uuid.UUID
     name: str
     description: str | None = None
+    user_count: int = 0
+
+
+class RoleCreate(SQLModel):
+    """Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
+    'motorista'). Nome deve ser único (validado no endpoint)."""
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=255)
+
+
+class RoleUpdate(SQLModel):
+    """Corpo de PATCH /roles/{role_id} -- edição parcial (nome e/ou
+    descrição). Renomear uma role não quebra nada além do óbvio: as
+    permissões e vínculos de usuário são por role_id, não por nome."""
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=255)
 
 
 class RolesPublic(SQLModel):
