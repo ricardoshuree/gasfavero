@@ -1,9 +1,9 @@
-# [mcp-local harness] feature: frontend-rbac | plano: 1231b7fe | 2026-08-03 15:40:50
-# Adiciona endpoint GET /users/me/permissions que retorna roles e permissões efetivas do usuário
+# [mcp-local harness] feature: close-open-signup-security | plano: ac575558 | 2026-08-04 11:29:39
+# Corrige: remove statements Python inalcancaveis (quebrava mypy strict), preserva logica original como comentario documentado
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import col, delete, func, select
 
 from app import crud
@@ -204,18 +204,37 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     return Message(message="User deleted successfully")
 
 
+# ---------------------------------------------------------------------------
+# Auto-cadastro público (B2C) -- DESABILITADO
+#
+# Reservado para uma futura abertura do canal de vendas B2C (cliente
+# final / comprador varejista se cadastrando sozinho). Hoje o gasfavero
+# é um sistema fechado: só um admin cria contas (ver POST /users/
+# acima, protegido por superuser).
+#
+# Lógica original preservada em comentário para reativação futura --
+# ao religar, restaurar o corpo da função e remover o HTTPException 403:
+#
+#     user = crud.get_user_by_email(session=session, email=user_in.email)
+#     if user:
+#         raise HTTPException(
+#             status_code=400,
+#             detail="The user with this email already exists in the system",
+#         )
+#     user_create = UserCreate.model_validate(user_in)
+#     user = crud.create_user(session=session, user_create=user_create)
+#     return user
+# ---------------------------------------------------------------------------
 @router.post("/signup", response_model=UserPublic)
 def register_user(session: SessionDep, user_in: UserRegister) -> Any:
-    """Create new user without the need to be logged in."""
-    user = crud.get_user_by_email(session=session, email=user_in.email)
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system",
-        )
-    user_create = UserCreate.model_validate(user_in)
-    user = crud.create_user(session=session, user_create=user_create)
-    return user
+    """Auto-cadastro público -- desabilitado, ver comentário acima."""
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "Cadastro público desabilitado. Peça a um administrador "
+            "para criar sua conta."
+        ),
+    )
 
 
 @router.get("/{user_id}", response_model=UserPublic)
