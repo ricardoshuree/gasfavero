@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-railpack-uv-fix | plano: 196fbfee | 2026-08-03 23:46:16
-Documenta o bug de deteccao do uv pelo Railpack e a correcao via pip, marca checklist 7-8 concluidos
+[mcp-local harness] feature: fix-readme-restore | plano: f899fa8c | 2026-08-04 00:02:29
+README restaurado por completo, com a nota consolidada sobre uv.lock e .python-version integrada
 -->
 # gasfavero
 
@@ -37,6 +37,7 @@ erp-gasfavero/
 │   │   ├── core/               ← config, db, security
 │   │   └── models.py           ← todos os modelos SQLModel
 │   ├── Dockerfile.monorepo-unused ← NÃO usar no Railway (ver seção de infra)
+│   ├── .python-version         ← 3.14, duplicado da raiz (ver seção de infra)
 │   └── tests/
 │       └── rbac/               ← testes de RBAC (SQLite, sem Docker)
 ├── frontend/
@@ -188,24 +189,33 @@ os passos são concluídos.
   por isso o arquivo foi renomeado via `git mv`, não só reconfigurado
   na UI. O arquivo permanece no repo (histórico preservado) caso um dia
   o projeto migre para deploy single-container via Docker Compose.
-- **Railpack não detecta `uv` automaticamente**: o `uv.lock` deste
-  projeto vive na raiz do repositório (workspace `uv` compartilhado
-  entre os módulos), fora da Root Directory `backend/` configurada no
-  Railway. Sem o `uv.lock` visível, o Railpack não reconhece `uv` como
-  gerenciador de pacotes, não o instala na imagem, e não roda nenhuma
-  instalação de dependências — resultando em container saudável na
-  aparência mas crashando em loop (`uv: command not found`) ao tentar
-  iniciar. **Correção pragmática adotada**: build e start commands no
-  Railway usam `pip` diretamente em vez de `uv`, já que o
-  `backend/pyproject.toml` é autocontido (lista todas as dependências
-  sem depender do lock do workspace):
-  - Custom Build Command: `pip install --no-cache-dir .`
-  - Custom Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-  **Dívida técnica**: gerar um `uv.lock` dedicado e autocontido dentro
-  de `backend/` (fora do workspace da raiz) permitiria voltar a usar
-  `uv` no Railway com reprodutibilidade de versões — hoje o `pip
-  install .` resolve as versões mais recentes compatíveis a cada build,
-  sem pin exato.
+- **Padrão recorrente: arquivos de config na raiz do workspace `uv`
+  ficam invisíveis pro Railway**, já que a Root Directory configurada é
+  `backend/`, não a raiz do repo. Apareceu duas vezes até agora:
+  - **`uv.lock`**: vive na raiz (workspace `uv` compartilhado entre
+    módulos). Sem ele visível, o Railpack não reconhece `uv` como
+    gerenciador de pacotes, não o instala na imagem, e não instala
+    nenhuma dependência — container sobe "saudável" na aparência mas
+    crasha em loop (`uv: command not found`) ao iniciar. **Correção
+    pragmática**: build e start commands usam `pip` diretamente em vez
+    de `uv`, já que `backend/pyproject.toml` é autocontido:
+    - Custom Build Command: `pip install --no-cache-dir .`
+    - Custom Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+    **Dívida técnica**: gerar um `uv.lock` dedicado dentro de
+    `backend/` permitiria voltar a usar `uv` com reprodutibilidade de
+    versões — hoje o `pip install .` resolve as versões mais recentes
+    compatíveis a cada build, sem pin exato.
+  - **`.python-version`**: define `3.14` na raiz, mas não existia
+    dentro de `backend/`. Sem ele, o Railpack usava um Python `3.13.14`
+    default, incompatível com `requires-python = ">=3.14,<4.0"` do
+    `backend/pyproject.toml` — o `pip install` falhava com "Package
+    'app' requires a different Python". **Correção**:
+    `backend/.python-version` criado com `3.14`, duplicando o valor da
+    raiz.
+
+  Ao adicionar módulos ou configs novas ao workspace `uv`, verificar
+  se algum outro arquivo de configuração relevante só existe na raiz e
+  precisa de uma cópia dentro de `backend/` para o Railway enxergar.
 
 ### Checklist
 
@@ -287,13 +297,15 @@ definidas nas migrations herdadas do `erp-core-template`. O
    também que não existe nenhum arquivo `Dockerfile` na Root Directory
    configurada, já que o Railway prioriza ele mesmo com Railpack
    selecionado (ver dívida técnica acima)
-5. Em **Settings → Build → Custom Build Command**:
+5. Confirme que `backend/.python-version` existe com a versão exigida
+   pelo `pyproject.toml` (ver dívida técnica acima)
+6. Em **Settings → Build → Custom Build Command**:
    `pip install --no-cache-dir .`
-6. Em **Settings → Deploy → Custom Start Command**:
+7. Em **Settings → Deploy → Custom Start Command**:
    `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-7. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
+8. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
    **Variables → Raw Editor**
-8. **Networking → Generate Domain** para obter a URL pública
+9. **Networking → Generate Domain** para obter a URL pública
 
 ---
 

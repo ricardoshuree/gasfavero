@@ -1,0 +1,3 @@
+# [mcp-local harness] feature: fix-python-version-railway | plano: 1d902ac5 | 2026-08-04 00:00:31
+# Fixa versao do Python pro Railpack detectar corretamente dentro de backend/
+3.14
