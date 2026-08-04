@@ -1,5 +1,3 @@
-# [mcp-local harness] feature: supabase-auth-frontend | plano: 56185697 | 2026-08-04 00:43:32
-# Adiciona @supabase/supabase-js como dependencia
 {
   "name": "frontend",
   "private": true,
