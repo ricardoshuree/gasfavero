@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-infra-setup | plano: 12f50a12 | 2026-08-03 21:00:23
-README consolidado do gasfavero: conflito de merge resolvido + seção de processo de infra
+[mcp-local harness] feature: docs-infra-checklist-update | plano: 7a13c59d | 2026-08-03 22:16:58
+Checklist 1-5 marcada, decisões de segurança e rotação documentadas
 -->
 # gasfavero
 
@@ -140,14 +140,38 @@ os passos são concluídos.
   mudança). A confecção fica no slot pago desde o início.
 - **Ambiente**: só produção por enquanto, sem projeto Supabase de dev
   separado (decisão para caber no free tier com múltiplos ERPs).
+- **Segurança na criação do projeto Supabase**: `Enable automatic RLS`
+  ativado (toda tabela nova nasce fechada por padrão, sem policy
+  explícita ninguém acessa via API) e `Automatically expose new tables`
+  desativado (backend acessa o Postgres diretamente via SQLModel/Alembic,
+  não pela API REST autogerada — não há necessidade de expor tabelas
+  por esse caminho).
+- **Conexão Postgres**: via **Session pooler** (porta 5432, host
+  `aws-0-sa-east-1.pooler.supabase.com`), não Transaction pooler nem
+  conexão direta — o Railway mantém o processo `uvicorn` rodando de
+  forma persistente (não é serverless/stateless), então o Session
+  pooler preserva o comportamento completo de sessão que o SQLModel
+  precisa, só proxeando via IPv4.
+- **Google OAuth consent screen**: criado em modo **Testing** (não
+  verificado publicamente) — suficiente para uso interno do ERP.
+  Antes de testar o login de fato, é preciso adicionar os e-mails que
+  vão logar em **Google Auth Platform → Audience → Test users**,
+  senão o Google recusa o login mesmo com client ID/secret corretos.
+- **Rotação de credenciais**: durante o setup, a senha do Postgres, a
+  `service_role` key do Supabase e o Client Secret do Google OAuth
+  passaram em texto puro pelo chat de configuração. Todas foram
+  rotacionadas após o uso (senha resetada, secret key regenerada,
+  OAuth client secret regenerado com o antigo excluído). Lição para os
+  próximos ERPs: preferir descrever "copiei o valor" a colar o valor
+  em si na conversa, mesmo com um assistente — evita rotação reativa.
 
 ### Checklist
 
-- [ ] 1. Criar projeto no Supabase (Postgres + Auth)
-- [ ] 2. Coletar `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- [ ] 3. Criar OAuth 2.0 Client ID no Google Cloud Console
-- [ ] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
-- [ ] 5. Preencher `.env` local com as credenciais
+- [x] 1. Criar projeto no Supabase (Postgres + Auth)
+- [x] 2. Coletar `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- [x] 3. Criar OAuth 2.0 Client ID no Google Cloud Console
+- [x] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
+- [x] 5. Preencher `.env` local com as credenciais
 - [ ] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
 - [ ] 7. Criar projeto no Railway e conectar ao repositório GitHub
 - [ ] 8. Configurar variáveis de ambiente no Railway
@@ -162,15 +186,17 @@ os passos são concluídos.
    texto plano por nós — trate como segredo)
 4. Em **Project Settings → API**, anote:
    - `Project URL` → `SUPABASE_URL`
-   - `anon public` → `SUPABASE_ANON_KEY`
-   - `service_role secret` → `SUPABASE_SERVICE_ROLE_KEY`
+   - Publishable key → `SUPABASE_ANON_KEY`
+   - Secret key → `SUPABASE_SERVICE_ROLE_KEY`
 
 ### 2. Configurar Google OAuth
 
 1. Acesse https://console.cloud.google.com/apis/credentials
-2. Crie um projeto (ou reaproveite um existente) → **APIs & Services →
-   Credentials → Create Credentials → OAuth 2.0 Client ID**
-3. Tipo de aplicação: Web application
+2. Crie um projeto dedicado (ex: `erp-gasfavero`) → **APIs & Services →
+   OAuth consent screen** → preenche App Information, Audience
+   (External), Contact Information → Create
+3. **Credentials → Create Credentials → OAuth client ID** → tipo
+   Web application
 4. Em **Authorized redirect URIs**, adicione:
    `https://<seu-projeto>.supabase.co/auth/v1/callback`
 5. No Supabase: **Authentication → Providers → Google** → cole o
@@ -182,9 +208,13 @@ No `.env` local e nas variáveis de ambiente do Railway (backend):
 
 ```env
 SUPABASE_URL=https://<seu-projeto>.supabase.co
-SUPABASE_ANON_KEY=<chave-anon>
-SUPABASE_SERVICE_ROLE_KEY=<chave-service-role>
-DATABASE_URL=<connection-string-do-postgres-supabase>
+SUPABASE_ANON_KEY=<publishable-key>
+SUPABASE_SERVICE_ROLE_KEY=<secret-key>
+POSTGRES_SERVER=<host-do-pooler>
+POSTGRES_PORT=5432
+POSTGRES_DB=postgres
+POSTGRES_USER=<usuario-do-pooler>
+POSTGRES_PASSWORD=<senha-do-banco>
 ```
 
 ### 4. Aplicar migrations (RBAC incluso)
