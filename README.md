@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-infra-checklist-update | plano: 7a13c59d | 2026-08-03 22:16:58
-Checklist 1-5 marcada, decisões de segurança e rotação documentadas
+[mcp-local harness] feature: docs-infra-checklist-update-2 | plano: 4419a545 | 2026-08-03 22:36:31
+Checklist item 6 marcado, dívida técnica de percent-encoding documentada
 -->
 # gasfavero
 
@@ -164,6 +164,16 @@ os passos são concluídos.
   OAuth client secret regenerado com o antigo excluído). Lição para os
   próximos ERPs: preferir descrever "copiei o valor" a colar o valor
   em si na conversa, mesmo com um assistente — evita rotação reativa.
+- **Bug de percent-encoding na senha do Postgres**: o `config.py`
+  herdado do `erp-core-template` monta a URI de conexão concatenando
+  `POSTGRES_USER:POSTGRES_PASSWORD@POSTGRES_SERVER` sem escapar
+  caracteres especiais. Uma senha gerada com símbolos como `@`, `#`,
+  `!`, `&` quebra o parser da URI (o SQLAlchemy interpreta parte da
+  senha como se fosse o host). Contorno usado: senha do banco gerada
+  só com caracteres alfanuméricos. **Dívida técnica**: corrigir
+  `backend/app/core/config.py` para aplicar `urllib.parse.quote_plus`
+  na senha antes de montar a URI, evitando essa armadilha nos próximos
+  ERPs independente de como a senha for gerada.
 
 ### Checklist
 
@@ -172,7 +182,7 @@ os passos são concluídos.
 - [x] 3. Criar OAuth 2.0 Client ID no Google Cloud Console
 - [x] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
 - [x] 5. Preencher `.env` local com as credenciais
-- [ ] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
+- [x] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
 - [ ] 7. Criar projeto no Railway e conectar ao repositório GitHub
 - [ ] 8. Configurar variáveis de ambiente no Railway
 - [ ] 9. Validar deploy do backend em produção
@@ -182,8 +192,9 @@ os passos são concluídos.
 1. Acesse https://supabase.com/dashboard e crie/entre na conta
 2. Novo projeto → nome `gasfavero`, região mais próxima do Brasil
    (`South America (São Paulo)`), plano Free
-3. Gere e guarde a senha do banco em local seguro (não é armazenada em
-   texto plano por nós — trate como segredo)
+3. Gere e guarde a senha do banco em local seguro — **prefira só
+   caracteres alfanuméricos** (ver dívida técnica de percent-encoding
+   acima) até o `config.py` ser corrigido
 4. Em **Project Settings → API**, anote:
    - `Project URL` → `SUPABASE_URL`
    - Publishable key → `SUPABASE_ANON_KEY`
@@ -214,7 +225,10 @@ POSTGRES_SERVER=<host-do-pooler>
 POSTGRES_PORT=5432
 POSTGRES_DB=postgres
 POSTGRES_USER=<usuario-do-pooler>
-POSTGRES_PASSWORD=<senha-do-banco>
+POSTGRES_PASSWORD=<senha-do-banco, sem caracteres especiais por ora>
+SECRET_KEY=<gerado com secrets.token_urlsafe(32), fixo>
+FIRST_SUPERUSER=<email do admin inicial>
+FIRST_SUPERUSER_PASSWORD=<senha forte>
 ```
 
 ### 4. Aplicar migrations (RBAC incluso)
@@ -222,11 +236,12 @@ POSTGRES_PASSWORD=<senha-do-banco>
 ```powershell
 cd backend
 uv run alembic upgrade head
+uv run python -m app.initial_data
 ```
 
 As tabelas `role`, `module`, `role_permission` e `user_role` já estão
-definidas nas migrations herdadas do `erp-core-template` — só rodar
-contra o Postgres do Supabase.
+definidas nas migrations herdadas do `erp-core-template`. O
+`initial_data` cria o superusuário e popula os roles/módulos padrão.
 
 ### 5. Railway (backend)
 
