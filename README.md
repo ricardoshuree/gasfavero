@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: fix-readme-restore | plano: f899fa8c | 2026-08-04 00:02:29
-README restaurado por completo, com a nota consolidada sobre uv.lock e .python-version integrada
+[mcp-local harness] feature: docs-final-infra-state | plano: fa7a590d | 2026-08-04 00:24:19
+README final com checklist 100% completo, trilha de debugging do Railway documentada, instrucoes atualizadas de deploy via Dockerfile
 -->
 # gasfavero
 
@@ -10,17 +10,21 @@ com o [`mcp-local`](https://github.com/ricardoshuree/mcp-local) embarcado
 como subtree em `mcp-local/` — monólito autocontido, sem dependência de
 outros projetos ativos.
 
+**Status**: backend em produção no Railway, respondendo em
+`https://frontend-production-35d5.up.railway.app/docs` (domínio será
+renomeado — ver dívida técnica de nomenclatura do serviço).
+
 ---
 
 ## Stack
 
 | Camada | Tecnologia |
 |---|---|
-| Backend | Python 3.12, FastAPI, SQLModel, Alembic, Argon2 |
+| Backend | Python 3.14, FastAPI, SQLModel, Alembic, Argon2 |
 | Frontend | React, TypeScript, Tailwind CSS, shadcn/ui, TanStack Router |
 | Banco | PostgreSQL via Supabase (produção) / SQLite in-memory (testes) |
 | Auth | Supabase Auth (Email + Google OAuth) |
-| Deploy | Vercel (frontend) + Railway (backend) |
+| Deploy | Vercel (frontend) + Railway (backend, via Dockerfile) |
 | CI/CD | GitHub Actions |
 | Dev | uv, mcp-local (embarcado, servidor MCP isolado deste projeto) |
 
@@ -36,7 +40,8 @@ erp-gasfavero/
 │   │   ├── api/routes/         ← endpoints FastAPI
 │   │   ├── core/               ← config, db, security
 │   │   └── models.py           ← todos os modelos SQLModel
-│   ├── Dockerfile.monorepo-unused ← NÃO usar no Railway (ver seção de infra)
+│   ├── Dockerfile              ← usado no Railway (backend isolado, ver infra)
+│   ├── Dockerfile.monorepo-unused ← NÃO usar (builda frontend+backend juntos)
 │   ├── .python-version         ← 3.14, duplicado da raiz (ver seção de infra)
 │   └── tests/
 │       └── rbac/               ← testes de RBAC (SQLite, sem Docker)
@@ -85,7 +90,7 @@ do negócio (ex: `vendas`, `estoque-gas`):
 
 ### Pré-requisitos
 
-- Python 3.12+ — `winget install Python.Python.3.12` (Windows)
+- Python 3.14+ — `winget install Python.Python.3.14` (Windows)
 - uv — `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows)
 - Node.js 20+ — https://nodejs.org
 
@@ -127,8 +132,19 @@ pytest tests/rbac/ -v   # roda sem banco externo (SQLite in-memory)
 
 ## Setup de infraestrutura — Supabase + Google OAuth + Railway
 
-Checklist do processo de provisionamento deste ERP. Atualizado conforme
-os passos são concluídos.
+Checklist do processo de provisionamento deste ERP.
+
+### Checklist
+
+- [x] 1. Criar projeto no Supabase (Postgres + Auth)
+- [x] 2. Coletar `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- [x] 3. Criar OAuth 2.0 Client ID no Google Cloud Console
+- [x] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
+- [x] 5. Preencher `.env` local com as credenciais
+- [x] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
+- [x] 7. Criar projeto no Railway e conectar ao repositório GitHub
+- [x] 8. Configurar variáveis de ambiente no Railway
+- [x] 9. Validar deploy do backend em produção — `/docs` respondendo
 
 ### Decisões tomadas
 
@@ -162,72 +178,89 @@ os passos são concluídos.
 - **Rotação de credenciais**: durante o setup, a senha do Postgres, a
   `service_role` key do Supabase e o Client Secret do Google OAuth
   passaram em texto puro pelo chat de configuração. Todas foram
-  rotacionadas após o uso (senha resetada, secret key regenerada,
-  OAuth client secret regenerado com o antigo excluído). Lição para os
-  próximos ERPs: preferir descrever "copiei o valor" a colar o valor
-  em si na conversa, mesmo com um assistente — evita rotação reativa.
+  rotacionadas após o uso. Lição para os próximos ERPs: preferir
+  descrever "copiei o valor" a colar o valor em si na conversa, mesmo
+  com um assistente — evita rotação reativa.
 - **Bug de percent-encoding na senha do Postgres**: o `config.py`
   herdado do `erp-core-template` monta a URI de conexão concatenando
   `POSTGRES_USER:POSTGRES_PASSWORD@POSTGRES_SERVER` sem escapar
-  caracteres especiais. Uma senha gerada com símbolos como `@`, `#`,
-  `!`, `&` quebra o parser da URI (o SQLAlchemy interpreta parte da
-  senha como se fosse o host). Contorno usado: senha do banco gerada
-  só com caracteres alfanuméricos. **Dívida técnica**: corrigir
-  `backend/app/core/config.py` para aplicar `urllib.parse.quote_plus`
-  na senha antes de montar a URI, evitando essa armadilha nos próximos
-  ERPs independente de como a senha for gerada.
-- **`backend/Dockerfile` renomeado para `Dockerfile.monorepo-unused`**:
-  esse arquivo veio do `fastapi/full-stack-fastapi-template` original e
-  builda **frontend e backend juntos numa única imagem** (estágio Bun
-  compila o React, copia pro estágio Python, serve tudo de um container
-  só) — o contexto de build esperado é a raiz do repositório, não
-  `backend/`. Isso contraria a arquitetura decidida (Vercel para
-  frontend, Railway só para backend, deploys independentes). O Railway
-  detecta qualquer arquivo chamado `Dockerfile` na Root Directory
-  configurada e **sobrepõe a escolha manual de builder na UI** (mesmo
-  selecionando "Railpack" no dropdown, o deploy real usava Dockerfile) —
-  por isso o arquivo foi renomeado via `git mv`, não só reconfigurado
-  na UI. O arquivo permanece no repo (histórico preservado) caso um dia
-  o projeto migre para deploy single-container via Docker Compose.
-- **Padrão recorrente: arquivos de config na raiz do workspace `uv`
-  ficam invisíveis pro Railway**, já que a Root Directory configurada é
-  `backend/`, não a raiz do repo. Apareceu duas vezes até agora:
-  - **`uv.lock`**: vive na raiz (workspace `uv` compartilhado entre
-    módulos). Sem ele visível, o Railpack não reconhece `uv` como
-    gerenciador de pacotes, não o instala na imagem, e não instala
-    nenhuma dependência — container sobe "saudável" na aparência mas
-    crasha em loop (`uv: command not found`) ao iniciar. **Correção
-    pragmática**: build e start commands usam `pip` diretamente em vez
-    de `uv`, já que `backend/pyproject.toml` é autocontido:
-    - Custom Build Command: `pip install --no-cache-dir .`
-    - Custom Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-    **Dívida técnica**: gerar um `uv.lock` dedicado dentro de
-    `backend/` permitiria voltar a usar `uv` com reprodutibilidade de
-    versões — hoje o `pip install .` resolve as versões mais recentes
-    compatíveis a cada build, sem pin exato.
-  - **`.python-version`**: define `3.14` na raiz, mas não existia
-    dentro de `backend/`. Sem ele, o Railpack usava um Python `3.13.14`
-    default, incompatível com `requires-python = ">=3.14,<4.0"` do
-    `backend/pyproject.toml` — o `pip install` falhava com "Package
-    'app' requires a different Python". **Correção**:
-    `backend/.python-version` criado com `3.14`, duplicando o valor da
-    raiz.
+  caracteres especiais. Uma senha com símbolos como `@`, `#`, `!`, `&`
+  quebra o parser da URI. Contorno usado: senha do banco só com
+  caracteres alfanuméricos. **Dívida técnica**: aplicar
+  `urllib.parse.quote_plus` na senha em `backend/app/core/config.py`.
+- **Nome do serviço no Railway ficou "frontend"**: erro de digitação
+  original que não foi corrigido a tempo (o campo de rename não foi
+  encontrado na UI durante o setup). **Dívida técnica**: renomear o
+  serviço e, se possível, o domínio público para `gasfavero`/`backend`
+  — puramente cosmético, não afeta funcionamento.
 
-  Ao adicionar módulos ou configs novas ao workspace `uv`, verificar
-  se algum outro arquivo de configuração relevante só existe na raiz e
-  precisa de uma cópia dentro de `backend/` para o Railway enxergar.
+### Deploy no Railway — o caminho até funcionar
 
-### Checklist
+O deploy correto acabou sendo **Dockerfile próprio, simples, exclusivo
+do backend** — não Railpack. Documentando a trilha completa porque cada
+etapa intermediária tem uma lição para os próximos ERPs:
 
-- [x] 1. Criar projeto no Supabase (Postgres + Auth)
-- [x] 2. Coletar `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- [x] 3. Criar OAuth 2.0 Client ID no Google Cloud Console
-- [x] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
-- [x] 5. Preencher `.env` local com as credenciais
-- [x] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
-- [x] 7. Criar projeto no Railway e conectar ao repositório GitHub
-- [x] 8. Configurar variáveis de ambiente no Railway
-- [ ] 9. Validar deploy do backend em produção
+1. **`backend/Dockerfile` original (herdado do template) builda
+   frontend+backend juntos** numa imagem só, com contexto de build
+   esperado na raiz do repo, não em `backend/`. Incompatível com a
+   arquitetura (Vercel + Railway separados). Renomeado para
+   `Dockerfile.monorepo-unused` (mantido no repo como referência).
+2. **Railway prioriza automaticamente qualquer arquivo `Dockerfile`**
+   encontrado na Root Directory configurada, **mesmo com "Railpack"
+   selecionado manualmente no dropdown da UI** — a escolha do builder
+   na tela não é definitiva enquanto existir um Dockerfile físico no
+   caminho.
+3. **Tentativa com Railpack** (sem Dockerfile no caminho) esbarrou em
+   dois arquivos de config que só existiam na raiz do workspace `uv`,
+   fora da Root Directory `backend/`:
+   - `uv.lock`: sem ele, Railpack não reconhecia `uv`, não instalava
+     nenhuma dependência — crash loop `uv: command not found`
+   - `.python-version` (`3.14` na raiz): sem ele dentro de `backend/`,
+     Railpack usava Python `3.13.14` default, incompatível com
+     `requires-python = ">=3.14,<4.0"` do `pyproject.toml`
+   `backend/.python-version` foi criado como cópia. Trocou-se `uv` por
+   `pip install --no-cache-dir .` nos comandos de build/start.
+4. **Mesmo com `pip install` "bem-sucedido" no build, o runtime não
+   encontrava `uvicorn`** (`No module named uvicorn`) — o Railpack
+   builda em estágios separados (build vs. runtime) e só copia pro
+   estágio final o que ele mesmo sabe gerenciar; pacotes instalados via
+   `Custom Build Command` cru ficavam pra trás.
+5. **Decisão: voltar para Dockerfile, mas um novo, simples e exclusivo
+   do backend** — controle total sobre o que entra na imagem final, sem
+   depender da heurística do Railpack. `backend/Dockerfile` atual:
+   `FROM python:3.14-slim`, copia o código, `pip install .`, roda
+   `python -m uvicorn ...` via shell form (`CMD ["sh", "-c", ...]`) para
+   permitir expansão de `$PORT`.
+6. **Ordem de `COPY` no Dockerfile importava**: copiar só o
+   `pyproject.toml` antes do `pip install` (otimização clássica de
+   cache de camada) quebrava, porque o build backend `hatchling` deste
+   projeto precisa enxergar a pasta `app/` de verdade para montar o
+   pacote wheel — não trabalha só com a lista de dependências. Corrigido
+   copiando todo o código antes de instalar.
+7. **`Custom Start Command` configurado na UI do Railway sobrepõe o
+   `CMD` do Dockerfile**, e como não passa por shell, `$PORT` chegava
+   literal (`--port $PORT` sem expandir) em vez do número real. Corrigido
+   limpando o campo por completo — o `CMD` do Dockerfile assume.
+8. **Último erro**: `RuntimeError: Frontend directory '.../frontend'
+   does not exist`. O `backend/app/main.py` chama
+   `app.frontend("/", directory=FRONTEND_DIR)` — método do FastAPI que
+   monta os estáticos do frontend direto no backend, pensado pro modelo
+   single-container original. Como o frontend não é buildado neste
+   Dockerfile (fica no Vercel, separado), o diretório nunca existe, e
+   esse método específico lança exceção fatal em vez de ignorar
+   silenciosamente. **Correção**: chamada tornada condicional à
+   existência do diretório (`if FRONTEND_DIR.exists(): ...`), preserva
+   a opção de deploy single-container no futuro sem quebrar o deploy
+   atual isolado.
+
+**Configuração final do serviço no Railway:**
+- Root Directory: `backend`
+- Builder: `Dockerfile` (auto-detectado, `backend/Dockerfile`)
+- Custom Build Command: vazio (definido no Dockerfile)
+- Custom Start Command: vazio (definido no Dockerfile via `CMD`)
+- Variáveis de ambiente: 13 variáveis via **Variables → Raw Editor**
+  (ver seção 3 abaixo)
+- Domínio público gerado via **Networking → Generate Domain**
 
 ### 1. Criar projeto no Supabase
 
@@ -291,21 +324,16 @@ definidas nas migrations herdadas do `erp-core-template`. O
 
 1. Acesse https://railway.app e conecte a conta GitHub
 2. New Project → Deploy from GitHub repo → `ricardoshuree/gasfavero`
-3. No serviço criado, em **Settings → Source → Root Directory**,
-   define `backend`
-4. Em **Settings → Build → Builder**, force `Railpack` — mas confirme
-   também que não existe nenhum arquivo `Dockerfile` na Root Directory
-   configurada, já que o Railway prioriza ele mesmo com Railpack
-   selecionado (ver dívida técnica acima)
-5. Confirme que `backend/.python-version` existe com a versão exigida
-   pelo `pyproject.toml` (ver dívida técnica acima)
-6. Em **Settings → Build → Custom Build Command**:
-   `pip install --no-cache-dir .`
-7. Em **Settings → Deploy → Custom Start Command**:
-   `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-8. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
+3. **Settings → Source → Root Directory**: `backend`
+4. Garanta que `backend/Dockerfile` existe (o simples, exclusivo do
+   backend — não o `Dockerfile.monorepo-unused`) — o Railway vai
+   detectá-lo e usá-lo automaticamente como builder
+5. **Settings → Build/Deploy**: deixe Custom Build Command e Custom
+   Start Command vazios — tudo já está definido no Dockerfile
+6. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
    **Variables → Raw Editor**
-9. **Networking → Generate Domain** para obter a URL pública
+7. **Networking → Generate Domain** para obter a URL pública
+8. Valide em `<dominio>/docs` que a API responde
 
 ---
 
@@ -328,7 +356,7 @@ GitHub → Settings → Branches → Add rule → `main` → marcar
 | Serviço | Plataforma | O que cobre |
 |---|---|---|
 | Frontend | Vercel | Build e deploy automático via GitHub |
-| Backend | Railway | Deploy do FastAPI, auto-deploy via GitHub |
+| Backend | Railway | Deploy do FastAPI via Dockerfile, auto-deploy via GitHub |
 | Banco + Auth | Supabase | PostgreSQL gerenciado, Auth, RLS |
 
 ---
