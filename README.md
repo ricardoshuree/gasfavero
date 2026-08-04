@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-final-infra-state | plano: fa7a590d | 2026-08-04 00:24:19
-README final com checklist 100% completo, trilha de debugging do Railway documentada, instrucoes atualizadas de deploy via Dockerfile
+[mcp-local harness] feature: docs-final-naming-update | plano: cfdd3b9c | 2026-08-04 00:32:47
+Status atualizado com nome do servico (backend) e dominio customizado, incluindo como renomear via UI (duplo clique no titulo)
 -->
 # gasfavero
 
@@ -11,8 +11,7 @@ como subtree em `mcp-local/` — monólito autocontido, sem dependência de
 outros projetos ativos.
 
 **Status**: backend em produção no Railway, respondendo em
-`https://frontend-production-35d5.up.railway.app/docs` (domínio será
-renomeado — ver dívida técnica de nomenclatura do serviço).
+`https://backend-gasfavero.up.railway.app/docs`.
 
 ---
 
@@ -188,11 +187,10 @@ Checklist do processo de provisionamento deste ERP.
   quebra o parser da URI. Contorno usado: senha do banco só com
   caracteres alfanuméricos. **Dívida técnica**: aplicar
   `urllib.parse.quote_plus` na senha em `backend/app/core/config.py`.
-- **Nome do serviço no Railway ficou "frontend"**: erro de digitação
-  original que não foi corrigido a tempo (o campo de rename não foi
-  encontrado na UI durante o setup). **Dívida técnica**: renomear o
-  serviço e, se possível, o domínio público para `gasfavero`/`backend`
-  — puramente cosmético, não afeta funcionamento.
+- **Nome do serviço e domínio no Railway**: renomeados de `frontend`
+  (erro de digitação original) para `backend`, e o domínio público de
+  `frontend-production-35d5.up.railway.app` para
+  `backend-gasfavero.up.railway.app`.
 
 ### Deploy no Railway — o caminho até funcionar
 
@@ -254,13 +252,14 @@ etapa intermediária tem uma lição para os próximos ERPs:
    atual isolado.
 
 **Configuração final do serviço no Railway:**
+- Nome do serviço: `backend`
+- Domínio público: `backend-gasfavero.up.railway.app`
 - Root Directory: `backend`
 - Builder: `Dockerfile` (auto-detectado, `backend/Dockerfile`)
 - Custom Build Command: vazio (definido no Dockerfile)
 - Custom Start Command: vazio (definido no Dockerfile via `CMD`)
 - Variáveis de ambiente: 13 variáveis via **Variables → Raw Editor**
   (ver seção 3 abaixo)
-- Domínio público gerado via **Networking → Generate Domain**
 
 ### 1. Criar projeto no Supabase
 
@@ -332,8 +331,11 @@ definidas nas migrations herdadas do `erp-core-template`. O
    Start Command vazios — tudo já está definido no Dockerfile
 6. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
    **Variables → Raw Editor**
-7. **Networking → Generate Domain** para obter a URL pública
-8. Valide em `<dominio>/docs` que a API responde
+7. **Networking → Generate Domain**, depois customize o subdomínio
+   (ex: `backend-gasfavero`) clicando direto no campo de domínio
+8. Renomeie o serviço: clique duas vezes no nome no topo do painel do
+   serviço (abre edição inline — não fica em Settings)
+9. Valide em `<dominio>/docs` que a API responde
 
 ---
 
