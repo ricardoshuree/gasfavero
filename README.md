@@ -1,6 +1,6 @@
 <!--
-[mcp-local harness] feature: docs-dockerfile-warning | plano: dcfb9694 | 2026-08-03 23:18:32
-Documenta o problema do Dockerfile monorepo e a correção de forçar Railpack no Railway
+[mcp-local harness] feature: docs-railpack-uv-fix | plano: 196fbfee | 2026-08-03 23:46:16
+Documenta o bug de deteccao do uv pelo Railpack e a correcao via pip, marca checklist 7-8 concluidos
 -->
 # gasfavero
 
@@ -36,7 +36,7 @@ erp-gasfavero/
 │   │   ├── api/routes/         ← endpoints FastAPI
 │   │   ├── core/               ← config, db, security
 │   │   └── models.py           ← todos os modelos SQLModel
-│   ├── Dockerfile              ← NÃO usar no Railway (ver seção de infra)
+│   ├── Dockerfile.monorepo-unused ← NÃO usar no Railway (ver seção de infra)
 │   └── tests/
 │       └── rbac/               ← testes de RBAC (SQLite, sem Docker)
 ├── frontend/
@@ -175,20 +175,37 @@ os passos são concluídos.
   `backend/app/core/config.py` para aplicar `urllib.parse.quote_plus`
   na senha antes de montar a URI, evitando essa armadilha nos próximos
   ERPs independente de como a senha for gerada.
-- **`backend/Dockerfile` não deve ser usado no Railway**: esse arquivo
-  veio do `fastapi/full-stack-fastapi-template` original e builda
-  **frontend e backend juntos numa única imagem** (estágio Bun compila
-  o React, copia pro estágio Python, serve tudo de um container só) —
-  o contexto de build esperado é a raiz do repositório, não `backend/`.
-  Isso contraria a arquitetura decidida (Vercel para frontend, Railway
-  só para backend, deploys independentes). O Railway detecta esse
-  Dockerfile automaticamente e tenta usá-lo em vez do Railpack, o que
-  quebra o build. **Correção**: em Railway → Settings → Build →
-  Builder, forçar manualmente `Railpack` em vez de `Dockerfile`. O
-  arquivo em si foi mantido no repo (não removido) por poder ser útil
-  no futuro caso o projeto migre para deploy single-container via
-  Docker Compose — mas hoje é um artefato órfão em relação ao deploy
-  real usado.
+- **`backend/Dockerfile` renomeado para `Dockerfile.monorepo-unused`**:
+  esse arquivo veio do `fastapi/full-stack-fastapi-template` original e
+  builda **frontend e backend juntos numa única imagem** (estágio Bun
+  compila o React, copia pro estágio Python, serve tudo de um container
+  só) — o contexto de build esperado é a raiz do repositório, não
+  `backend/`. Isso contraria a arquitetura decidida (Vercel para
+  frontend, Railway só para backend, deploys independentes). O Railway
+  detecta qualquer arquivo chamado `Dockerfile` na Root Directory
+  configurada e **sobrepõe a escolha manual de builder na UI** (mesmo
+  selecionando "Railpack" no dropdown, o deploy real usava Dockerfile) —
+  por isso o arquivo foi renomeado via `git mv`, não só reconfigurado
+  na UI. O arquivo permanece no repo (histórico preservado) caso um dia
+  o projeto migre para deploy single-container via Docker Compose.
+- **Railpack não detecta `uv` automaticamente**: o `uv.lock` deste
+  projeto vive na raiz do repositório (workspace `uv` compartilhado
+  entre os módulos), fora da Root Directory `backend/` configurada no
+  Railway. Sem o `uv.lock` visível, o Railpack não reconhece `uv` como
+  gerenciador de pacotes, não o instala na imagem, e não roda nenhuma
+  instalação de dependências — resultando em container saudável na
+  aparência mas crashando em loop (`uv: command not found`) ao tentar
+  iniciar. **Correção pragmática adotada**: build e start commands no
+  Railway usam `pip` diretamente em vez de `uv`, já que o
+  `backend/pyproject.toml` é autocontido (lista todas as dependências
+  sem depender do lock do workspace):
+  - Custom Build Command: `pip install --no-cache-dir .`
+  - Custom Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+  **Dívida técnica**: gerar um `uv.lock` dedicado e autocontido dentro
+  de `backend/` (fora do workspace da raiz) permitiria voltar a usar
+  `uv` no Railway com reprodutibilidade de versões — hoje o `pip
+  install .` resolve as versões mais recentes compatíveis a cada build,
+  sem pin exato.
 
 ### Checklist
 
@@ -198,8 +215,8 @@ os passos são concluídos.
 - [x] 4. Configurar redirect URI e ativar provider Google no Supabase Auth
 - [x] 5. Preencher `.env` local com as credenciais
 - [x] 6. Aplicar migrations (incluindo RBAC) no Postgres do Supabase
-- [ ] 7. Criar projeto no Railway e conectar ao repositório GitHub
-- [ ] 8. Configurar variáveis de ambiente no Railway
+- [x] 7. Criar projeto no Railway e conectar ao repositório GitHub
+- [x] 8. Configurar variáveis de ambiente no Railway
 - [ ] 9. Validar deploy do backend em produção
 
 ### 1. Criar projeto no Supabase
@@ -266,14 +283,17 @@ definidas nas migrations herdadas do `erp-core-template`. O
 2. New Project → Deploy from GitHub repo → `ricardoshuree/gasfavero`
 3. No serviço criado, em **Settings → Source → Root Directory**,
    define `backend`
-4. Em **Settings → Build → Builder**, force `Railpack` — o Railway
-   detecta o `backend/Dockerfile` automaticamente e tenta usá-lo, o
-   que quebra o build (ver dívida técnica acima)
-5. Em **Settings → Deploy → Custom Start Command**:
-   `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-6. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
+4. Em **Settings → Build → Builder**, force `Railpack` — mas confirme
+   também que não existe nenhum arquivo `Dockerfile` na Root Directory
+   configurada, já que o Railway prioriza ele mesmo com Railpack
+   selecionado (ver dívida técnica acima)
+5. Em **Settings → Build → Custom Build Command**:
+   `pip install --no-cache-dir .`
+6. Em **Settings → Deploy → Custom Start Command**:
+   `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+7. Configure as variáveis de ambiente (mesmas do `.env`, ver acima) via
    **Variables → Raw Editor**
-7. **Networking → Generate Domain** para obter a URL pública
+8. **Networking → Generate Domain** para obter a URL pública
 
 ---
 
