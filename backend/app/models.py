@@ -1,8 +1,9 @@
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:24:33
-# Adiciona Module.label + ModuleUpdate, e todos os Pydantic Create/Public models pra geografia, Cliente, Preco e BlocoVale
+# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:30:39
+# Adiciona telefone+endereco opcional em Cliente, e as tabelas Venda/VendaItem com todos os Pydantic models
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import EmailStr
 from sqlalchemy import Column, DateTime, Numeric, UniqueConstraint
@@ -456,6 +457,7 @@ class Cliente(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     nome: str = Field(max_length=255)
     cpf: str = Field(unique=True, max_length=14, index=True)
+    telefone: str | None = Field(default=None, max_length=20)
     created_at: datetime = Field(
         default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
     )
@@ -478,26 +480,35 @@ class ClienteEndereco(SQLModel, table=True):
 # ---- Response/Create models de Cliente (endpoints em clientes.py) ----
 
 class ClienteCreate(SQLModel):
-    """Corpo de POST /clientes/ -- cria cliente + endereço + o vínculo
-    cliente_endereco (valid_to NULL) numa única chamada, espelhando o
-    fluxo real: motorista cadastra cliente já com o endereço."""
+    """Corpo de POST /clientes/ -- cria cliente (+ endereço, se
+    informado) numa única chamada.
+
+    endereco é OPCIONAL no backend de propósito: a tela /clientes
+    exige endereço (validação no frontend daquela tela), mas a tela de
+    Venda (cadastro rápido de cliente no balcão) não -- o cliente pode
+    ser cadastrado só com nome/cpf/telefone e ganhar um endereço depois.
+    """
     nome: str = Field(min_length=1, max_length=255)
     cpf: str = Field(min_length=11, max_length=14)
-    endereco: EnderecoCreate
+    telefone: str | None = Field(default=None, max_length=20)
+    endereco: EnderecoCreate | None = None
 
 
 class ClienteUpdate(SQLModel):
-    """Edição só dos dados do próprio cliente (nome/cpf). Trocar de
-    endereço é um endpoint separado (POST /clientes/{id}/endereco),
-    porque isso precisa fechar o histórico, não é um UPDATE simples."""
+    """Edição só dos dados do próprio cliente (nome/cpf/telefone).
+    Trocar de endereço é um endpoint separado (POST
+    /clientes/{id}/endereco), porque isso precisa fechar o histórico,
+    não é um UPDATE simples."""
     nome: str | None = Field(default=None, min_length=1, max_length=255)
     cpf: str | None = Field(default=None, min_length=11, max_length=14)
+    telefone: str | None = Field(default=None, max_length=20)
 
 
 class ClientePublic(SQLModel):
     id: uuid.UUID
     nome: str
     cpf: str
+    telefone: str | None = None
     created_at: datetime
     endereco: EnderecoPublic | None = None
 
@@ -513,9 +524,10 @@ class ClientesPublic(SQLModel):
 # Preço tem vigência por data (não é um valor único sobrescrito) --
 # quando o gerente cadastra um preço novo pra um produto, fecha o
 # registro vigente anterior (valid_to = agora) e abre um novo. A Venda
-# (item ainda não modelado, de propósito) vai referenciar o preco_id
-# vigente no momento pra "congelar" o valor praticado -- mudar o preço
-# depois não altera o valor de vendas já feitas.
+# referencia o preco_id vigente no momento pra "congelar" o valor
+# praticado -- cada linha de Preco é IMUTÁVEL depois de criada, então
+# reajustar o preço no futuro nunca altera vendas já feitas (elas
+# continuam apontando pra linha antiga e intacta).
 # ---------------------------------------------------------------------------
 
 class Preco(SQLModel, table=True):
@@ -565,9 +577,7 @@ class ProdutosComPrecoPublic(SQLModel):
 #
 # Vale.numero é único em TODO o sistema (decisão confirmada), não só
 # dentro do bloco -- por isso é uma constraint unique de banco, não só
-# validação de aplicação. Ao cadastrar um BlocoVale (primeira/última
-# folha), o endpoint que vai criar isso (item 6 da lista, ainda não
-# implementado) gera uma linha Vale pra cada número da sequência.
+# validação de aplicação.
 # ---------------------------------------------------------------------------
 
 class BlocoVale(SQLModel, table=True):
@@ -613,6 +623,122 @@ class BlocoValePublic(SQLModel):
 
 class BlocosValePublic(SQLModel):
     data: list[BlocoValePublic]
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Venda (venda de balcão da distribuidora) + VendaItem
+#
+# Uma Venda é o cabeçalho da transação; VendaItem é cada linha da
+# "sacola" (produto + quantidade + preço daquele momento). O preço
+# gravado em cada VendaItem vem de uma linha IMUTÁVEL de Preco (ver
+# comentário na classe Preco) -- reajustar preços no futuro não afeta
+# vendas passadas.
+#
+# motorista_id é sempre obrigatório: pra venda de balcão (sem entrega
+# por um motorista de verdade), aponta pro usuário-sistema
+# "Distribuidora Gás Favero" (ver seed na migration + proteção contra
+# DELETE em users.py). Isso evita ter uma FK nullable só pra
+# representar "ninguém" -- sempre tem alguém "dono" da venda pra fins
+# de relatório.
+#
+# forma_pagamento fica como string livre (não Enum de banco) pra não
+# precisar de migration toda vez que uma forma nova aparecer -- a
+# validação de quais valores são aceitos (cartao/pix/dinheiro/vale)
+# mora no Pydantic (Literal) da camada de API, não no schema do banco.
+# ---------------------------------------------------------------------------
+
+class Venda(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
+    endereco_id: uuid.UUID | None = Field(
+        default=None, foreign_key="endereco.id", ondelete="SET NULL"
+    )
+    motorista_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    forma_pagamento: str = Field(max_length=20)
+    vale_id: uuid.UUID | None = Field(
+        default=None, foreign_key="vale.id", ondelete="RESTRICT"
+    )
+    data_pagamento_vale: date | None = Field(default=None)
+    valor_total: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    valor_pago: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    data_venda: date = Field(default_factory=lambda: datetime.now(UTC).date())
+    pago_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+class VendaItem(SQLModel, table=True):
+    __tablename__ = "venda_item"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
+    produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="RESTRICT")
+    preco_id: uuid.UUID = Field(foreign_key="preco.id", ondelete="RESTRICT")
+    quantidade: int
+    subtotal: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+
+
+# ---- Response/Create models de Venda (endpoints em vendas.py) ----
+
+class VendaItemCreate(SQLModel):
+    produto_id: uuid.UUID
+    quantidade: int = Field(gt=0)
+
+
+class VendaCreate(SQLModel):
+    """Corpo de POST /vendas/ -- cria a venda inteira (cabeçalho +
+    itens da sacola) numa única transação.
+
+    vale_numero é o número físico da folha do vale (não o vale_id) --
+    o endpoint resolve pra um Vale existente e valida que ainda não foi
+    usado em outra venda. data_pagamento_vale, se não informado e a
+    forma for 'vale', é calculado automaticamente como o 5º dia útil
+    do mês seguinte (decisão do Ricardo: dá previsibilidade ao cliente
+    alinhada com o pagamento do salário)."""
+    cliente_id: uuid.UUID
+    endereco_id: uuid.UUID | None = None
+    motorista_id: uuid.UUID
+    forma_pagamento: Literal["cartao", "pix", "dinheiro", "vale"]
+    vale_numero: int | None = None
+    data_pagamento_vale: date | None = None
+    valor_pago: Decimal = Field(gt=0, decimal_places=2)
+    data_venda: date | None = None
+    itens: list[VendaItemCreate] = Field(min_length=1)
+
+
+class VendaItemPublic(SQLModel):
+    id: uuid.UUID
+    produto_id: uuid.UUID
+    produto_title: str
+    quantidade: int
+    preco_unitario: Decimal
+    subtotal: Decimal
+
+
+class VendaPublic(SQLModel):
+    id: uuid.UUID
+    cliente_id: uuid.UUID
+    cliente_nome: str
+    endereco: EnderecoPublic | None = None
+    motorista_id: uuid.UUID
+    motorista_nome: str
+    forma_pagamento: str
+    vale_numero: int | None = None
+    data_pagamento_vale: date | None = None
+    valor_total: Decimal
+    valor_pago: Decimal
+    data_venda: date
+    pago_em: datetime | None = None
+    criado_por_id: uuid.UUID
+    created_at: datetime
+    itens: list[VendaItemPublic] = []
+
+
+class VendasPublic(SQLModel):
+    data: list[VendaPublic]
+    count: int
 
 
 # ---------------------------------------------------------------------------

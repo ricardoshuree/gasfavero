@@ -1,5 +1,14 @@
+# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:32:56
+# Adiciona protecao contra DELETE do usuario-sistema Distribuidora Gas Favero
 # [mcp-local harness] feature: rbac-crud-permission-matrix | plano: 3c4333ee | 2026-08-04 13:43:42
 # read_user_permissions agora agrega e retorna os 4 flags CRUD por modulo
+#
+# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12
+# Protege o usuario-sistema "Distribuidora Gas Favero" contra DELETE --
+# ele e o motorista_id padrao das vendas de balcao, apagar quebraria
+# todas as vendas de balcao ja registradas (FK RESTRICT ja impediria
+# se ja houvesse venda, mas essa trava explicita protege mesmo antes
+# da primeira venda existir)
 import uuid
 from typing import Any
 
@@ -13,6 +22,7 @@ from app.api.deps import (
     get_current_active_superuser,
 )
 from app.core.config import settings
+from app.core.constants import SISTEMA_DISTRIBUIDORA_EMAIL
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     Item,
@@ -360,6 +370,14 @@ def delete_user(
     if user == current_user:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
+        )
+    if user.email == SISTEMA_DISTRIBUIDORA_EMAIL:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Este usuário é o padrão de vendas de balcão da distribuidora "
+                "e não pode ser apagado."
+            ),
         )
     statement = delete(Item).where(col(Item.owner_id) == user_id)
     session.exec(statement)

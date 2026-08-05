@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:32:14
-// Colunas da tabela de Clientes: nome, cpf, endereco vigente, acoes
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:43:34
+// Adiciona coluna de telefone
 import type { ColumnDef } from "@tanstack/react-table"
 
 import type { ClientePublic } from "@/client"
@@ -16,6 +16,15 @@ export const clienteColumns: ColumnDef<ClientePublic>[] = [
   {
     accessorKey: "cpf",
     header: "CPF",
+  },
+  {
+    accessorKey: "telefone",
+    header: "Telefone",
+    cell: ({ row }) => (
+      <span className="text-muted-foreground">
+        {row.original.telefone || "—"}
+      </span>
+    ),
   },
   {
     id: "endereco",

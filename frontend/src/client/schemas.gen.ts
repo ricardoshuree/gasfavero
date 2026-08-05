@@ -185,16 +185,39 @@ export const ClienteCreateSchema = {
             minLength: 11,
             title: 'Cpf'
         },
+        telefone: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 20
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Telefone'
+        },
         endereco: {
-            '$ref': '#/components/schemas/EnderecoCreate'
+            anyOf: [
+                {
+                    '$ref': '#/components/schemas/EnderecoCreate'
+                },
+                {
+                    type: 'null'
+                }
+            ]
         }
     },
     type: 'object',
-    required: ['nome', 'cpf', 'endereco'],
+    required: ['nome', 'cpf'],
     title: 'ClienteCreate',
-    description: `Corpo de POST /clientes/ -- cria cliente + endereço + o vínculo
-cliente_endereco (valid_to NULL) numa única chamada, espelhando o
-fluxo real: motorista cadastra cliente já com o endereço.`
+    description: `Corpo de POST /clientes/ -- cria cliente (+ endereço, se
+informado) numa única chamada.
+
+endereco é OPCIONAL no backend de propósito: a tela /clientes
+exige endereço (validação no frontend daquela tela), mas a tela de
+Venda (cadastro rápido de cliente no balcão) não -- o cliente pode
+ser cadastrado só com nome/cpf/telefone e ganhar um endereço depois.`
 } as const;
 
 export const ClientePublicSchema = {
@@ -211,6 +234,17 @@ export const ClientePublicSchema = {
         cpf: {
             type: 'string',
             title: 'Cpf'
+        },
+        telefone: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Telefone'
         },
         created_at: {
             type: 'string',
@@ -260,13 +294,26 @@ export const ClienteUpdateSchema = {
                 }
             ],
             title: 'Cpf'
+        },
+        telefone: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 20
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Telefone'
         }
     },
     type: 'object',
     title: 'ClienteUpdate',
-    description: `Edição só dos dados do próprio cliente (nome/cpf). Trocar de
-endereço é um endpoint separado (POST /clientes/{id}/endereco),
-porque isso precisa fechar o histórico, não é um UPDATE simples.`
+    description: `Edição só dos dados do próprio cliente (nome/cpf/telefone).
+Trocar de endereço é um endpoint separado (POST
+/clientes/{id}/endereco), porque isso precisa fechar o histórico,
+não é um UPDATE simples.`
 } as const;
 
 export const ClientesPublicSchema = {
@@ -1488,4 +1535,290 @@ export const ValidationErrorSchema = {
     type: 'object',
     required: ['loc', 'msg', 'type'],
     title: 'ValidationError'
+} as const;
+
+export const VendaCreateSchema = {
+    properties: {
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        endereco_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Endereco Id'
+        },
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        forma_pagamento: {
+            type: 'string',
+            enum: ['cartao', 'pix', 'dinheiro', 'vale'],
+            title: 'Forma Pagamento'
+        },
+        vale_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Numero'
+        },
+        data_pagamento_vale: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Pagamento Vale'
+        },
+        valor_pago: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                }
+            ],
+            title: 'Valor Pago'
+        },
+        data_venda: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Venda'
+        },
+        itens: {
+            items: {
+                '$ref': '#/components/schemas/VendaItemCreate'
+            },
+            type: 'array',
+            minItems: 1,
+            title: 'Itens'
+        }
+    },
+    type: 'object',
+    required: ['cliente_id', 'motorista_id', 'forma_pagamento', 'valor_pago', 'itens'],
+    title: 'VendaCreate',
+    description: `Corpo de POST /vendas/ -- cria a venda inteira (cabeçalho +
+itens da sacola) numa única transação.
+
+vale_numero é o número físico da folha do vale (não o vale_id) --
+o endpoint resolve pra um Vale existente e valida que ainda não foi
+usado em outra venda. data_pagamento_vale, se não informado e a
+forma for 'vale', é calculado automaticamente como o 5º dia útil
+do mês seguinte (decisão do Ricardo: dá previsibilidade ao cliente
+alinhada com o pagamento do salário).`
+} as const;
+
+export const VendaItemCreateSchema = {
+    properties: {
+        produto_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Produto Id'
+        },
+        quantidade: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Quantidade'
+        }
+    },
+    type: 'object',
+    required: ['produto_id', 'quantidade'],
+    title: 'VendaItemCreate'
+} as const;
+
+export const VendaItemPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        produto_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Produto Id'
+        },
+        produto_title: {
+            type: 'string',
+            title: 'Produto Title'
+        },
+        quantidade: {
+            type: 'integer',
+            title: 'Quantidade'
+        },
+        preco_unitario: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Preco Unitario'
+        },
+        subtotal: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Subtotal'
+        }
+    },
+    type: 'object',
+    required: ['id', 'produto_id', 'produto_title', 'quantidade', 'preco_unitario', 'subtotal'],
+    title: 'VendaItemPublic'
+} as const;
+
+export const VendaPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        cliente_nome: {
+            type: 'string',
+            title: 'Cliente Nome'
+        },
+        endereco: {
+            anyOf: [
+                {
+                    '$ref': '#/components/schemas/EnderecoPublic'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        motorista_nome: {
+            type: 'string',
+            title: 'Motorista Nome'
+        },
+        forma_pagamento: {
+            type: 'string',
+            title: 'Forma Pagamento'
+        },
+        vale_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Numero'
+        },
+        data_pagamento_vale: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Pagamento Vale'
+        },
+        valor_total: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor Total'
+        },
+        valor_pago: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor Pago'
+        },
+        data_venda: {
+            type: 'string',
+            format: 'date',
+            title: 'Data Venda'
+        },
+        pago_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Pago Em'
+        },
+        criado_por_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Criado Por Id'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        itens: {
+            items: {
+                '$ref': '#/components/schemas/VendaItemPublic'
+            },
+            type: 'array',
+            title: 'Itens',
+            default: []
+        }
+    },
+    type: 'object',
+    required: ['id', 'cliente_id', 'cliente_nome', 'motorista_id', 'motorista_nome', 'forma_pagamento', 'valor_total', 'valor_pago', 'data_venda', 'criado_por_id', 'created_at'],
+    title: 'VendaPublic'
+} as const;
+
+export const VendasPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/VendaPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'VendasPublic'
 } as const;

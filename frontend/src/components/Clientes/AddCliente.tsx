@@ -1,11 +1,16 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-05 07:47:51
-// Corrige BairrosService para GeografiaService
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:43:09
+// Adiciona campo telefone opcional
 // [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:32:36
 // Dialog de criacao de Cliente + Endereco, com select de bairro e input de rua com sugestoes (datalist)
 //
 // [mcp-local harness] fix: BairrosService -> GeografiaService (a tag do
 // router geografia.py e "geografia", entao o gerador usa esse nome pra
 // classe do servico, nao o prefixo da URL "/bairros")
+//
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
+// Adiciona campo telefone (opcional). Endereco continua obrigatorio
+// nesta tela (decisao do Ricardo -- so a tela de Venda tem endereco
+// opcional).
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
@@ -48,6 +53,7 @@ import { handleError } from "@/utils"
 const formSchema = z.object({
   nome: z.string().min(1, { message: "Nome é obrigatório" }),
   cpf: z.string().min(11, { message: "CPF inválido" }),
+  telefone: z.string().optional(),
   bairro_id: z.string().min(1, { message: "Selecione um bairro" }),
   rua_nome: z.string().min(1, { message: "Rua é obrigatória" }),
   numero: z.string().min(1, { message: "Número é obrigatório" }),
@@ -68,6 +74,7 @@ const AddCliente = () => {
     defaultValues: {
       nome: "",
       cpf: "",
+      telefone: "",
       bairro_id: "",
       rua_nome: "",
       numero: "",
@@ -108,6 +115,7 @@ const AddCliente = () => {
     mutation.mutate({
       nome: data.nome,
       cpf: data.cpf,
+      telefone: data.telefone || undefined,
       endereco: {
         bairro_id: data.bairro_id,
         rua_nome: data.rua_nome,
@@ -153,26 +161,42 @@ const AddCliente = () => {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="cpf"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      CPF <span className="text-destructive">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="000.000.000-00"
-                        type="text"
-                        {...field}
-                        required
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="cpf"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        CPF <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="000.000.000-00"
+                          type="text"
+                          {...field}
+                          required
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="telefone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="(00) 00000-0000" type="text" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

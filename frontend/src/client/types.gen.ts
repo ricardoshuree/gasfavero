@@ -46,20 +46,26 @@ export type Body_login_login_access_token = {
 };
 
 /**
- * Corpo de POST /clientes/ -- cria cliente + endereço + o vínculo
- * cliente_endereco (valid_to NULL) numa única chamada, espelhando o
- * fluxo real: motorista cadastra cliente já com o endereço.
+ * Corpo de POST /clientes/ -- cria cliente (+ endereço, se
+ * informado) numa única chamada.
+ *
+ * endereco é OPCIONAL no backend de propósito: a tela /clientes
+ * exige endereço (validação no frontend daquela tela), mas a tela de
+ * Venda (cadastro rápido de cliente no balcão) não -- o cliente pode
+ * ser cadastrado só com nome/cpf/telefone e ganhar um endereço depois.
  */
 export type ClienteCreate = {
     nome: string;
     cpf: string;
-    endereco: EnderecoCreate;
+    telefone?: (string | null);
+    endereco?: (EnderecoCreate | null);
 };
 
 export type ClientePublic = {
     id: string;
     nome: string;
     cpf: string;
+    telefone?: (string | null);
     created_at: string;
     endereco?: (EnderecoPublic | null);
 };
@@ -70,13 +76,15 @@ export type ClientesPublic = {
 };
 
 /**
- * Edição só dos dados do próprio cliente (nome/cpf). Trocar de
- * endereço é um endpoint separado (POST /clientes/{id}/endereco),
- * porque isso precisa fechar o histórico, não é um UPDATE simples.
+ * Edição só dos dados do próprio cliente (nome/cpf/telefone).
+ * Trocar de endereço é um endpoint separado (POST
+ * /clientes/{id}/endereco), porque isso precisa fechar o histórico,
+ * não é um UPDATE simples.
  */
 export type ClienteUpdate = {
     nome?: (string | null);
     cpf?: (string | null);
+    telefone?: (string | null);
 };
 
 /**
@@ -385,6 +393,69 @@ export type ValidationError = {
     };
 };
 
+/**
+ * Corpo de POST /vendas/ -- cria a venda inteira (cabeçalho +
+ * itens da sacola) numa única transação.
+ *
+ * vale_numero é o número físico da folha do vale (não o vale_id) --
+ * o endpoint resolve pra um Vale existente e valida que ainda não foi
+ * usado em outra venda. data_pagamento_vale, se não informado e a
+ * forma for 'vale', é calculado automaticamente como o 5º dia útil
+ * do mês seguinte (decisão do Ricardo: dá previsibilidade ao cliente
+ * alinhada com o pagamento do salário).
+ */
+export type VendaCreate = {
+    cliente_id: string;
+    endereco_id?: (string | null);
+    motorista_id: string;
+    forma_pagamento: 'cartao' | 'pix' | 'dinheiro' | 'vale';
+    vale_numero?: (number | null);
+    data_pagamento_vale?: (string | null);
+    valor_pago: (number | string);
+    data_venda?: (string | null);
+    itens: Array<VendaItemCreate>;
+};
+
+export type forma_pagamento = 'cartao' | 'pix' | 'dinheiro' | 'vale';
+
+export type VendaItemCreate = {
+    produto_id: string;
+    quantidade: number;
+};
+
+export type VendaItemPublic = {
+    id: string;
+    produto_id: string;
+    produto_title: string;
+    quantidade: number;
+    preco_unitario: string;
+    subtotal: string;
+};
+
+export type VendaPublic = {
+    id: string;
+    cliente_id: string;
+    cliente_nome: string;
+    endereco?: (EnderecoPublic | null);
+    motorista_id: string;
+    motorista_nome: string;
+    forma_pagamento: string;
+    vale_numero?: (number | null);
+    data_pagamento_vale?: (string | null);
+    valor_total: string;
+    valor_pago: string;
+    data_venda: string;
+    pago_em?: (string | null);
+    criado_por_id: string;
+    created_at: string;
+    itens?: Array<VendaItemPublic>;
+};
+
+export type VendasPublic = {
+    data: Array<VendaPublic>;
+    count: number;
+};
+
 export type ClientesReadClientesData = {
     limit?: number;
     q?: (string | null);
@@ -628,3 +699,28 @@ export type ValesCreateBlocoValeData = {
 };
 
 export type ValesCreateBlocoValeResponse = (BlocoValePublic);
+
+export type VendasReadVendasData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type VendasReadVendasResponse = (VendasPublic);
+
+export type VendasCreateVendaData = {
+    requestBody: VendaCreate;
+};
+
+export type VendasCreateVendaResponse = (VendaPublic);
+
+export type VendasReadUltimoEnderecoClienteData = {
+    clienteId: string;
+};
+
+export type VendasReadUltimoEnderecoClienteResponse = ((EnderecoPublic | null));
+
+export type VendasReadVendaData = {
+    id: string;
+};
+
+export type VendasReadVendaResponse = (VendaPublic);

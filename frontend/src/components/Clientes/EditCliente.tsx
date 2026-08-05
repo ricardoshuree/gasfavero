@@ -1,5 +1,7 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:32:52
-// Dialog de edicao de nome/cpf do Cliente
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:43:26
+// Adiciona campo telefone na edicao
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
+// Adiciona campo telefone
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
@@ -34,6 +36,7 @@ import { handleError } from "@/utils"
 const formSchema = z.object({
   nome: z.string().min(1, { message: "Nome é obrigatório" }),
   cpf: z.string().min(11, { message: "CPF inválido" }),
+  telefone: z.string().optional(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -52,12 +55,19 @@ const EditCliente = ({ cliente, onSuccess }: EditClienteProps) => {
     resolver: zodResolver(formSchema),
     mode: "onBlur",
     criteriaMode: "all",
-    defaultValues: { nome: cliente.nome, cpf: cliente.cpf },
+    defaultValues: {
+      nome: cliente.nome,
+      cpf: cliente.cpf,
+      telefone: cliente.telefone ?? "",
+    },
   })
 
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
-      ClientesService.updateCliente({ id: cliente.id, requestBody: data }),
+      ClientesService.updateCliente({
+        id: cliente.id,
+        requestBody: { ...data, telefone: data.telefone || undefined },
+      }),
     onSuccess: () => {
       showSuccessToast("Cliente atualizado com sucesso")
       setIsOpen(false)
@@ -103,21 +113,37 @@ const EditCliente = ({ cliente, onSuccess }: EditClienteProps) => {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="cpf"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      CPF <span className="text-destructive">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input type="text" {...field} required />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="cpf"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        CPF <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="text" {...field} required />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="telefone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone</FormLabel>
+                      <FormControl>
+                        <Input type="text" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
             <DialogFooter>

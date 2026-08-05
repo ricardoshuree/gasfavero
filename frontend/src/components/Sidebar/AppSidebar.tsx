@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab | 2026-08-05 08:36:28
-// Renomeia 'Cadastro do Produto' para 'Produtos' no menu
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:39:34
+// Adiciona Vendas ao menu (modulo vendas), no topo
 // [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:15:56
 // Sidebar: Items vira Cadastro do Produto (modulo produtos), adiciona item Permissoes pra superuser
 //
@@ -9,6 +9,10 @@
 //
 // [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab
 // "Cadastro do Produto" -> "Produtos" (ajuste cosmetico pedido pelo Ricardo)
+//
+// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
+// Adiciona Vendas (modulo vendas) -- fica no topo do menu, e a tela
+// mais usada no dia a dia (venda de balcao)
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -16,6 +20,7 @@
  *   - Dashboard
  *
  * Itens controlados por módulo (visíveis se can_read):
+ *   - Vendas             → módulo "vendas"
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -40,6 +45,7 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  ShoppingCart,
   Ticket,
   Users,
   UsersRound,
@@ -66,6 +72,7 @@ const FIXED_ITEMS: Item[] = [
 // Mapeamento de módulo → item de menu
 // O campo "module" deve coincidir exatamente com o nome do módulo no banco
 const MODULE_ITEMS: Array<Item & { module: string }> = [
+  { module: "vendas",        icon: ShoppingCart, title: "Vendas",              path: "/vendas" },
   { module: "produtos",      icon: Box,         title: "Produtos",            path: "/produtos" },
   { module: "produtos",      icon: Banknote,    title: "Preços",              path: "/precos" },
   { module: "clientes",      icon: UsersRound,  title: "Clientes",            path: "/clientes" },

@@ -22,6 +22,7 @@ import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutValesRouteImport } from './routes/_layout/vales'
+import { Route as LayoutVendasRouteImport } from './routes/_layout/vendas'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -87,6 +88,11 @@ const LayoutValesRoute = LayoutValesRouteImport.update({
   path: '/vales',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutVendasRoute = LayoutVendasRouteImport.update({
+  id: '/vendas',
+  path: '/vendas',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/produtos': typeof LayoutProdutosRoute
   '/settings': typeof LayoutSettingsRoute
   '/vales': typeof LayoutValesRoute
+  '/vendas': typeof LayoutVendasRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByTo {
   '/produtos': typeof LayoutProdutosRoute
   '/settings': typeof LayoutSettingsRoute
   '/vales': typeof LayoutValesRoute
+  '/vendas': typeof LayoutVendasRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/_layout/produtos': typeof LayoutProdutosRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/vales': typeof LayoutValesRoute
+  '/_layout/vendas': typeof LayoutVendasRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
@@ -147,6 +156,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/settings'
     | '/vales'
+    | '/vendas'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -160,6 +170,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/settings'
     | '/vales'
+    | '/vendas'
     | '/'
   id:
     | '__root__'
@@ -175,6 +186,7 @@ export interface FileRouteTypes {
     | '/_layout/produtos'
     | '/_layout/settings'
     | '/_layout/vales'
+    | '/_layout/vendas'
     | '/_layout/'
   fileRoutesById: FileRoutesById
 }
@@ -279,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutValesRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/vendas': {
+      id: '/_layout/vendas'
+      path: '/vendas'
+      fullPath: '/vendas'
+      preLoaderRoute: typeof LayoutVendasRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
@@ -290,6 +309,7 @@ interface LayoutRouteChildren {
   LayoutProdutosRoute: typeof LayoutProdutosRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutValesRoute: typeof LayoutValesRoute
+  LayoutVendasRoute: typeof LayoutVendasRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
@@ -301,6 +321,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutProdutosRoute: LayoutProdutosRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutValesRoute: LayoutValesRoute,
+  LayoutVendasRoute: LayoutVendasRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
 

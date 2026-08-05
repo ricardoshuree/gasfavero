@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:40:13
-# Corrige import de or_ para vir de sqlalchemy diretamente (evita risco de ImportError)
+# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:32:15
+# Adiciona telefone e torna endereco opcional na criacao de Cliente
 # [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:25:56
 # CRUD de Cliente + Endereco, com troca de endereco fechando o historico
 # [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed
@@ -7,16 +7,22 @@
 # [mcp-local harness] fix: or_ importado de sqlalchemy (nao sqlmodel) --
 # func/col ja sao confirmados via items.py, mas or_ nunca foi usado no
 # projeto ainda; import direto da fonte evita risco de ImportError.
+#
+# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12
+# Cliente ganha telefone; endereco na criacao passa a ser OPCIONAL no
+# backend (quem exige endereco obrigatorio agora e a validacao da tela
+# /clientes, nao mais o backend -- a tela de Venda cadastra cliente
+# rapido sem endereco).
 """
 Rotas de Cliente + Endereço. Controle de acesso via módulo RBAC
 "clientes".
 
 Fluxo real (RF-01 do apanhado do Giovani): motorista cadastra cliente
-já com o endereço junto (POST /clientes/ recebe os dois de uma vez).
-Trocar de endereço depois é um endpoint separado (POST
-/clientes/{id}/endereco) porque precisa FECHAR o histórico antigo
-(valid_to = agora), não é um UPDATE simples -- ver ClienteEndereco em
-models.py.
+já com o endereço junto (POST /clientes/ recebe os dois de uma vez,
+mas endereço agora é opcional -- ver ClienteCreate). Trocar de
+endereço depois é um endpoint separado (POST /clientes/{id}/endereco)
+porque precisa FECHAR o histórico antigo (valid_to = agora), não é um
+UPDATE simples -- ver ClienteEndereco em models.py.
 """
 import uuid
 from typing import Any
@@ -118,6 +124,7 @@ def _to_cliente_public(session: SessionDep, cliente: Cliente) -> ClientePublic:
         id=cliente.id,
         nome=cliente.nome,
         cpf=cliente.cpf,
+        telefone=cliente.telefone,
         created_at=cliente.created_at,
         endereco=_to_endereco_public(session, endereco) if endereco else None,
     )
@@ -163,8 +170,10 @@ def read_clientes(
     dependencies=[Depends(require_module_permission(MODULE, action="create"))],
 )
 def create_cliente(*, session: SessionDep, cliente_in: ClienteCreate) -> Any:
-    """Cria cliente + endereço + o vínculo vigente numa única
-    transação."""
+    """Cria cliente (+ endereço e vínculo vigente, se endereço for
+    informado) numa única transação. Endereço é opcional aqui -- quem
+    exige endereço obrigatório é a tela /clientes (validação de
+    frontend), não este endpoint."""
     existente = session.exec(
         select(Cliente).where(Cliente.cpf == cliente_in.cpf)
     ).first()
@@ -174,14 +183,17 @@ def create_cliente(*, session: SessionDep, cliente_in: ClienteCreate) -> Any:
             detail=f"Já existe um cliente com o CPF '{cliente_in.cpf}'",
         )
 
-    cliente = Cliente(nome=cliente_in.nome, cpf=cliente_in.cpf)
+    cliente = Cliente(
+        nome=cliente_in.nome, cpf=cliente_in.cpf, telefone=cliente_in.telefone
+    )
     session.add(cliente)
     session.flush()
 
-    endereco = _create_endereco(session, cliente_in.endereco)
-    session.add(
-        ClienteEndereco(cliente_id=cliente.id, endereco_id=endereco.id)
-    )
+    if cliente_in.endereco is not None:
+        endereco = _create_endereco(session, cliente_in.endereco)
+        session.add(
+            ClienteEndereco(cliente_id=cliente.id, endereco_id=endereco.id)
+        )
 
     session.commit()
     session.refresh(cliente)
@@ -208,7 +220,7 @@ def read_cliente(session: SessionDep, id: uuid.UUID) -> Any:
 def update_cliente(
     *, session: SessionDep, id: uuid.UUID, cliente_in: ClienteUpdate
 ) -> Any:
-    """Edita só nome/cpf. Pra trocar de endereço, ver
+    """Edita só nome/cpf/telefone. Pra trocar de endereço, ver
     POST /clientes/{id}/endereco."""
     cliente = session.get(Cliente, id)
     if not cliente:
