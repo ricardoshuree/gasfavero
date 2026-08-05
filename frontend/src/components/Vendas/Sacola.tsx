@@ -22,7 +22,12 @@ function formatMoney(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-export function Sacola({ itens, onIncrementar, onDecrementar, onRemover }: SacolaProps) {
+export function Sacola({
+  itens,
+  onIncrementar,
+  onDecrementar,
+  onRemover,
+}: SacolaProps) {
   const total = itens.reduce(
     (acc, item) => acc + Number(item.precoUnitario) * item.quantidade,
     0,

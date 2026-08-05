@@ -28,8 +28,8 @@ function RolesSection() {
           <h2 className="text-lg font-semibold">Gerenciar Roles</h2>
           <p className="text-sm text-muted-foreground">
             Crie, renomeie ou apague roles RBAC (ex: "gerente", "motorista").
-            Depois de criada, configure o que ela pode fazer em cada módulo
-            na matriz abaixo.
+            Depois de criada, configure o que ela pode fazer em cada módulo na
+            matriz abaixo.
           </p>
         </div>
         <AddRole />

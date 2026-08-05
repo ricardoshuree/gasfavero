@@ -8,9 +8,9 @@ import { Search } from "lucide-react"
 import { Suspense, useState } from "react"
 
 import { ClientesService, UsersService } from "@/client"
-import { DataTable } from "@/components/Common/DataTable"
 import AddCliente from "@/components/Clientes/AddCliente"
 import { clienteColumns } from "@/components/Clientes/columns"
+import { DataTable } from "@/components/Common/DataTable"
 import { Input } from "@/components/ui/input"
 import { usePermissions } from "@/hooks/usePermissions"
 
@@ -39,7 +39,8 @@ export const Route = createFileRoute("/_layout/clientes")({
 function ClientesTableContent({ q }: { q: string }) {
   const { data: clientes } = useSuspenseQuery({
     queryKey: ["clientes", q],
-    queryFn: () => ClientesService.readClientes({ q: q || undefined, limit: 100 }),
+    queryFn: () =>
+      ClientesService.readClientes({ q: q || undefined, limit: 100 }),
   })
 
   if (clientes.data.length === 0) {

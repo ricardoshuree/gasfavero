@@ -38,7 +38,8 @@ export function RuaAutocomplete({
   const sugestoes = (opcoes ?? []).filter((r) =>
     r.nome.toLowerCase().includes(value.trim().toLowerCase()),
   )
-  const mostrarSugestoes = open && value.trim().length > 0 && sugestoes.length > 0
+  const mostrarSugestoes =
+    open && value.trim().length > 0 && sugestoes.length > 0
 
   return (
     <div className="relative">

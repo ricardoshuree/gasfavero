@@ -51,7 +51,8 @@ const PermissionMatrixDialog = ({ module }: PermissionMatrixDialogProps) => {
 
   const { data: matrix } = useQuery({
     queryKey: ["module-permissions", module.id],
-    queryFn: () => ModulesService.readModulePermissions({ moduleId: module.id }),
+    queryFn: () =>
+      ModulesService.readModulePermissions({ moduleId: module.id }),
     enabled: isOpen,
   })
 
@@ -119,8 +120,8 @@ const PermissionMatrixDialog = ({ module }: PermissionMatrixDialogProps) => {
             Permissões — {module.name}
           </DialogTitle>
           <DialogDescription>
-            Marque o que cada role pode fazer neste módulo. Superusuários
-            sempre têm acesso total, independente desta matriz.
+            Marque o que cada role pode fazer neste módulo. Superusuários sempre
+            têm acesso total, independente desta matriz.
           </DialogDescription>
         </DialogHeader>
 

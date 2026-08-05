@@ -72,9 +72,7 @@ function Vales() {
         {canCreate(MODULE) && <AddBlocoVale />}
       </div>
       <Suspense
-        fallback={
-          <p className="text-muted-foreground">Carregando blocos...</p>
-        }
+        fallback={<p className="text-muted-foreground">Carregando blocos...</p>}
       >
         <BlocosValeTableContent />
       </Suspense>

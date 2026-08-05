@@ -66,9 +66,7 @@ function Precos() {
         </p>
       </div>
       <Suspense
-        fallback={
-          <p className="text-muted-foreground">Carregando preços...</p>
-        }
+        fallback={<p className="text-muted-foreground">Carregando preços...</p>}
       >
         <PrecosTableContent />
       </Suspense>

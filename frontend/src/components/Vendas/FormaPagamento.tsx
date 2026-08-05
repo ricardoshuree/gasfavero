@@ -8,7 +8,11 @@ import { cn } from "@/lib/utils"
 
 export type FormaPagamentoValue = "cartao" | "pix" | "dinheiro" | "vale"
 
-const OPCOES: { value: FormaPagamentoValue; label: string; icon: typeof CreditCard }[] = [
+const OPCOES: {
+  value: FormaPagamentoValue
+  label: string
+  icon: typeof CreditCard
+}[] = [
   { value: "cartao", label: "Cartão", icon: CreditCard },
   { value: "pix", label: "Pix", icon: QrCode },
   { value: "dinheiro", label: "Dinheiro", icon: Banknote },

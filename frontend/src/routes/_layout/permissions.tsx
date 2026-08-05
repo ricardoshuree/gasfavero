@@ -90,8 +90,8 @@ function Permissions() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Permissões</h1>
         <p className="text-muted-foreground">
-          Configure o que cada role pode criar, ver, editar e apagar em
-          cada módulo. Superusuários sempre têm acesso total.
+          Configure o que cada role pode criar, ver, editar e apagar em cada
+          módulo. Superusuários sempre têm acesso total.
         </p>
       </div>
 
@@ -101,8 +101,8 @@ function Permissions() {
         <div className="mb-4">
           <h2 className="text-lg font-semibold">Matriz de Permissões</h2>
           <p className="text-sm text-muted-foreground">
-            Selecione um módulo para configurar create/read/update/delete
-            por role.
+            Selecione um módulo para configurar create/read/update/delete por
+            role.
           </p>
         </div>
         <Suspense

@@ -81,9 +81,9 @@ const DeleteRole = ({ role, onSuccess }: DeleteRoleProps) => {
                   </p>
                 ) : (
                   <p>
-                    Nenhum usuário está vinculado a essa role no momento.
-                    Apagar também remove a matriz de permissões associada a
-                    ela. Essa ação não pode ser desfeita.
+                    Nenhum usuário está vinculado a essa role no momento. Apagar
+                    também remove a matriz de permissões associada a ela. Essa
+                    ação não pode ser desfeita.
                   </p>
                 )}
               </div>

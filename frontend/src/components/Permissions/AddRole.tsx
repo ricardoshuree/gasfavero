@@ -100,7 +100,12 @@ const AddRole = () => {
                       Nome <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="gerente" type="text" {...field} required />
+                      <Input
+                        placeholder="gerente"
+                        type="text"
+                        {...field}
+                        required
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -206,7 +206,11 @@ const TrocarEndereco = ({ cliente, onSuccess }: TrocarEnderecoProps) => {
                         Número <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="123 ou s/n" type="text" {...field} />
+                        <Input
+                          placeholder="123 ou s/n"
+                          type="text"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -95,7 +95,7 @@ export function ClienteSection({
       cancelado = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cliente?.id])
+  }, [cliente?.id, cliente, onEnderecoChange])
 
   if (cliente) {
     return (
@@ -125,7 +125,9 @@ export function ClienteSection({
           <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
           {enderecoSelecionado ? (
             <>
-              <span className="flex-1">{formatEndereco(enderecoSelecionado)}</span>
+              <span className="flex-1">
+                {formatEndereco(enderecoSelecionado)}
+              </span>
               <Button
                 type="button"
                 variant="ghost"
@@ -214,7 +216,11 @@ interface QuickAddClienteProps {
   onError: (error: ApiError) => void
 }
 
-function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps) {
+function QuickAddCliente({
+  onCancel,
+  onCreated,
+  onError,
+}: QuickAddClienteProps) {
   const [nome, setNome] = useState("")
   const [cpf, setCpf] = useState("")
   const [telefone, setTelefone] = useState(() => formatTelefone("54"))
@@ -263,7 +269,11 @@ function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps)
         <Label htmlFor="qc-nome">
           Nome <span className="text-destructive">*</span>
         </Label>
-        <Input id="qc-nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+        <Input
+          id="qc-nome"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">

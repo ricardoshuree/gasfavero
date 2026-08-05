@@ -19,8 +19,8 @@ import {
   type ApiError,
   type ClientePublic,
   type EnderecoPublic,
-  type ProdutoComPrecoPublic,
   PrecosService,
+  type ProdutoComPrecoPublic,
   UsersService,
   VendasService,
 } from "@/client"
@@ -75,7 +75,8 @@ function Vendas() {
   const [cliente, setCliente] = useState<ClientePublic | null>(null)
   const [endereco, setEndereco] = useState<EnderecoPublic | null>(null)
   const [motoristaId, setMotoristaId] = useState("")
-  const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoValue | null>(null)
+  const [formaPagamento, setFormaPagamento] =
+    useState<FormaPagamentoValue | null>(null)
   const [valeNumero, setValeNumero] = useState("")
   const [dataPagamentoVale, setDataPagamentoVale] = useState("")
   const [valorPago, setValorPago] = useState("")
@@ -97,7 +98,9 @@ function Vendas() {
   // Default do combo de motorista = "Distribuidora Gás Favero"
   useEffect(() => {
     if (motoristaId || !users) return
-    const distribuidora = users.data.find((u) => u.full_name === NOME_DISTRIBUIDORA)
+    const distribuidora = users.data.find(
+      (u) => u.full_name === NOME_DISTRIBUIDORA,
+    )
     if (distribuidora) setMotoristaId(distribuidora.id)
   }, [users, motoristaId])
 
@@ -134,7 +137,9 @@ function Vendas() {
       const existente = prev.find((i) => i.produtoId === produto.id)
       if (existente) {
         return prev.map((i) =>
-          i.produtoId === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i,
+          i.produtoId === produto.id
+            ? { ...i, quantidade: i.quantidade + 1 }
+            : i,
         )
       }
       return [
@@ -189,9 +194,15 @@ function Vendas() {
           cliente_id: cliente?.id ?? "",
           endereco_id: endereco?.id,
           motorista_id: motoristaId,
-          forma_pagamento: formaPagamento as "cartao" | "pix" | "dinheiro" | "vale",
+          forma_pagamento: formaPagamento as
+            | "cartao"
+            | "pix"
+            | "dinheiro"
+            | "vale",
           vale_numero:
-            formaPagamento === "vale" && valeNumero ? Number(valeNumero) : undefined,
+            formaPagamento === "vale" && valeNumero
+              ? Number(valeNumero)
+              : undefined,
           data_pagamento_vale:
             formaPagamento === "vale" && dataPagamentoVale
               ? dataPagamentoVale
@@ -228,7 +239,8 @@ function Vendas() {
 
   const handleAbrirResumo = () => {
     if (!cliente) return showErrorToast("Selecione ou cadastre um cliente")
-    if (sacola.length === 0) return showErrorToast("Adicione ao menos 1 produto na sacola")
+    if (sacola.length === 0)
+      return showErrorToast("Adicione ao menos 1 produto na sacola")
     if (!formaPagamento) return showErrorToast("Selecione a forma de pagamento")
     if (formaPagamento === "vale" && !valeNumero.trim())
       return showErrorToast("Informe o número do vale")
@@ -244,7 +256,9 @@ function Vendas() {
     <div className="flex flex-col gap-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Vendas</h1>
-        <p className="text-muted-foreground">Venda de balcão da distribuidora</p>
+        <p className="text-muted-foreground">
+          Venda de balcão da distribuidora
+        </p>
       </div>
 
       <div className="grid gap-1.5 max-w-sm">
@@ -257,7 +271,9 @@ function Vendas() {
             {users?.data.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.full_name || u.email}
-                {u.roles && u.roles.length > 0 ? ` (${u.roles.join(", ")})` : ""}
+                {u.roles && u.roles.length > 0
+                  ? ` (${u.roles.join(", ")})`
+                  : ""}
               </SelectItem>
             ))}
           </SelectContent>

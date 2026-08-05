@@ -28,7 +28,11 @@ function formatMoney(valor: string | null | undefined): string {
  * produto, isso precisa de armazenamento de arquivo (não modelado
  * ainda).
  */
-export function ProdutoGrid({ produtos, quantidadesNaSacola, onSelect }: ProdutoGridProps) {
+export function ProdutoGrid({
+  produtos,
+  quantidadesNaSacola,
+  onSelect,
+}: ProdutoGridProps) {
   return (
     <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
       {produtos.map((produto) => {
@@ -47,7 +51,11 @@ export function ProdutoGrid({ produtos, quantidadesNaSacola, onSelect }: Produto
                 : "border-border bg-card hover:border-primary/50",
               semPreco && "cursor-not-allowed opacity-40",
             )}
-            title={semPreco ? "Produto sem preço cadastrado" : formatMoney(produto.preco_atual)}
+            title={
+              semPreco
+                ? "Produto sem preço cadastrado"
+                : formatMoney(produto.preco_atual)
+            }
           >
             {quantidade > 0 && (
               <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">

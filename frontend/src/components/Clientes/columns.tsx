@@ -9,9 +9,7 @@ export const clienteColumns: ColumnDef<ClientePublic>[] = [
   {
     accessorKey: "nome",
     header: "Nome",
-    cell: ({ row }) => (
-      <span className="font-medium">{row.original.nome}</span>
-    ),
+    cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
   },
   {
     accessorKey: "cpf",

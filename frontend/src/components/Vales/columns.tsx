@@ -25,7 +25,9 @@ export const blocoValeColumns: ColumnDef<BlocoValePublic>[] = [
   {
     accessorKey: "total_vales",
     header: "Total de vales",
-    cell: ({ row }) => <Badge variant="secondary">{row.original.total_vales}</Badge>,
+    cell: ({ row }) => (
+      <Badge variant="secondary">{row.original.total_vales}</Badge>
+    ),
   },
   {
     accessorKey: "created_at",

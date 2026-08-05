@@ -68,10 +68,13 @@ export function usePermissions() {
     return data.permissions.some((p) => p.module === module && p[action])
   }
 
-  const canCreate = (module: string): boolean => checkAction(module, "can_create")
+  const canCreate = (module: string): boolean =>
+    checkAction(module, "can_create")
   const canRead = (module: string): boolean => checkAction(module, "can_read")
-  const canUpdate = (module: string): boolean => checkAction(module, "can_update")
-  const canDelete = (module: string): boolean => checkAction(module, "can_delete")
+  const canUpdate = (module: string): boolean =>
+    checkAction(module, "can_update")
+  const canDelete = (module: string): boolean =>
+    checkAction(module, "can_delete")
 
   return {
     permissions: data,

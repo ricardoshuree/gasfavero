@@ -39,8 +39,7 @@ export function Logo({
       <span
         className={cn(
           "text-lg font-bold tracking-tight",
-          variant === "responsive" &&
-            "group-data-[collapsible=icon]:hidden",
+          variant === "responsive" && "group-data-[collapsible=icon]:hidden",
           className,
         )}
       >

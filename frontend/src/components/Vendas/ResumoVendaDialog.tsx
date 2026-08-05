@@ -1,5 +1,8 @@
 // [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:41:42
 // Dialog de resumo/confirmacao da venda antes de gravar
+
+import type { EnderecoPublic } from "@/client"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -8,9 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import type { EnderecoPublic } from "@/client"
 import type { SacolaItem } from "./Sacola"
 
 function formatMoney(valor: number): string {
@@ -66,8 +67,8 @@ export function ResumoVendaDialog({
         <DialogHeader>
           <DialogTitle>Confirmar Venda</DialogTitle>
           <DialogDescription>
-            Confira os dados antes de finalizar -- depois de confirmado não
-            dá pra editar, só estornar/ajustar manualmente.
+            Confira os dados antes de finalizar -- depois de confirmado não dá
+            pra editar, só estornar/ajustar manualmente.
           </DialogDescription>
         </DialogHeader>
 
@@ -119,7 +120,11 @@ export function ResumoVendaDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
             Voltar
           </Button>
           <LoadingButton onClick={onConfirm} loading={isPending}>

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ShieldCheck } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { type UserPublicWithRoles, RolesService, UsersService } from "@/client"
+import { RolesService, type UserPublicWithRoles, UsersService } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -86,9 +86,9 @@ const ManageRoles = ({ user, onSuccess }: ManageRolesProps) => {
         <DialogHeader>
           <DialogTitle>Manage Roles — {user.email}</DialogTitle>
           <DialogDescription>
-            Roles RBAC controlam acesso por módulo (ex: "vendas",
-            "estoque"). Independente do controle "Superuser", que dá
-            acesso irrestrito ignorando roles.
+            Roles RBAC controlam acesso por módulo (ex: "vendas", "estoque").
+            Independente do controle "Superuser", que dá acesso irrestrito
+            ignorando roles.
           </DialogDescription>
         </DialogHeader>
 

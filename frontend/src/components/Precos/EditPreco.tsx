@@ -7,7 +7,7 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { type ProdutoComPrecoPublic, PrecosService } from "@/client"
+import { PrecosService, type ProdutoComPrecoPublic } from "@/client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -36,9 +36,14 @@ const formSchema = z.object({
   valor: z
     .string()
     .min(1, { message: "Informe o valor" })
-    .refine((v) => !Number.isNaN(Number(v.replace(",", "."))) && Number(v.replace(",", ".")) > 0, {
-      message: "Valor precisa ser um número maior que zero",
-    }),
+    .refine(
+      (v) =>
+        !Number.isNaN(Number(v.replace(",", "."))) &&
+        Number(v.replace(",", ".")) > 0,
+      {
+        message: "Valor precisa ser um número maior que zero",
+      },
+    ),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -89,8 +94,8 @@ const EditPreco = ({ produto }: EditPrecoProps) => {
         <DialogHeader>
           <DialogTitle>Preço — {produto.title}</DialogTitle>
           <DialogDescription>
-            Cadastrar um novo valor fecha o preço vigente atual e passa a
-            valer a partir de agora -- vendas já feitas não mudam.
+            Cadastrar um novo valor fecha o preço vigente atual e passa a valer
+            a partir de agora -- vendas já feitas não mudam.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

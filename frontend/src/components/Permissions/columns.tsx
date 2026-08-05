@@ -29,9 +29,7 @@ export const roleColumns: ColumnDef<RolePublic>[] = [
     cell: ({ row }) => {
       const count = row.original.user_count ?? 0
       return (
-        <Badge variant={count > 0 ? "default" : "secondary"}>
-          {count}
-        </Badge>
+        <Badge variant={count > 0 ? "default" : "secondary"}>{count}</Badge>
       )
     },
   },

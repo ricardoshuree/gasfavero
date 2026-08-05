@@ -122,9 +122,9 @@ const AddBlocoVale = () => {
         <DialogHeader>
           <DialogTitle>Novo Bloco de Vale</DialogTitle>
           <DialogDescription>
-            Informe a primeira e a última folha do bloco -- um vale é gerado
-            pra cada número da sequência. O motorista escolhido aqui fica
-            fixo: não é possível reatribuir o bloco depois.
+            Informe a primeira e a última folha do bloco -- um vale é gerado pra
+            cada número da sequência. O motorista escolhido aqui fica fixo: não
+            é possível reatribuir o bloco depois.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -190,8 +190,7 @@ const AddBlocoVale = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Última folha{" "}
-                        <span className="text-destructive">*</span>
+                        Última folha <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input

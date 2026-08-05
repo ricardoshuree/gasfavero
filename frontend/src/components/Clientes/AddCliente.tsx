@@ -152,9 +152,8 @@ const AddCliente = () => {
         <DialogHeader>
           <DialogTitle>Novo Cliente</DialogTitle>
           <DialogDescription>
-            Cadastra o cliente já com o endereço. Se a rua não estiver na
-            lista de sugestões, é só digitar o nome -- ela é cadastrada na
-            hora.
+            Cadastra o cliente já com o endereço. Se a rua não estiver na lista
+            de sugestões, é só digitar o nome -- ela é cadastrada na hora.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -209,7 +208,9 @@ const AddCliente = () => {
                           placeholder="(54) 99999-9999"
                           type="text"
                           {...field}
-                          onChange={(e) => field.onChange(formatTelefone(e.target.value))}
+                          onChange={(e) =>
+                            field.onChange(formatTelefone(e.target.value))
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -282,7 +283,11 @@ const AddCliente = () => {
                         Número <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="123 ou s/n" type="text" {...field} />
+                        <Input
+                          placeholder="123 ou s/n"
+                          type="text"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

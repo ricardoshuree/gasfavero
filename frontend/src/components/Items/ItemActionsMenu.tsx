@@ -41,7 +41,9 @@ export const ItemActionsMenu = ({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {canUpdate && <EditItem item={item} onSuccess={() => setOpen(false)} />}
-        {canDelete && <DeleteItem id={item.id} onSuccess={() => setOpen(false)} />}
+        {canDelete && (
+          <DeleteItem id={item.id} onSuccess={() => setOpen(false)} />
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
