@@ -243,6 +243,21 @@ export type ProximoValeNumeroPublic = {
 };
 
 /**
+ * Resposta de GET /vendas/vales-recebimento/resumo -- os 3 cards
+ * da tela de Recebimento de Vale. *_valor é sempre o saldo residual
+ * (valor_total - valor_pago) das vendas naquele grupo, nunca o valor
+ * total da venda.
+ */
+export type ResumoRecebimentoValePublic = {
+    em_aberto_qtd: number;
+    em_aberto_valor: string;
+    atraso_qtd: number;
+    atraso_valor: string;
+    aguardando_baixa_qtd: number;
+    aguardando_baixa_valor: string;
+};
+
+/**
  * Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
  * 'motorista'). Nome deve ser único (validado no endpoint).
  */
@@ -406,6 +421,18 @@ export type ValidationError = {
 };
 
 /**
+ * Corpo de PATCH /vendas/{id}/baixar-vale -- confirma
+ * oficialmente o recebimento na distribuidora (sempre feito ali,
+ * nunca em campo). valor_pago é opcional: se omitido, usa o valor
+ * já registrado por marcar-pago. Se o valor confirmado for igual ao
+ * valor_total, a venda fecha de vez (pago_em); se for parcial, volta
+ * pra fila de 'em aberto' com o saldo residual atualizado.
+ */
+export type VendaBaixarValeRequest = {
+    valor_pago?: (number | string | null);
+};
+
+/**
  * Corpo de POST /vendas/ -- cria a venda inteira (cabeçalho +
  * itens da sacola) numa única transação.
  *
@@ -444,6 +471,17 @@ export type VendaItemPublic = {
     subtotal: string;
 };
 
+/**
+ * Corpo de PATCH /vendas/{id}/marcar-pago -- registra que o
+ * valor foi recebido (hoje: por um operador na tela de Recebimento
+ * de Vale; no futuro: por um motorista numa interface própria em
+ * campo). NÃO fecha a venda -- só a baixa (endpoint separado, só
+ * na distribuidora) faz isso. Pode ser um valor parcial.
+ */
+export type VendaMarcarPagoRequest = {
+    valor_pago: (number | string);
+};
+
 export type VendaPublic = {
     id: string;
     cliente_id: string;
@@ -458,6 +496,8 @@ export type VendaPublic = {
     valor_pago: string;
     data_venda: string;
     pago_em?: (string | null);
+    recebido_em?: (string | null);
+    recebido_por_nome?: (string | null);
     criado_por_id: string;
     created_at: string;
     itens?: Array<VendaItemPublic>;
@@ -736,6 +776,33 @@ export type VendasReadProximoNumeroValeData = {
 };
 
 export type VendasReadProximoNumeroValeResponse = (ProximoValeNumeroPublic);
+
+export type VendasReadResumoRecebimentoValeResponse = (ResumoRecebimentoValePublic);
+
+export type VendasReadValesRecebimentoData = {
+    buscaNumero?: (number | null);
+    limit?: number;
+    orderBy?: 'data_venda' | 'valor_total' | 'cliente';
+    orderDir?: 'asc' | 'desc';
+    skip?: number;
+    status?: 'aberto' | 'aguardando_baixa';
+};
+
+export type VendasReadValesRecebimentoResponse = (VendasPublic);
+
+export type VendasMarcarVendaPagoData = {
+    id: string;
+    requestBody: VendaMarcarPagoRequest;
+};
+
+export type VendasMarcarVendaPagoResponse = (VendaPublic);
+
+export type VendasBaixarValeData = {
+    id: string;
+    requestBody: VendaBaixarValeRequest;
+};
+
+export type VendasBaixarValeResponse = (VendaPublic);
 
 export type VendasReadVendaData = {
     id: string;

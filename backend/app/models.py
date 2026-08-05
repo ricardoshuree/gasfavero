@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:26:26
-# Adiciona ProximoValeNumeroPublic
+# [mcp-local harness] feature: recebimento-vale-fix-conceitual | plano: 1e451713 | 2026-08-05 16:58:47
+# Atualiza comentarios/docstrings: baixa sempre fecha a venda (valor menor = desconto, nao residuo); cards de resumo somam valor_total (aberto/atraso) e valor_pago (aguardando baixa)
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -645,6 +645,26 @@ class BlocosValePublic(SQLModel):
 # precisar de migration toda vez que uma forma nova aparecer -- a
 # validação de quais valores são aceitos (cartao/pix/dinheiro/vale)
 # mora no Pydantic (Literal) da camada de API, não no schema do banco.
+#
+# --- Recebimento de Vale: recebido_em vs pago_em -----------------------
+# Uma venda em vale passa por até 3 estados:
+#   1) Em aberto        -- recebido_em IS NULL, pago_em IS NULL
+#   2) Aguardando baixa -- recebido_em IS NOT NULL, pago_em IS NULL
+#      (alguém já confirmou o recebimento -- hoje só o operador na
+#      distribuidora, no futuro também o motorista em campo -- mas
+#      só a distribuidora pode dar a baixa oficial)
+#   3) Baixada          -- pago_em IS NOT NULL (fechada de vez)
+#
+# IMPORTANTE (decisão do Ricardo, revista depois de ver o fluxo
+# funcionando): a baixa SEMPRE fecha a venda (estado 3), não importa
+# o valor. Se o valor pago na baixa for menor que valor_total, a
+# diferença é tratada como DESCONTO -- não vira um "saldo residual"
+# que mantém a venda em aberto. Ou seja, não existe "baixa parcial
+# que reabre o vale": uma vez que se deu baixa, aquele vale não está
+# mais passível de recebimento, ponto final. `valor_pago` registra o
+# que foi de fato recebido (podendo ser menor que valor_total por
+# desconto), mas isso nunca faz a venda voltar pro estado (1).
+# -------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
 class Venda(SQLModel, table=True):
@@ -663,6 +683,13 @@ class Venda(SQLModel, table=True):
     valor_pago: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     data_venda: date = Field(default_factory=lambda: datetime.now(UTC).date())
     pago_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    # ver bloco de comentário "Recebimento de Vale" acima da classe
+    recebido_em: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+    recebido_por_id: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", ondelete="SET NULL"
+    )
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     created_at: datetime = Field(
         default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
@@ -731,6 +758,8 @@ class VendaPublic(SQLModel):
     valor_pago: Decimal
     data_venda: date
     pago_em: datetime | None = None
+    recebido_em: datetime | None = None
+    recebido_por_nome: str | None = None
     criado_por_id: uuid.UUID
     created_at: datetime
     itens: list[VendaItemPublic] = []
@@ -749,6 +778,49 @@ class ProximoValeNumeroPublic(SQLModel):
     vale" na tela de venda -- continua editável, não é obrigatório
     usar exatamente esse número."""
     numero: int | None = None
+
+
+# ---- Recebimento de Vale (endpoints em vendas.py) ----
+
+class VendaMarcarPagoRequest(SQLModel):
+    """Corpo de PATCH /vendas/{id}/marcar-pago -- registra que o
+    valor foi recebido (hoje: por um operador na tela de Recebimento
+    de Vale; no futuro: por um motorista numa interface própria em
+    campo). NÃO fecha a venda -- só a baixa (endpoint separado, só
+    na distribuidora) faz isso."""
+    valor_pago: Decimal = Field(gt=0, decimal_places=2)
+
+
+class VendaBaixarValeRequest(SQLModel):
+    """Corpo de PATCH /vendas/{id}/baixar-vale -- confirma
+    oficialmente o recebimento na distribuidora (sempre feito ali,
+    nunca em campo) e FECHA a venda de vez (pago_em), não importa o
+    valor. valor_pago é opcional: se omitido, usa o valor já
+    registrado por marcar-pago. Se for menor que valor_total, a
+    diferença é um desconto -- não deixa a venda em aberto de novo
+    (ver comentário em Venda, models.py)."""
+    valor_pago: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+
+
+class ResumoRecebimentoValePublic(SQLModel):
+    """Resposta de GET /vendas/vales-recebimento/resumo -- os 3 cards
+    da tela de Recebimento de Vale.
+
+    em_aberto_valor / atraso_valor: soma do valor_total das vendas
+    naquele grupo (não desconta nada -- são vendas que ainda não
+    tiveram nenhum recebimento registrado).
+
+    aguardando_baixa_valor: soma do valor_pago (o que foi de fato
+    registrado como recebido, ainda não conferido/baixado na
+    distribuidora) -- não o valor_total, porque o que importa aqui pro
+    operador é quanto ele deve esperar receber/conferir em mãos.
+    """
+    em_aberto_qtd: int
+    em_aberto_valor: Decimal
+    atraso_qtd: int
+    atraso_valor: Decimal
+    aguardando_baixa_qtd: int
+    aguardando_baixa_valor: Decimal
 
 
 # ---------------------------------------------------------------------------

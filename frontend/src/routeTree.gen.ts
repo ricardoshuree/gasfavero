@@ -20,6 +20,7 @@ import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
 import { Route as LayoutPermissionsRouteImport } from './routes/_layout/permissions'
 import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
+import { Route as LayoutRecebimentoValeRouteImport } from './routes/_layout/recebimento-vale'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutValesRouteImport } from './routes/_layout/vales'
 import { Route as LayoutVendasRouteImport } from './routes/_layout/vendas'
@@ -78,6 +79,11 @@ const LayoutProdutosRoute = LayoutProdutosRouteImport.update({
   path: '/produtos',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutRecebimentoValeRoute = LayoutRecebimentoValeRouteImport.update({
+  id: '/recebimento-vale',
+  path: '/recebimento-vale',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
+  '/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/settings': typeof LayoutSettingsRoute
   '/vales': typeof LayoutValesRoute
   '/vendas': typeof LayoutVendasRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
+  '/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/settings': typeof LayoutSettingsRoute
   '/vales': typeof LayoutValesRoute
   '/vendas': typeof LayoutVendasRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   '/_layout/permissions': typeof LayoutPermissionsRoute
   '/_layout/precos': typeof LayoutPrecosRoute
   '/_layout/produtos': typeof LayoutProdutosRoute
+  '/_layout/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/vales': typeof LayoutValesRoute
   '/_layout/vendas': typeof LayoutVendasRoute
@@ -154,6 +163,7 @@ export interface FileRouteTypes {
     | '/permissions'
     | '/precos'
     | '/produtos'
+    | '/recebimento-vale'
     | '/settings'
     | '/vales'
     | '/vendas'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/permissions'
     | '/precos'
     | '/produtos'
+    | '/recebimento-vale'
     | '/settings'
     | '/vales'
     | '/vendas'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/_layout/permissions'
     | '/_layout/precos'
     | '/_layout/produtos'
+    | '/_layout/recebimento-vale'
     | '/_layout/settings'
     | '/_layout/vales'
     | '/_layout/vendas'
@@ -277,6 +289,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutProdutosRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/recebimento-vale': {
+      id: '/_layout/recebimento-vale'
+      path: '/recebimento-vale'
+      fullPath: '/recebimento-vale'
+      preLoaderRoute: typeof LayoutRecebimentoValeRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/settings': {
       id: '/_layout/settings'
       path: '/settings'
@@ -307,6 +326,7 @@ interface LayoutRouteChildren {
   LayoutPermissionsRoute: typeof LayoutPermissionsRoute
   LayoutPrecosRoute: typeof LayoutPrecosRoute
   LayoutProdutosRoute: typeof LayoutProdutosRoute
+  LayoutRecebimentoValeRoute: typeof LayoutRecebimentoValeRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutValesRoute: typeof LayoutValesRoute
   LayoutVendasRoute: typeof LayoutVendasRoute
@@ -319,6 +339,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutPermissionsRoute: LayoutPermissionsRoute,
   LayoutPrecosRoute: LayoutPrecosRoute,
   LayoutProdutosRoute: LayoutProdutosRoute,
+  LayoutRecebimentoValeRoute: LayoutRecebimentoValeRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutValesRoute: LayoutValesRoute,
   LayoutVendasRoute: LayoutVendasRoute,

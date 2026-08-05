@@ -914,6 +914,45 @@ vale" na tela de venda -- continua editável, não é obrigatório
 usar exatamente esse número.`
 } as const;
 
+export const ResumoRecebimentoValePublicSchema = {
+    properties: {
+        em_aberto_qtd: {
+            type: 'integer',
+            title: 'Em Aberto Qtd'
+        },
+        em_aberto_valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Em Aberto Valor'
+        },
+        atraso_qtd: {
+            type: 'integer',
+            title: 'Atraso Qtd'
+        },
+        atraso_valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Atraso Valor'
+        },
+        aguardando_baixa_qtd: {
+            type: 'integer',
+            title: 'Aguardando Baixa Qtd'
+        },
+        aguardando_baixa_valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Aguardando Baixa Valor'
+        }
+    },
+    type: 'object',
+    required: ['em_aberto_qtd', 'em_aberto_valor', 'atraso_qtd', 'atraso_valor', 'aguardando_baixa_qtd', 'aguardando_baixa_valor'],
+    title: 'ResumoRecebimentoValePublic',
+    description: `Resposta de GET /vendas/vales-recebimento/resumo -- os 3 cards
+da tela de Recebimento de Vale. *_valor é sempre o saldo residual
+(valor_total - valor_pago) das vendas naquele grupo, nunca o valor
+total da venda.`
+} as const;
+
 export const RoleCreateSchema = {
     properties: {
         name: {
@@ -1561,6 +1600,35 @@ export const ValidationErrorSchema = {
     title: 'ValidationError'
 } as const;
 
+export const VendaBaixarValeRequestSchema = {
+    properties: {
+        valor_pago: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Valor Pago'
+        }
+    },
+    type: 'object',
+    title: 'VendaBaixarValeRequest',
+    description: `Corpo de PATCH /vendas/{id}/baixar-vale -- confirma
+oficialmente o recebimento na distribuidora (sempre feito ali,
+nunca em campo). valor_pago é opcional: se omitido, usa o valor
+já registrado por marcar-pago. Se o valor confirmado for igual ao
+valor_total, a venda fecha de vez (pago_em); se for parcial, volta
+pra fila de 'em aberto' com o saldo residual atualizado.`
+} as const;
+
 export const VendaCreateSchema = {
     properties: {
         cliente_id: {
@@ -1715,6 +1783,32 @@ export const VendaItemPublicSchema = {
     title: 'VendaItemPublic'
 } as const;
 
+export const VendaMarcarPagoRequestSchema = {
+    properties: {
+        valor_pago: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                }
+            ],
+            title: 'Valor Pago'
+        }
+    },
+    type: 'object',
+    required: ['valor_pago'],
+    title: 'VendaMarcarPagoRequest',
+    description: `Corpo de PATCH /vendas/{id}/marcar-pago -- registra que o
+valor foi recebido (hoje: por um operador na tela de Recebimento
+de Vale; no futuro: por um motorista numa interface própria em
+campo). NÃO fecha a venda -- só a baixa (endpoint separado, só
+na distribuidora) faz isso. Pode ser um valor parcial.`
+} as const;
+
 export const VendaPublicSchema = {
     properties: {
         id: {
@@ -1803,6 +1897,29 @@ export const VendaPublicSchema = {
                 }
             ],
             title: 'Pago Em'
+        },
+        recebido_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Recebido Em'
+        },
+        recebido_por_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Recebido Por Nome'
         },
         criado_por_id: {
             type: 'string',

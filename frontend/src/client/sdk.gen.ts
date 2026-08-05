@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -1051,6 +1051,103 @@ export class VendasService {
             path: {
                 motorista_id: data.motoristaId
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Resumo Recebimento Vale
+     * @returns ResumoRecebimentoValePublic Successful Response
+     * @throws ApiError
+     */
+    public static readResumoRecebimentoVale(): CancelablePromise<VendasReadResumoRecebimentoValeResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/vales-recebimento/resumo'
+        });
+    }
+    
+    /**
+     * Read Vales Recebimento
+     * @param data The data for the request.
+     * @param data.status
+     * @param data.buscaNumero
+     * @param data.orderBy
+     * @param data.orderDir
+     * @param data.skip
+     * @param data.limit
+     * @returns VendasPublic Successful Response
+     * @throws ApiError
+     */
+    public static readValesRecebimento(data: VendasReadValesRecebimentoData = {}): CancelablePromise<VendasReadValesRecebimentoResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/vales-recebimento',
+            query: {
+                status: data.status,
+                busca_numero: data.buscaNumero,
+                order_by: data.orderBy,
+                order_dir: data.orderDir,
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Marcar Venda Pago
+     * Registra que o valor foi recebido -- hoje só usado pelo
+     * operador na tela de Recebimento de Vale, no futuro também pelo
+     * motorista numa interface própria em campo. NÃO fecha a venda --
+     * só move ela pra fila 'aguardando baixa'.
+     * @param data The data for the request.
+     * @param data.id
+     * @param data.requestBody
+     * @returns VendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static marcarVendaPago(data: VendasMarcarVendaPagoData): CancelablePromise<VendasMarcarVendaPagoResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/vendas/{id}/marcar-pago',
+            path: {
+                id: data.id
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Baixar Vale
+     * Confirma oficialmente o recebimento na distribuidora (sempre
+     * feito aqui, nunca em campo). Se o valor confirmado for igual ao
+     * valor_total, fecha a venda de vez (pago_em). Se for parcial,
+     * volta pra fila 'em aberto' com o saldo residual atualizado --
+     * aguardando um próximo recebimento.
+     * @param data The data for the request.
+     * @param data.id
+     * @param data.requestBody
+     * @returns VendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static baixarVale(data: VendasBaixarValeData): CancelablePromise<VendasBaixarValeResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/vendas/{id}/baixar-vale',
+            path: {
+                id: data.id
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }

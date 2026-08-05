@@ -1,12 +1,5 @@
-# [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:27:15
-# Adiciona GET /vendas/proximo-numero-vale/{motorista_id}
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:34:31
-# Adiciona GET /vendas/cliente/{cliente_id}/ultimo-endereco (sugestao de endereco baseada no historico de vendas)
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12
-#
-# [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
-# Adiciona GET /vendas/proximo-numero-vale/{motorista_id} -- sugestao do
-# proximo numero de vale livre no bloco atribuido ao motorista
+# [mcp-local harness] feature: recebimento-vale-fix-conceitual | plano: 1e451713 | 2026-08-05 17:00:53
+# Baixa sempre fecha a venda (remove reabertura parcial); cards de resumo passam a somar valor_total (aberto/atraso) e valor_pago (aguardando baixa)
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -22,7 +15,8 @@ reajustes futuros de preço nunca afetam vendas já registradas.
 import calendar
 import uuid
 from datetime import date, timedelta
-from typing import Any
+from decimal import Decimal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import col, func, select
@@ -38,13 +32,16 @@ from app.models import (
     Item,
     Preco,
     ProximoValeNumeroPublic,
+    ResumoRecebimentoValePublic,
     Rua,
     User,
     Vale,
     Venda,
+    VendaBaixarValeRequest,
     VendaCreate,
     VendaItem,
     VendaItemPublic,
+    VendaMarcarPagoRequest,
     VendaPublic,
     VendasPublic,
     get_datetime_utc,
@@ -53,6 +50,11 @@ from app.models import (
 router = APIRouter(prefix="/vendas", tags=["vendas"])
 
 MODULE = "vendas"
+
+# Limite de dias corridos desde a venda pra considerar um vale em
+# aberto "em atraso" (contado a partir de data_venda, decisão do
+# Ricardo -- não da data prevista de pagamento).
+DIAS_ATRASO_VALE = 30
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +115,9 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
     motorista = session.get(User, venda.motorista_id)
     endereco = session.get(Endereco, venda.endereco_id) if venda.endereco_id else None
     vale = session.get(Vale, venda.vale_id) if venda.vale_id else None
+    recebido_por = (
+        session.get(User, venda.recebido_por_id) if venda.recebido_por_id else None
+    )
 
     itens = session.exec(
         select(VendaItem).where(VendaItem.venda_id == venda.id)
@@ -146,6 +151,10 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
         valor_pago=venda.valor_pago,
         data_venda=venda.data_venda,
         pago_em=venda.pago_em,
+        recebido_em=venda.recebido_em,
+        recebido_por_nome=(
+            (recebido_por.full_name or recebido_por.email) if recebido_por else None
+        ),
         criado_por_id=venda.criado_por_id,
         created_at=venda.created_at,
         itens=itens_public,
@@ -227,6 +236,196 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
             return ProximoValeNumeroPublic(numero=vale_livre.numero)
 
     return ProximoValeNumeroPublic(numero=None)
+
+
+# ---------------------------------------------------------------------------
+# Recebimento de Vale
+#
+# Estados de uma venda em vale (ver bloco de comentário em models.py,
+# na classe Venda):
+#   1) em aberto        -- recebido_em IS NULL, pago_em IS NULL
+#   2) aguardando baixa -- recebido_em IS NOT NULL, pago_em IS NULL
+#   3) baixada          -- pago_em IS NOT NULL (SEMPRE definitivo --
+#      a baixa nunca reabre a venda, mesmo com valor menor que o
+#      total; a diferença é tratada como desconto)
+#
+# Precisam vir ANTES de "/{id}" nesse arquivo -- senão o FastAPI casa
+# "vales-recebimento" como se fosse o {id} da rota genérica abaixo.
+# ---------------------------------------------------------------------------
+
+def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
+    query = (
+        select(Venda)
+        .where(Venda.forma_pagamento == "vale")
+        .where(col(Venda.pago_em).is_(None))
+    )
+    if status == "aberto":
+        return query.where(col(Venda.recebido_em).is_(None))
+    return query.where(col(Venda.recebido_em).is_not(None))
+
+
+@router.get(
+    "/vales-recebimento/resumo",
+    response_model=ResumoRecebimentoValePublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_resumo_recebimento_vale(session: SessionDep) -> Any:
+    limite_atraso = date.today() - timedelta(days=DIAS_ATRASO_VALE)
+
+    em_aberto = session.exec(_query_base_vale_pendente(status="aberto")).all()
+    aguardando_baixa = session.exec(
+        _query_base_vale_pendente(status="aguardando_baixa")
+    ).all()
+    atraso = [v for v in em_aberto if v.data_venda <= limite_atraso]
+
+    def soma_valor_total(vendas: list[Venda]) -> Decimal:
+        return sum((v.valor_total for v in vendas), Decimal("0"))
+
+    def soma_valor_pago(vendas: list[Venda]) -> Decimal:
+        return sum((v.valor_pago for v in vendas), Decimal("0"))
+
+    return ResumoRecebimentoValePublic(
+        em_aberto_qtd=len(em_aberto),
+        em_aberto_valor=soma_valor_total(em_aberto),
+        atraso_qtd=len(atraso),
+        atraso_valor=soma_valor_total(atraso),
+        aguardando_baixa_qtd=len(aguardando_baixa),
+        aguardando_baixa_valor=soma_valor_pago(aguardando_baixa),
+    )
+
+
+@router.get(
+    "/vales-recebimento",
+    response_model=VendasPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_vales_recebimento(
+    session: SessionDep,
+    status: Literal["aberto", "aguardando_baixa"] = "aberto",
+    busca_numero: int | None = None,
+    order_by: Literal["data_venda", "valor_total", "cliente"] = "data_venda",
+    order_dir: Literal["asc", "desc"] = "desc",
+    skip: int = 0,
+    limit: int = 20,
+) -> Any:
+    query = _query_base_vale_pendente(status=status)
+
+    if busca_numero is not None:
+        vale_ids = select(Vale.id).where(Vale.numero == busca_numero)
+        query = query.where(col(Venda.vale_id).in_(vale_ids))
+
+    count = session.exec(select(func.count()).select_from(query.subquery())).one()
+
+    if order_by == "cliente":
+        query = query.join(Cliente, Cliente.id == Venda.cliente_id)
+        order_col = Cliente.nome
+    elif order_by == "valor_total":
+        order_col = Venda.valor_total
+    else:
+        order_col = Venda.data_venda
+
+    query = query.order_by(
+        order_col.desc() if order_dir == "desc" else order_col.asc()
+    )
+    vendas = session.exec(query.offset(skip).limit(limit)).all()
+
+    return VendasPublic(
+        data=[_to_venda_public(session, v) for v in vendas], count=count
+    )
+
+
+def _validar_venda_vale_aberta(venda: Venda | None) -> Venda:
+    if not venda:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    if venda.forma_pagamento != "vale":
+        raise HTTPException(
+            status_code=400, detail="Essa operação só vale pra vendas em vale"
+        )
+    if venda.pago_em is not None:
+        raise HTTPException(status_code=400, detail="Este vale já foi baixado")
+    return venda
+
+
+@router.patch(
+    "/{id}/marcar-pago",
+    response_model=VendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))],
+)
+def marcar_venda_pago(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    body: VendaMarcarPagoRequest,
+) -> Any:
+    """Registra que o valor foi recebido -- hoje só usado pelo
+    operador na tela de Recebimento de Vale, no futuro também pelo
+    motorista numa interface própria em campo. NÃO fecha a venda --
+    só move ela pra fila 'aguardando baixa'."""
+    venda = _validar_venda_vale_aberta(session.get(Venda, id))
+
+    if body.valor_pago < venda.valor_pago:
+        raise HTTPException(
+            status_code=400,
+            detail="O valor pago não pode ser menor que o já registrado",
+        )
+    if body.valor_pago > venda.valor_total:
+        raise HTTPException(
+            status_code=400,
+            detail="O valor pago não pode ser maior que o valor total da venda",
+        )
+
+    venda.valor_pago = body.valor_pago
+    venda.recebido_em = get_datetime_utc()
+    venda.recebido_por_id = current_user.id
+    session.add(venda)
+    session.commit()
+    session.refresh(venda)
+    return _to_venda_public(session, venda)
+
+
+@router.patch(
+    "/{id}/baixar-vale",
+    response_model=VendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))],
+)
+def baixar_vale(
+    *, session: SessionDep, id: uuid.UUID, body: VendaBaixarValeRequest
+) -> Any:
+    """Confirma oficialmente o recebimento na distribuidora (sempre
+    feito aqui, nunca em campo) e FECHA a venda de vez (pago_em) --
+    não importa o valor. Se o valor confirmado for menor que
+    valor_total, a diferença é um desconto: não deixa a venda em
+    aberto de novo (decisão do Ricardo -- ver comentário em Venda,
+    models.py)."""
+    venda = _validar_venda_vale_aberta(session.get(Venda, id))
+
+    if venda.recebido_em is None:
+        raise HTTPException(
+            status_code=400,
+            detail="É preciso marcar como pago antes de dar a baixa",
+        )
+
+    valor_pago = body.valor_pago if body.valor_pago is not None else venda.valor_pago
+
+    if valor_pago < venda.valor_pago:
+        raise HTTPException(
+            status_code=400,
+            detail="O valor pago não pode ser menor que o já registrado",
+        )
+    if valor_pago > venda.valor_total:
+        raise HTTPException(
+            status_code=400,
+            detail="O valor pago não pode ser maior que o valor total da venda",
+        )
+
+    venda.valor_pago = valor_pago
+    venda.pago_em = get_datetime_utc()
+
+    session.add(venda)
+    session.commit()
+    session.refresh(venda)
+    return _to_venda_public(session, venda)
 
 
 @router.get(

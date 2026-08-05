@@ -1,18 +1,5 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:39:34
-// Adiciona Vendas ao menu (modulo vendas), no topo
-// [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:15:56
-// Sidebar: Items vira Cadastro do Produto (modulo produtos), adiciona item Permissoes pra superuser
-//
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b
-// Adiciona Clientes (modulo clientes), Precos (modulo produtos -- mesma
-// permissao de Cadastro do Produto) e Bloco de Vale (modulo vales)
-//
-// [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab
-// "Cadastro do Produto" -> "Produtos" (ajuste cosmetico pedido pelo Ricardo)
-//
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
-// Adiciona Vendas (modulo vendas) -- fica no topo do menu, e a tela
-// mais usada no dia a dia (venda de balcao)
+// [mcp-local harness] feature: recebimento-vale-frontend | plano: 18bab2b5 | 2026-08-05 15:55:32
+// Adiciona item "Recebimento de Vale" no menu lateral (modulo vendas)
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -21,6 +8,7 @@
  *
  * Itens controlados por módulo (visíveis se can_read):
  *   - Vendas             → módulo "vendas"
+ *   - Recebimento de Vale → módulo "vendas" (mesma permissão de Vendas)
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -41,6 +29,7 @@
 import {
   Banknote,
   Box,
+  HandCoins,
   Home,
   Package,
   Settings,
@@ -65,25 +54,43 @@ import { type Item, Main } from "./Main"
 import { User } from "./User"
 
 // Itens sempre visíveis para qualquer usuário autenticado
-const FIXED_ITEMS: Item[] = [
-  { icon: Home, title: "Dashboard", path: "/" },
-]
+const FIXED_ITEMS: Item[] = [{ icon: Home, title: "Dashboard", path: "/" }]
 
 // Mapeamento de módulo → item de menu
 // O campo "module" deve coincidir exatamente com o nome do módulo no banco
 const MODULE_ITEMS: Array<Item & { module: string }> = [
-  { module: "vendas",        icon: ShoppingCart, title: "Vendas",              path: "/vendas" },
-  { module: "produtos",      icon: Box,         title: "Produtos",            path: "/produtos" },
-  { module: "produtos",      icon: Banknote,    title: "Preços",              path: "/precos" },
-  { module: "clientes",      icon: UsersRound,  title: "Clientes",            path: "/clientes" },
-  { module: "vales",         icon: Ticket,      title: "Bloco de Vale",       path: "/vales" },
-  { module: "usuarios",      icon: Users,       title: "Usuários",            path: "/admin" },
-  { module: "configuracoes", icon: Settings,    title: "Configurações",       path: "/settings" },
+  { module: "vendas", icon: ShoppingCart, title: "Vendas", path: "/vendas" },
+  {
+    module: "vendas",
+    icon: HandCoins,
+    title: "Recebimento de Vale",
+    path: "/recebimento-vale",
+  },
+  { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
+  { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
+  {
+    module: "clientes",
+    icon: UsersRound,
+    title: "Clientes",
+    path: "/clientes",
+  },
+  { module: "vales", icon: Ticket, title: "Bloco de Vale", path: "/vales" },
+  { module: "usuarios", icon: Users, title: "Usuários", path: "/admin" },
+  {
+    module: "configuracoes",
+    icon: Settings,
+    title: "Configurações",
+    path: "/settings",
+  },
 ]
 
 // Itens exclusivos de superuser (acesso administrativo completo)
 const ADMIN_ITEM: Item = { icon: Package, title: "Admin", path: "/admin" }
-const PERMISSIONS_ITEM: Item = { icon: ShieldCheck, title: "Permissões", path: "/permissions" }
+const PERMISSIONS_ITEM: Item = {
+  icon: ShieldCheck,
+  title: "Permissões",
+  path: "/permissions",
+}
 
 export function AppSidebar() {
   const { user: currentUser } = useAuth()
