@@ -1,11 +1,14 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:31:57
-// Adiciona Precos, Clientes e Bloco de Vale ao menu lateral
+// [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab | 2026-08-05 08:36:28
+// Renomeia 'Cadastro do Produto' para 'Produtos' no menu
 // [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:15:56
 // Sidebar: Items vira Cadastro do Produto (modulo produtos), adiciona item Permissoes pra superuser
 //
 // [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b
 // Adiciona Clientes (modulo clientes), Precos (modulo produtos -- mesma
 // permissao de Cadastro do Produto) e Bloco de Vale (modulo vales)
+//
+// [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab
+// "Cadastro do Produto" -> "Produtos" (ajuste cosmetico pedido pelo Ricardo)
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -13,7 +16,7 @@
  *   - Dashboard
  *
  * Itens controlados por módulo (visíveis se can_read):
- *   - Cadastro do Produto → módulo "produtos" (gasfavero-específico)
+ *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
  *   - Bloco de Vale      → módulo "vales"
@@ -63,7 +66,7 @@ const FIXED_ITEMS: Item[] = [
 // Mapeamento de módulo → item de menu
 // O campo "module" deve coincidir exatamente com o nome do módulo no banco
 const MODULE_ITEMS: Array<Item & { module: string }> = [
-  { module: "produtos",      icon: Box,         title: "Cadastro do Produto", path: "/produtos" },
+  { module: "produtos",      icon: Box,         title: "Produtos",            path: "/produtos" },
   { module: "produtos",      icon: Banknote,    title: "Preços",              path: "/precos" },
   { module: "clientes",      icon: UsersRound,  title: "Clientes",            path: "/clientes" },
   { module: "vales",         icon: Ticket,      title: "Bloco de Vale",       path: "/vales" },

@@ -1,6 +1,9 @@
+// [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab | 2026-08-05 08:36:37
+// Remove <Footer /> e seu import do layout principal
+// [mcp-local harness] feature: ajustes-cosmeticos-menu-footer | plano: cee9ccab
+// Footer removido -- ocupava espaco desnecessario na interface mobile
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
 
-import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
 import {
   SidebarInset,
@@ -33,7 +36,6 @@ function Layout() {
             <Outlet />
           </div>
         </main>
-        <Footer />
       </SidebarInset>
     </SidebarProvider>
   )
