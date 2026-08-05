@@ -1,10 +1,11 @@
-# [mcp-local harness] feature: fix-role-delete-cascade | plano: 880b7b1a | 2026-08-04 19:07:48
-# Adiciona cascade_delete=True em Role.user_roles, Role.permissions e Module.permissions -- corrige o 503 no DELETE de roles/módulos com vínculos, usando o mesmo padrão já usado em User.items/User.roles
+# [mcp-local harness] feature: modelo-core-cliente-endereco-preco-vale | plano: c2b109e3 | 2026-08-04 21:58:08
+# Corrige o import feio (__import__ inline) trazendo Column pro topo do arquivo, junto com os outros imports do sqlalchemy
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import Column, DateTime, Numeric, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -320,6 +321,152 @@ class ItemPublic(ItemBase):
 class ItemsPublic(SQLModel):
     data: list[ItemPublic]
     count: int
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Geografia (Cidade > Bairro > Rua > Endereço)
+#
+# Bairro fica direto embaixo de Cidade, não de uma "Região" -- a praça
+# de entrega do Giovani é organizada por bairro mesmo (sem polígono
+# desenhado), então uma camada extra de Região só complicaria sem
+# necessidade real hoje. Se um dia precisar de área desenhada à mão
+# (não é o caso combinado), isso entra como tabela própria depois,
+# sem exigir mudar essa hierarquia.
+#
+# IMPORTANTE: nenhuma dessas classes declara Relationship() SQLModel
+# bidirecional (back_populates) de propósito -- são só FK simples.
+# Isso evita reproduzir o mesmo bug já corrigido em Role (SQLAlchemy
+# tentando anular FK de filhos carregados em memória antes do delete,
+# em vez de deixar o ON DELETE do Postgres agir). Sem Relationship()
+# carregada na sessão, não há esse comportamento por trás das costas.
+# ---------------------------------------------------------------------------
+
+class Cidade(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    nome: str = Field(unique=True, max_length=255)
+
+
+class Bairro(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("cidade_id", "nome", name="uq_bairro_cidade_nome"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    cidade_id: uuid.UUID = Field(foreign_key="cidade.id", ondelete="CASCADE")
+    nome: str = Field(max_length=255)
+
+
+class Rua(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("bairro_id", "nome", name="uq_rua_bairro_nome"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    bairro_id: uuid.UUID = Field(foreign_key="bairro.id", ondelete="CASCADE")
+    # "cresce por uso": além do seed inicial, uma rua nova é criada na
+    # hora que alguém cadastra o primeiro endereço nela -- ninguém
+    # conhece as ruas de Veranópolis melhor que quem mora/trabalha lá.
+    nome: str = Field(max_length=255)
+
+
+class Endereco(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    rua_id: uuid.UUID = Field(foreign_key="rua.id", ondelete="RESTRICT")
+    # string, não int -- endereço brasileiro às vezes é "s/n", "123A"
+    # etc, não vale a pena forçar numérico puro
+    numero: str = Field(max_length=20)
+    complemento: str | None = Field(default=None, max_length=255)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Cliente + histórico de endereço
+#
+# Cliente e Endereço são entidades distintas (pessoas mudam de casa) --
+# ClienteEndereco é o histórico: valid_to NULL = endereço vigente
+# agora. Nunca dar UPDATE num endereço vigente pra trocar de casa;
+# sempre fechar o registro antigo (valid_to = agora) e abrir um novo.
+# Um índice único parcial (na migration) garante que só existe 1 linha
+# vigente por cliente ao mesmo tempo -- histórico linear, sem endereços
+# simultâneos (decisão confirmada com o Ricardo).
+# ---------------------------------------------------------------------------
+
+class Cliente(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    nome: str = Field(max_length=255)
+    cpf: str = Field(unique=True, max_length=14, index=True)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+class ClienteEndereco(SQLModel, table=True):
+    __tablename__ = "cliente_endereco"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="CASCADE")
+    endereco_id: uuid.UUID = Field(foreign_key="endereco.id", ondelete="RESTRICT")
+    valid_from: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+    # NULL = vigente agora. Fechar (setar valid_to) ao trocar de
+    # endereço, nunca apagar a linha antiga -- é o histórico.
+    valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Preço (histórico de vigência)
+#
+# Preço tem vigência por data (não é um valor único sobrescrito) --
+# quando o gerente cadastra um preço novo pra um produto, fecha o
+# registro vigente anterior (valid_to = agora) e abre um novo. A Venda
+# (item ainda não modelado, de propósito) vai referenciar o preco_id
+# vigente no momento pra "congelar" o valor praticado -- mudar o preço
+# depois não altera o valor de vendas já feitas.
+# ---------------------------------------------------------------------------
+
+class Preco(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
+    valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    valid_from: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+    valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Bloco de Vale + Vale
+#
+# BlocoVale.motorista_id é fixo desde a criação (decisão confirmada) --
+# se atribuir errado, a correção é apagar e recriar o bloco, não editar
+# o motorista responsável.
+#
+# Vale.numero é único em TODO o sistema (decisão confirmada), não só
+# dentro do bloco -- por isso é uma constraint unique de banco, não só
+# validação de aplicação. Ao cadastrar um BlocoVale (primeira/última
+# folha), o endpoint que vai criar isso (item 6 da lista, ainda não
+# implementado) gera uma linha Vale pra cada número da sequência.
+# ---------------------------------------------------------------------------
+
+class BlocoVale(SQLModel, table=True):
+    __tablename__ = "bloco_vale"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    motorista_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    primeira_folha: int
+    ultima_folha: int
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+class Vale(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    numero: int = Field(unique=True, index=True)
+    bloco_id: uuid.UUID = Field(foreign_key="bloco_vale.id", ondelete="CASCADE")
 
 
 # ---------------------------------------------------------------------------
