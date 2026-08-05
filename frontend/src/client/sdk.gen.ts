@@ -3,7 +3,167 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse } from './types.gen';
+
+export class ClientesService {
+    /**
+     * Read Clientes
+     * Lista clientes. `q` busca por nome OU cpf (case-insensitive,
+     * parcial) -- é a consulta que o motorista usa pra achar o cliente
+     * na hora da venda (RF-04).
+     * @param data The data for the request.
+     * @param data.q
+     * @param data.skip
+     * @param data.limit
+     * @returns ClientesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readClientes(data: ClientesReadClientesData = {}): CancelablePromise<ClientesReadClientesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/clientes/',
+            query: {
+                q: data.q,
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Cliente
+     * Cria cliente + endereço + o vínculo vigente numa única
+     * transação.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ClientePublic Successful Response
+     * @throws ApiError
+     */
+    public static createCliente(data: ClientesCreateClienteData): CancelablePromise<ClientesCreateClienteResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/clientes/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Cliente
+     * @param data The data for the request.
+     * @param data.id
+     * @returns ClientePublic Successful Response
+     * @throws ApiError
+     */
+    public static readCliente(data: ClientesReadClienteData): CancelablePromise<ClientesReadClienteResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/clientes/{id}',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Cliente
+     * Edita só nome/cpf. Pra trocar de endereço, ver
+     * POST /clientes/{id}/endereco.
+     * @param data The data for the request.
+     * @param data.id
+     * @param data.requestBody
+     * @returns ClientePublic Successful Response
+     * @throws ApiError
+     */
+    public static updateCliente(data: ClientesUpdateClienteData): CancelablePromise<ClientesUpdateClienteResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/clientes/{id}',
+            path: {
+                id: data.id
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Trocar Endereco
+     * Registra um novo endereço vigente pro cliente, fechando o
+     * anterior (valid_to = agora) -- nunca edita o endereço antigo no
+     * lugar, é sempre um novo registro no histórico.
+     * @param data The data for the request.
+     * @param data.id
+     * @param data.requestBody
+     * @returns ClientePublic Successful Response
+     * @throws ApiError
+     */
+    public static trocarEndereco(data: ClientesTrocarEnderecoData): CancelablePromise<ClientesTrocarEnderecoResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/clientes/{id}/endereco',
+            path: {
+                id: data.id
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class GeografiaService {
+    /**
+     * Read Bairros
+     * Lista os bairros cadastrados (hoje só Veranópolis tem bairros).
+     * @returns BairrosPublic Successful Response
+     * @throws ApiError
+     */
+    public static readBairros(): CancelablePromise<GeografiaReadBairrosResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/bairros/'
+        });
+    }
+    
+    /**
+     * Read Ruas
+     * Lista as ruas já cadastradas nesse bairro -- usado como
+     * sugestão no cadastro de endereço; não é uma lista fechada (a rua
+     * digitada pelo usuário não precisa estar nessa lista, ver
+     * EnderecoCreate em clientes.py).
+     * @param data The data for the request.
+     * @param data.bairroId
+     * @returns RuasPublic Successful Response
+     * @throws ApiError
+     */
+    public static readRuas(data: GeografiaReadRuasData): CancelablePromise<GeografiaReadRuasResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/bairros/{bairro_id}/ruas',
+            path: {
+                bairro_id: data.bairroId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class ItemsService {
     /**
@@ -231,6 +391,36 @@ export class ModulesService {
     }
     
     /**
+     * Update Module
+     * Edita o label e/ou a description de exibição de um módulo (ex:
+     * trocar "Delegacao" por "Delegação" com acento).
+     *
+     * NUNCA edita `name` (o slug técnico) -- essa string é referenciada
+     * literalmente em require_module_permission("delegacao") no código
+     * das rotas, então mudá-la quebraria qualquer rota que já dependa
+     * dela. Por isso ModuleUpdate nem expõe esse campo.
+     * @param data The data for the request.
+     * @param data.moduleId
+     * @param data.requestBody
+     * @returns ModulePublic Successful Response
+     * @throws ApiError
+     */
+    public static updateModule(data: ModulesUpdateModuleData): CancelablePromise<ModulesUpdateModuleResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/modules/{module_id}',
+            path: {
+                module_id: data.moduleId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
      * Read Module Permissions
      * Matriz de permissões do módulo: uma linha por role existente, com
      * os 4 flags CRUD (zerados se a role ainda não tem RolePermission
@@ -269,6 +459,47 @@ export class ModulesService {
             url: '/api/v1/modules/{module_id}/permissions',
             path: {
                 module_id: data.moduleId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class PrecosService {
+    /**
+     * Read Precos
+     * Lista todos os produtos com o preço vigente de cada um (nulo
+     * se o produto ainda não tem preço cadastrado).
+     * @returns ProdutosComPrecoPublic Successful Response
+     * @throws ApiError
+     */
+    public static readPrecos(): CancelablePromise<PrecosReadPrecosResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/precos/'
+        });
+    }
+    
+    /**
+     * Set Preco
+     * Cadastra um novo preço vigente pro produto, fechando o
+     * anterior (se houver).
+     * @param data The data for the request.
+     * @param data.produtoId
+     * @param data.requestBody
+     * @returns PrecoPublic Successful Response
+     * @throws ApiError
+     */
+    public static setPreco(data: PrecosSetPrecoData): CancelablePromise<PrecosSetPrecoResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/precos/{produto_id}',
+            path: {
+                produto_id: data.produtoId
             },
             body: data.requestBody,
             mediaType: 'application/json',
@@ -689,6 +920,41 @@ export class UtilsService {
                 module_name: data.moduleName,
                 action: data.action
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class ValesService {
+    /**
+     * Read Blocos Vale
+     * @returns BlocosValePublic Successful Response
+     * @throws ApiError
+     */
+    public static readBlocosVale(): CancelablePromise<ValesReadBlocosValeResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/blocos-vale/'
+        });
+    }
+    
+    /**
+     * Create Bloco Vale
+     * Cria o bloco de vale já atribuído a um motorista, e gera os
+     * vales (um por número da sequência).
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns BlocoValePublic Successful Response
+     * @throws ApiError
+     */
+    public static createBlocoVale(data: ValesCreateBlocoValeData): CancelablePromise<ValesCreateBlocoValeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/blocos-vale/',
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }

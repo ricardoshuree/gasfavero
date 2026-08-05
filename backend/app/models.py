@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: modelo-core-cliente-endereco-preco-vale | plano: c2b109e3 | 2026-08-04 21:58:08
-# Corrige o import feio (__import__ inline) trazendo Column pro topo do arquivo, junto com os outros imports do sqlalchemy
+# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:24:33
+# Adiciona Module.label + ModuleUpdate, e todos os Pydantic Create/Public models pra geografia, Cliente, Preco e BlocoVale
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -45,6 +45,13 @@ class Module(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, max_length=100)
     description: str | None = Field(default=None, max_length=255)
+    # Nome de exibição, 100% cosmético -- separado de `name` de
+    # propósito. `name` é o slug técnico usado literalmente em
+    # require_module_permission("delegacao") no código das rotas;
+    # editar isso quebraria qualquer rota que já referencie a string.
+    # `label` pode ser editado livremente a qualquer momento (ex:
+    # trocar "Delegacao" por "Delegação" com acento) sem esse risco.
+    label: str | None = Field(default=None, max_length=255)
 
     permissions: list["RolePermission"] = Relationship(
         back_populates="module", cascade_delete=True
@@ -171,10 +178,19 @@ class ModulePublic(SQLModel):
     id: uuid.UUID
     name: str
     description: str | None = None
+    label: str | None = None
 
 
 class ModulesPublic(SQLModel):
     data: list[ModulePublic]
+
+
+class ModuleUpdate(SQLModel):
+    """Corpo de PATCH /modules/{module_id} -- edita SÓ label e/ou
+    description (campos cosméticos). `name` (o slug técnico) nunca é
+    editável por aqui de propósito -- ver comentário na classe Module."""
+    label: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=255)
 
 
 class RolePermissionEntry(SQLModel):
@@ -381,6 +397,49 @@ class Endereco(SQLModel, table=True):
     )
 
 
+# ---- Response/Create models de geografia (endpoints em geografia.py) ----
+
+class BairroPublic(SQLModel):
+    id: uuid.UUID
+    nome: str
+
+
+class BairrosPublic(SQLModel):
+    data: list[BairroPublic]
+
+
+class RuaPublic(SQLModel):
+    id: uuid.UUID
+    nome: str
+
+
+class RuasPublic(SQLModel):
+    data: list[RuaPublic]
+
+
+class EnderecoCreate(SQLModel):
+    """Corpo usado para criar (ou trocar) o endereço de um cliente.
+
+    rua_nome é sempre texto livre, nunca um rua_id -- o endpoint
+    resolve pra uma Rua existente (case-insensitive, mesmo bairro) ou
+    cria uma nova na hora ("cresce por uso"). Isso evita o frontend
+    precisar gerenciar o caso "rua não existe ainda no catálogo".
+    """
+    bairro_id: uuid.UUID
+    rua_nome: str = Field(min_length=1, max_length=255)
+    numero: str = Field(min_length=1, max_length=20)
+    complemento: str | None = Field(default=None, max_length=255)
+
+
+class EnderecoPublic(SQLModel):
+    id: uuid.UUID
+    numero: str
+    complemento: str | None = None
+    rua_nome: str
+    bairro_nome: str
+    cidade_nome: str
+
+
 # ---------------------------------------------------------------------------
 # gasfavero — Cliente + histórico de endereço
 #
@@ -416,6 +475,38 @@ class ClienteEndereco(SQLModel, table=True):
     valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
+# ---- Response/Create models de Cliente (endpoints em clientes.py) ----
+
+class ClienteCreate(SQLModel):
+    """Corpo de POST /clientes/ -- cria cliente + endereço + o vínculo
+    cliente_endereco (valid_to NULL) numa única chamada, espelhando o
+    fluxo real: motorista cadastra cliente já com o endereço."""
+    nome: str = Field(min_length=1, max_length=255)
+    cpf: str = Field(min_length=11, max_length=14)
+    endereco: EnderecoCreate
+
+
+class ClienteUpdate(SQLModel):
+    """Edição só dos dados do próprio cliente (nome/cpf). Trocar de
+    endereço é um endpoint separado (POST /clientes/{id}/endereco),
+    porque isso precisa fechar o histórico, não é um UPDATE simples."""
+    nome: str | None = Field(default=None, min_length=1, max_length=255)
+    cpf: str | None = Field(default=None, min_length=11, max_length=14)
+
+
+class ClientePublic(SQLModel):
+    id: uuid.UUID
+    nome: str
+    cpf: str
+    created_at: datetime
+    endereco: EnderecoPublic | None = None
+
+
+class ClientesPublic(SQLModel):
+    data: list[ClientePublic]
+    count: int
+
+
 # ---------------------------------------------------------------------------
 # gasfavero — Preço (histórico de vigência)
 #
@@ -435,6 +526,34 @@ class Preco(SQLModel, table=True):
         default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
     )
     valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
+# ---- Response/Create models de Preço (endpoints em precos.py) ----
+
+class PrecoCreate(SQLModel):
+    """Corpo de POST /produtos/{produto_id}/preco -- cadastra um novo
+    preço vigente pro produto (fecha o anterior automaticamente)."""
+    valor: Decimal = Field(gt=0, decimal_places=2)
+
+
+class PrecoPublic(SQLModel):
+    id: uuid.UUID
+    valor: Decimal
+    valid_from: datetime
+
+
+class ProdutoComPrecoPublic(SQLModel):
+    """Produto + preço vigente -- usado pela tela 'Cadastro de
+    Preços', que é 'parecida com Produto' só que atribuindo preço."""
+    id: uuid.UUID
+    title: str
+    description: str | None = None
+    preco_atual: Decimal | None = None
+    preco_valid_from: datetime | None = None
+
+
+class ProdutosComPrecoPublic(SQLModel):
+    data: list[ProdutoComPrecoPublic]
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +586,33 @@ class Vale(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     numero: int = Field(unique=True, index=True)
     bloco_id: uuid.UUID = Field(foreign_key="bloco_vale.id", ondelete="CASCADE")
+
+
+# ---- Response/Create models de Bloco de Vale (endpoints em vales.py) ----
+
+class BlocoValeCreate(SQLModel):
+    """Corpo de POST /blocos-vale/ -- cria o bloco E já atribui o
+    motorista na mesma chamada (motorista é fixo desde a criação,
+    decisão confirmada -- não existe endpoint pra reatribuir depois).
+    Gera automaticamente uma linha Vale pra cada número entre
+    primeira_folha e ultima_folha (inclusive)."""
+    motorista_id: uuid.UUID
+    primeira_folha: int = Field(gt=0)
+    ultima_folha: int = Field(gt=0)
+
+
+class BlocoValePublic(SQLModel):
+    id: uuid.UUID
+    motorista_id: uuid.UUID
+    motorista_nome: str
+    primeira_folha: int
+    ultima_folha: int
+    total_vales: int
+    created_at: datetime
+
+
+class BlocosValePublic(SQLModel):
+    data: list[BlocoValePublic]
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,22 @@
-# [mcp-local harness] feature: rbac-permission-matrix-and-produtos | plano: 5220fc65 | 2026-08-04 14:13:20
-# Registra o router de modules
+# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:26:54
+# Registra geografia, clientes, precos e vales no api_router
+# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed
+# Registra os routers de geografia, clientes, precos e vales
 from fastapi import APIRouter
 
-from app.api.routes import items, login, modules, private, roles, users, utils
+from app.api.routes import (
+    clientes,
+    geografia,
+    items,
+    login,
+    modules,
+    precos,
+    private,
+    roles,
+    users,
+    utils,
+    vales,
+)
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -12,6 +26,10 @@ api_router.include_router(roles.router)
 api_router.include_router(modules.router)
 api_router.include_router(utils.router)
 api_router.include_router(items.router)
+api_router.include_router(geografia.router)
+api_router.include_router(clientes.router)
+api_router.include_router(precos.router)
+api_router.include_router(vales.router)
 
 
 if settings.ENVIRONMENT == "local":

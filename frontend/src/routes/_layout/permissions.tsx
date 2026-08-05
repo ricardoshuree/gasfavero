@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: gestao-roles-crud | plano: 9728719f | 2026-08-04 18:34:23
-// Adiciona a seção RolesSection (gestão de Roles) acima da lista de módulos/matriz de permissões já existente, com um separador visual
+// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:35:57
+// Titulo do modulo usa label (fallback name) + botao EditModule
 // [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:14:32
 // Nova pagina /permissions -- lista modulos, cada um abre a matriz de permissoes
 //
@@ -8,13 +8,19 @@
 // da matriz de modulos ja existente. E o mesmo lugar por ser tudo
 // RBAC na mesma tela: primeiro decide quais roles existem, depois o
 // que cada uma pode fazer em cada modulo.
+//
+// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b
+// Titulo do modulo passa a usar `label` (com fallback pro name
+// capitalizado) e ganha um botao de editar (EditModule) -- resolve o
+// caso "Delegacao" sem acento sem arriscar mexer no slug tecnico.
 import { useSuspenseQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { Suspense } from "react"
 
 import { ModulesService, UsersService } from "@/client"
-import RolesSection from "@/components/Permissions/RolesSection"
+import EditModule from "@/components/Permissions/EditModule"
 import PermissionMatrixDialog from "@/components/Permissions/PermissionMatrixDialog"
+import RolesSection from "@/components/Permissions/RolesSection"
 
 function getModulesQueryOptions() {
   return {
@@ -60,13 +66,16 @@ function ModulesListContent() {
           key={module.id}
           className="flex items-center justify-between rounded-lg border px-4 py-3"
         >
-          <div>
-            <p className="font-medium capitalize">{module.name}</p>
-            {module.description && (
-              <p className="text-sm text-muted-foreground">
-                {module.description}
-              </p>
-            )}
+          <div className="flex items-center gap-1">
+            <div>
+              <p className="font-medium">{module.label || module.name}</p>
+              {module.description && (
+                <p className="text-sm text-muted-foreground">
+                  {module.description}
+                </p>
+              )}
+            </div>
+            <EditModule module={module} />
           </div>
           <PermissionMatrixDialog module={module} />
         </div>

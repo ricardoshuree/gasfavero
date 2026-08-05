@@ -16,9 +16,12 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupB2cDisabledRouteImport } from './routes/signup-b2c-disabled'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
 import { Route as LayoutPermissionsRouteImport } from './routes/_layout/permissions'
+import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
+import { Route as LayoutValesRouteImport } from './routes/_layout/vales'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -54,9 +57,19 @@ const LayoutAdminRoute = LayoutAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutClientesRoute = LayoutClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutPermissionsRoute = LayoutPermissionsRouteImport.update({
   id: '/permissions',
   path: '/permissions',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutPrecosRoute = LayoutPrecosRouteImport.update({
+  id: '/precos',
+  path: '/precos',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutProdutosRoute = LayoutProdutosRouteImport.update({
@@ -69,6 +82,11 @@ const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutValesRoute = LayoutValesRouteImport.update({
+  id: '/vales',
+  path: '/vales',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -77,9 +95,12 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
+  '/clientes': typeof LayoutClientesRoute
   '/permissions': typeof LayoutPermissionsRoute
+  '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
   '/settings': typeof LayoutSettingsRoute
+  '/vales': typeof LayoutValesRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -87,9 +108,12 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
+  '/clientes': typeof LayoutClientesRoute
   '/permissions': typeof LayoutPermissionsRoute
+  '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
   '/settings': typeof LayoutSettingsRoute
+  '/vales': typeof LayoutValesRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
@@ -100,9 +124,12 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/_layout/admin': typeof LayoutAdminRoute
+  '/_layout/clientes': typeof LayoutClientesRoute
   '/_layout/permissions': typeof LayoutPermissionsRoute
+  '/_layout/precos': typeof LayoutPrecosRoute
   '/_layout/produtos': typeof LayoutProdutosRoute
   '/_layout/settings': typeof LayoutSettingsRoute
+  '/_layout/vales': typeof LayoutValesRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
@@ -114,9 +141,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup-b2c-disabled'
     | '/admin'
+    | '/clientes'
     | '/permissions'
+    | '/precos'
     | '/produtos'
     | '/settings'
+    | '/vales'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -124,9 +154,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup-b2c-disabled'
     | '/admin'
+    | '/clientes'
     | '/permissions'
+    | '/precos'
     | '/produtos'
     | '/settings'
+    | '/vales'
     | '/'
   id:
     | '__root__'
@@ -136,9 +169,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup-b2c-disabled'
     | '/_layout/admin'
+    | '/_layout/clientes'
     | '/_layout/permissions'
+    | '/_layout/precos'
     | '/_layout/produtos'
     | '/_layout/settings'
+    | '/_layout/vales'
     | '/_layout/'
   fileRoutesById: FileRoutesById
 }
@@ -201,11 +237,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/clientes': {
+      id: '/_layout/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof LayoutClientesRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/permissions': {
       id: '/_layout/permissions'
       path: '/permissions'
       fullPath: '/permissions'
       preLoaderRoute: typeof LayoutPermissionsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/precos': {
+      id: '/_layout/precos'
+      path: '/precos'
+      fullPath: '/precos'
+      preLoaderRoute: typeof LayoutPrecosRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/produtos': {
@@ -222,22 +272,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutSettingsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/vales': {
+      id: '/_layout/vales'
+      path: '/vales'
+      fullPath: '/vales'
+      preLoaderRoute: typeof LayoutValesRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
+  LayoutClientesRoute: typeof LayoutClientesRoute
   LayoutPermissionsRoute: typeof LayoutPermissionsRoute
+  LayoutPrecosRoute: typeof LayoutPrecosRoute
   LayoutProdutosRoute: typeof LayoutProdutosRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
+  LayoutValesRoute: typeof LayoutValesRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
+  LayoutClientesRoute: LayoutClientesRoute,
   LayoutPermissionsRoute: LayoutPermissionsRoute,
+  LayoutPrecosRoute: LayoutPrecosRoute,
   LayoutProdutosRoute: LayoutProdutosRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
+  LayoutValesRoute: LayoutValesRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
 

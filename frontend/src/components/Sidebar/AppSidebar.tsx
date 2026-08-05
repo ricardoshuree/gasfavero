@@ -1,5 +1,11 @@
+// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:31:57
+// Adiciona Precos, Clientes e Bloco de Vale ao menu lateral
 // [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:15:56
 // Sidebar: Items vira Cadastro do Produto (modulo produtos), adiciona item Permissoes pra superuser
+//
+// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b
+// Adiciona Clientes (modulo clientes), Precos (modulo produtos -- mesma
+// permissao de Cadastro do Produto) e Bloco de Vale (modulo vales)
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -8,6 +14,9 @@
  *
  * Itens controlados por módulo (visíveis se can_read):
  *   - Cadastro do Produto → módulo "produtos" (gasfavero-específico)
+ *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
+ *   - Clientes           → módulo "clientes"
+ *   - Bloco de Vale      → módulo "vales"
  *   - Usuários            → módulo "usuarios"
  *   - Configurações       → módulo "configuracoes"
  *
@@ -22,12 +31,15 @@
  */
 
 import {
+  Banknote,
   Box,
   Home,
   Package,
   Settings,
   ShieldCheck,
+  Ticket,
   Users,
+  UsersRound,
 } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
@@ -51,9 +63,12 @@ const FIXED_ITEMS: Item[] = [
 // Mapeamento de módulo → item de menu
 // O campo "module" deve coincidir exatamente com o nome do módulo no banco
 const MODULE_ITEMS: Array<Item & { module: string }> = [
-  { module: "produtos",      icon: Box,       title: "Cadastro do Produto", path: "/produtos" },
-  { module: "usuarios",      icon: Users,     title: "Usuários",      path: "/admin" },
-  { module: "configuracoes", icon: Settings,  title: "Configurações", path: "/settings" },
+  { module: "produtos",      icon: Box,         title: "Cadastro do Produto", path: "/produtos" },
+  { module: "produtos",      icon: Banknote,    title: "Preços",              path: "/precos" },
+  { module: "clientes",      icon: UsersRound,  title: "Clientes",            path: "/clientes" },
+  { module: "vales",         icon: Ticket,      title: "Bloco de Vale",       path: "/vales" },
+  { module: "usuarios",      icon: Users,       title: "Usuários",            path: "/admin" },
+  { module: "configuracoes", icon: Settings,    title: "Configurações",       path: "/settings" },
 ]
 
 // Itens exclusivos de superuser (acesso administrativo completo)

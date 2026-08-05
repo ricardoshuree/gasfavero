@@ -1,5 +1,7 @@
-# [mcp-local harness] feature: rbac-permission-matrix-and-produtos | plano: 5220fc65 | 2026-08-04 14:13:08
-# Novo router: GET /modules, GET/PUT /modules/{id}/permissions -- a matriz de permissoes por modulo
+# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:24:52
+# Adiciona PATCH /modules/{id} pra editar label/description (nao o slug name)
+# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed
+# Adiciona PATCH /modules/{id} -- edita so label/description (nunca o name/slug tecnico)
 """
 Rotas de administração dos módulos RBAC e da matriz de permissões
 (Role x Módulo x Ação). Protegido por superuser -- é aqui que se
@@ -18,6 +20,7 @@ from app.models import (
     ModulePermissionMatrixUpdate,
     ModulePublic,
     ModulesPublic,
+    ModuleUpdate,
     Role,
     RolePermission,
     RolePermissionEntry,
@@ -35,6 +38,31 @@ def read_modules(session: SessionDep) -> Any:
     """Lista todos os módulos RBAC cadastrados."""
     modules = session.exec(select(Module).order_by(Module.name)).all()
     return ModulesPublic(data=[ModulePublic.model_validate(m) for m in modules])
+
+
+@router.patch("/{module_id}", response_model=ModulePublic)
+def update_module(
+    *, session: SessionDep, module_id: uuid.UUID, module_in: ModuleUpdate
+) -> Any:
+    """
+    Edita o label e/ou a description de exibição de um módulo (ex:
+    trocar "Delegacao" por "Delegação" com acento).
+
+    NUNCA edita `name` (o slug técnico) -- essa string é referenciada
+    literalmente em require_module_permission("delegacao") no código
+    das rotas, então mudá-la quebraria qualquer rota que já dependa
+    dela. Por isso ModuleUpdate nem expõe esse campo.
+    """
+    module = session.get(Module, module_id)
+    if not module:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    update_data = module_in.model_dump(exclude_unset=True)
+    module.sqlmodel_update(update_data)
+    session.add(module)
+    session.commit()
+    session.refresh(module)
+    return module
 
 
 @router.get("/{module_id}/permissions", response_model=ModulePermissionMatrix)
