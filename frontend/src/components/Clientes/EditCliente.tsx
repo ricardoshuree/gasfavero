@@ -1,7 +1,12 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:43:26
-// Adiciona campo telefone na edicao
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:34:56
+// Label CPF/CNPJ
 // [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
 // Adiciona campo telefone
+//
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
+// Label "CPF" -> "CPF/CNPJ" (so cosmetico, sem tocar em telefone aqui
+// -- e edicao, nao faz sentido forcar prefixo (54) sobre valor ja
+// existente)
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
@@ -35,7 +40,7 @@ import { handleError } from "@/utils"
 
 const formSchema = z.object({
   nome: z.string().min(1, { message: "Nome é obrigatório" }),
-  cpf: z.string().min(11, { message: "CPF inválido" }),
+  cpf: z.string().min(11, { message: "CPF/CNPJ inválido" }),
   telefone: z.string().optional(),
 })
 
@@ -120,7 +125,7 @@ const EditCliente = ({ cliente, onSuccess }: EditClienteProps) => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        CPF <span className="text-destructive">*</span>
+                        CPF/CNPJ <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="text" {...field} required />

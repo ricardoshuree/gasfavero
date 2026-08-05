@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:43:09
-// Adiciona campo telefone opcional
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:34:37
+// CPF/CNPJ label, mascara telefone, RuaAutocomplete
 // [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:32:36
 // Dialog de criacao de Cliente + Endereco, com select de bairro e input de rua com sugestoes (datalist)
 //
@@ -11,6 +11,10 @@
 // Adiciona campo telefone (opcional). Endereco continua obrigatorio
 // nesta tela (decisao do Ricardo -- so a tela de Venda tem endereco
 // opcional).
+//
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
+// Label "CPF" -> "CPF/CNPJ", mascara de telefone com (54) padrao,
+// RuaAutocomplete no lugar do datalist nativo
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
@@ -19,6 +23,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { type ClienteCreate, ClientesService, GeografiaService } from "@/client"
+import RuaAutocomplete from "@/components/Common/RuaAutocomplete"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -50,9 +55,18 @@ import {
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
+/** Formata dígitos como "(54) 99999-9999" progressivamente. */
+function formatTelefone(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 11)
+  if (d.length === 0) return ""
+  if (d.length <= 2) return `(${d}${d.length === 2 ? ") " : ""}`
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
 const formSchema = z.object({
   nome: z.string().min(1, { message: "Nome é obrigatório" }),
-  cpf: z.string().min(11, { message: "CPF inválido" }),
+  cpf: z.string().min(11, { message: "CPF/CNPJ inválido" }),
   telefone: z.string().optional(),
   bairro_id: z.string().min(1, { message: "Selecione um bairro" }),
   rua_nome: z.string().min(1, { message: "Rua é obrigatória" }),
@@ -74,7 +88,7 @@ const AddCliente = () => {
     defaultValues: {
       nome: "",
       cpf: "",
-      telefone: "",
+      telefone: formatTelefone("54"),
       bairro_id: "",
       rua_nome: "",
       numero: "",
@@ -112,10 +126,11 @@ const AddCliente = () => {
   })
 
   const onSubmit = (data: FormData) => {
+    const telefoneDigits = (data.telefone || "").replace(/\D/g, "")
     mutation.mutate({
       nome: data.nome,
       cpf: data.cpf,
-      telefone: data.telefone || undefined,
+      telefone: telefoneDigits.length > 2 ? data.telefone : undefined,
       endereco: {
         bairro_id: data.bairro_id,
         rua_nome: data.rua_nome,
@@ -168,7 +183,7 @@ const AddCliente = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        CPF <span className="text-destructive">*</span>
+                        CPF/CNPJ <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -190,7 +205,12 @@ const AddCliente = () => {
                     <FormItem>
                       <FormLabel>Telefone</FormLabel>
                       <FormControl>
-                        <Input placeholder="(00) 00000-0000" type="text" {...field} />
+                        <Input
+                          placeholder="(54) 99999-9999"
+                          type="text"
+                          {...field}
+                          onChange={(e) => field.onChange(formatTelefone(e.target.value))}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -240,19 +260,13 @@ const AddCliente = () => {
                       Rua <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        type="text"
-                        list="ruas-sugeridas"
-                        placeholder="Nome da rua"
+                      <RuaAutocomplete
+                        value={field.value}
+                        onChange={field.onChange}
+                        opcoes={ruas?.data}
                         disabled={!bairroId}
-                        {...field}
                       />
                     </FormControl>
-                    <datalist id="ruas-sugeridas">
-                      {ruas?.data.map((rua) => (
-                        <option key={rua.id} value={rua.nome} />
-                      ))}
-                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )}

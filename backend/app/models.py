@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:30:39
-# Adiciona telefone+endereco opcional em Cliente, e as tabelas Venda/VendaItem com todos os Pydantic models
+# [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:26:26
+# Adiciona ProximoValeNumeroPublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -739,6 +739,16 @@ class VendaPublic(SQLModel):
 class VendasPublic(SQLModel):
     data: list[VendaPublic]
     count: int
+
+
+class ProximoValeNumeroPublic(SQLModel):
+    """Resposta de GET /vendas/proximo-numero-vale/{motorista_id} --
+    sugestão do próximo número de vale livre dentro do(s) bloco(s)
+    atribuído(s) a esse motorista (null se não houver nenhum livre ou
+    nenhum bloco atribuído). É só uma sugestão pro campo "número do
+    vale" na tela de venda -- continua editável, não é obrigatório
+    usar exatamente esse número."""
+    numero: int | None = None
 
 
 # ---------------------------------------------------------------------------

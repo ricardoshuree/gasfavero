@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:43:34
-// Adiciona coluna de telefone
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:35:34
+// Header CPF/CNPJ
 import type { ColumnDef } from "@tanstack/react-table"
 
 import type { ClientePublic } from "@/client"
@@ -15,7 +15,7 @@ export const clienteColumns: ColumnDef<ClientePublic>[] = [
   },
   {
     accessorKey: "cpf",
-    header: "CPF",
+    header: "CPF/CNPJ",
   },
   {
     accessorKey: "telefone",

@@ -231,6 +231,18 @@ export type ProdutosComPrecoPublic = {
 };
 
 /**
+ * Resposta de GET /vendas/proximo-numero-vale/{motorista_id} --
+ * sugestão do próximo número de vale livre dentro do(s) bloco(s)
+ * atribuído(s) a esse motorista (null se não houver nenhum livre ou
+ * nenhum bloco atribuído). É só uma sugestão pro campo "número do
+ * vale" na tela de venda -- continua editável, não é obrigatório
+ * usar exatamente esse número.
+ */
+export type ProximoValeNumeroPublic = {
+    numero?: (number | null);
+};
+
+/**
  * Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
  * 'motorista'). Nome deve ser único (validado no endpoint).
  */
@@ -718,6 +730,12 @@ export type VendasReadUltimoEnderecoClienteData = {
 };
 
 export type VendasReadUltimoEnderecoClienteResponse = ((EnderecoPublic | null));
+
+export type VendasReadProximoNumeroValeData = {
+    motoristaId: string;
+};
+
+export type VendasReadProximoNumeroValeResponse = (ProximoValeNumeroPublic);
 
 export type VendasReadVendaData = {
     id: string;

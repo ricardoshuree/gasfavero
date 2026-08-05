@@ -890,6 +890,30 @@ export const ProdutosComPrecoPublicSchema = {
     title: 'ProdutosComPrecoPublic'
 } as const;
 
+export const ProximoValeNumeroPublicSchema = {
+    properties: {
+        numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Numero'
+        }
+    },
+    type: 'object',
+    title: 'ProximoValeNumeroPublic',
+    description: `Resposta de GET /vendas/proximo-numero-vale/{motorista_id} --
+sugestão do próximo número de vale livre dentro do(s) bloco(s)
+atribuído(s) a esse motorista (null se não houver nenhum livre ou
+nenhum bloco atribuído). É só uma sugestão pro campo "número do
+vale" na tela de venda -- continua editável, não é obrigatório
+usar exatamente esse número.`
+} as const;
+
 export const RoleCreateSchema = {
     properties: {
         name: {

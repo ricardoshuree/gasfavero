@@ -1,6 +1,12 @@
+# [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:27:15
+# Adiciona GET /vendas/proximo-numero-vale/{motorista_id}
 # [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:34:31
 # Adiciona GET /vendas/cliente/{cliente_id}/ultimo-endereco (sugestao de endereco baseada no historico de vendas)
 # [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12
+#
+# [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
+# Adiciona GET /vendas/proximo-numero-vale/{motorista_id} -- sugestao do
+# proximo numero de vale livre no bloco atribuido ao motorista
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -24,12 +30,14 @@ from sqlmodel import col, func, select
 from app.api.deps import CurrentUser, SessionDep, require_module_permission
 from app.models import (
     Bairro,
+    BlocoVale,
     Cidade,
     Cliente,
     Endereco,
     EnderecoPublic,
     Item,
     Preco,
+    ProximoValeNumeroPublic,
     Rua,
     User,
     Vale,
@@ -186,6 +194,39 @@ def read_ultimo_endereco_cliente(session: SessionDep, cliente_id: uuid.UUID) -> 
     if not endereco:
         return None
     return _to_endereco_public(session, endereco)
+
+
+@router.get(
+    "/proximo-numero-vale/{motorista_id}",
+    response_model=ProximoValeNumeroPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> Any:
+    """Primeiro número de vale ainda não usado, dentro do(s) bloco(s)
+    de vale atribuído(s) a esse motorista -- sugestão pro campo
+    "número do vale" na tela de venda. Percorre os blocos do
+    motorista em ordem de criação; dentro de cada um, pega o menor
+    número que ainda não apareceu em nenhuma Venda. Continua 100%
+    editável no frontend -- isso é só um ponto de partida."""
+    blocos = session.exec(
+        select(BlocoVale)
+        .where(BlocoVale.motorista_id == motorista_id)
+        .order_by(BlocoVale.created_at)
+    ).all()
+
+    usados_subquery = select(Venda.vale_id).where(col(Venda.vale_id).is_not(None))
+
+    for bloco in blocos:
+        vale_livre = session.exec(
+            select(Vale)
+            .where(Vale.bloco_id == bloco.id)
+            .where(col(Vale.id).not_in(usados_subquery))
+            .order_by(Vale.numero)
+        ).first()
+        if vale_livre:
+            return ProximoValeNumeroPublic(numero=vale_livre.numero)
+
+    return ProximoValeNumeroPublic(numero=None)
 
 
 @router.get(

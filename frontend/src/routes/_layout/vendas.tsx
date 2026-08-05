@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:44:39
-// Corrige tipagem do onError (ApiError explicito em vez de cast as never)
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:34:03
+// Sugere automaticamente o proximo numero de vale do bloco do motorista selecionado
 // [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
 // Pagina /vendas -- dashboard de venda de balcao da distribuidora (item 7
 // da lista de requisitos). Gate via modulo 'vendas'.
@@ -7,6 +7,10 @@
 // [mcp-local harness] fix: onError tipado explicitamente como ApiError
 // (em vez de cast `as never`) -- mais limpo e consistente com o
 // restante do projeto.
+//
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
+// Ao selecionar "Vale", sugere automaticamente o proximo numero livre
+// do bloco do motorista selecionado (continua editavel)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -96,6 +100,19 @@ function Vendas() {
     const distribuidora = users.data.find((u) => u.full_name === NOME_DISTRIBUIDORA)
     if (distribuidora) setMotoristaId(distribuidora.id)
   }, [users, motoristaId])
+
+  // Ao escolher "Vale", sugere o próximo número livre do bloco do
+  // motorista selecionado -- só preenche se o campo ainda estiver
+  // vazio (não sobrescreve o que o usuário já digitou).
+  useEffect(() => {
+    if (formaPagamento !== "vale" || !motoristaId) return
+    VendasService.readProximoNumeroVale({ motoristaId })
+      .then((res) => {
+        if (res.numero == null) return
+        setValeNumero((atual) => (atual ? atual : String(res.numero)))
+      })
+      .catch(() => {})
+  }, [formaPagamento, motoristaId])
 
   const total = sacola.reduce(
     (acc, item) => acc + Number(item.precoUnitario) * item.quantidade,

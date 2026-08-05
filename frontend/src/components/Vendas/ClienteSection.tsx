@@ -1,9 +1,13 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:45:13
-// Corrige tipagem do onError (ApiError explicito)
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:33:18
+// CPF/CNPJ label, mascara de telefone (54) padrao, RuaAutocomplete
 // [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
 // Secao de cliente: busca, selecao, quick-add com endereco opcional, sugestao de ultimo endereco transacionado
 //
 // [mcp-local harness] fix: onError tipado como ApiError (nao unknown)
+//
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
+// Label "CPF" -> "CPF/CNPJ", mascara de telefone com (54) padrao,
+// RuaAutocomplete no lugar do datalist nativo
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { MapPin, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -17,6 +21,7 @@ import {
   GeografiaService,
   VendasService,
 } from "@/client"
+import RuaAutocomplete from "@/components/Common/RuaAutocomplete"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -39,6 +44,17 @@ interface ClienteSectionProps {
 
 function formatEndereco(e: EnderecoPublic): string {
   return `${e.rua_nome}, ${e.numero}${e.complemento ? ` (${e.complemento})` : ""} — ${e.bairro_nome}`
+}
+
+/** Formata dígitos como "(54) 99999-9999", progressivamente enquanto
+ * digita. DDD 54 (Veranópolis/RS) já vem preenchido por padrão --
+ * editável, o usuário pode apagar e trocar se precisar. */
+function formatTelefone(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 11)
+  if (d.length === 0) return ""
+  if (d.length <= 2) return `(${d}${d.length === 2 ? ") " : ""}`
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
 }
 
 export function ClienteSection({
@@ -137,7 +153,7 @@ export function ClienteSection({
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
-              placeholder="Buscar cliente por nome ou CPF..."
+              placeholder="Buscar cliente por nome ou CPF/CNPJ..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -201,7 +217,7 @@ interface QuickAddClienteProps {
 function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps) {
   const [nome, setNome] = useState("")
   const [cpf, setCpf] = useState("")
-  const [telefone, setTelefone] = useState("")
+  const [telefone, setTelefone] = useState(() => formatTelefone("54"))
   const [incluirEndereco, setIncluirEndereco] = useState(false)
   const [bairroId, setBairroId] = useState("")
   const [ruaNome, setRuaNome] = useState("")
@@ -228,10 +244,12 @@ function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps)
   const podeSalvar = nome.trim().length > 0 && cpf.trim().length >= 11
 
   const onSubmit = () => {
+    // Só manda telefone se tiver algo além do DDD padrão (54)
+    const telefoneDigits = telefone.replace(/\D/g, "")
     mutation.mutate({
       nome,
       cpf,
-      telefone: telefone || undefined,
+      telefone: telefoneDigits.length > 2 ? telefone : undefined,
       endereco:
         incluirEndereco && bairroId && ruaNome && numero
           ? { bairro_id: bairroId, rua_nome: ruaNome, numero }
@@ -250,7 +268,7 @@ function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps)
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
           <Label htmlFor="qc-cpf">
-            CPF <span className="text-destructive">*</span>
+            CPF/CNPJ <span className="text-destructive">*</span>
           </Label>
           <Input
             id="qc-cpf"
@@ -263,9 +281,9 @@ function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps)
           <Label htmlFor="qc-telefone">Telefone</Label>
           <Input
             id="qc-telefone"
-            placeholder="(00) 00000-0000"
+            placeholder="(54) 99999-9999"
             value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
+            onChange={(e) => setTelefone(formatTelefone(e.target.value))}
           />
         </div>
       </div>
@@ -306,18 +324,13 @@ function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps)
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="qc-rua">Rua</Label>
-            <Input
+            <RuaAutocomplete
               id="qc-rua"
-              list="qc-ruas-sugeridas"
-              disabled={!bairroId}
               value={ruaNome}
-              onChange={(e) => setRuaNome(e.target.value)}
+              onChange={setRuaNome}
+              opcoes={ruas?.data}
+              disabled={!bairroId}
             />
-            <datalist id="qc-ruas-sugeridas">
-              {ruas?.data.map((r) => (
-                <option key={r.id} value={r.nome} />
-              ))}
-            </datalist>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="qc-numero">Número</Label>

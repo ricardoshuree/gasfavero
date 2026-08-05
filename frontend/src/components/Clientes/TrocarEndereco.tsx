@@ -1,9 +1,12 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-05 07:48:13
-// Corrige BairrosService para GeografiaService
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:35:23
+// RuaAutocomplete no lugar do datalist
 // [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:33:52
 // Dialog de troca de endereco do cliente, fechando o vigente no backend
 //
 // [mcp-local harness] fix: BairrosService -> GeografiaService
+//
+// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
+// RuaAutocomplete no lugar do datalist nativo
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { MapPin } from "lucide-react"
@@ -12,6 +15,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { type ClientePublic, ClientesService, GeografiaService } from "@/client"
+import RuaAutocomplete from "@/components/Common/RuaAutocomplete"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -180,19 +184,13 @@ const TrocarEndereco = ({ cliente, onSuccess }: TrocarEnderecoProps) => {
                       Rua <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        type="text"
-                        list="ruas-sugeridas-troca"
-                        placeholder="Nome da rua"
+                      <RuaAutocomplete
+                        value={field.value}
+                        onChange={field.onChange}
+                        opcoes={ruas?.data}
                         disabled={!bairroId}
-                        {...field}
                       />
                     </FormControl>
-                    <datalist id="ruas-sugeridas-troca">
-                      {ruas?.data.map((rua) => (
-                        <option key={rua.id} value={rua.nome} />
-                      ))}
-                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )}
