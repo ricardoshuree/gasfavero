@@ -1,3 +1,9 @@
+// [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977 | 2026-08-06 06:05:38
+// Adiciona bloco Historico de vendas (ultimas 3) no painel de cliente, pedido do Giovani
+// [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977
+// Bloco "Histórico de vendas (últimas 3)" no painel de cliente -- pedido do
+// Giovani: data, valor pago, endereço (rua+numero), status, assim que o
+// cliente é identificado na tela de Vendas.
 // [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba | 2026-08-05 22:18:01
 // Adiciona campo Complemento faltante no cadastro rapido de cliente
 // [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba
@@ -26,6 +32,7 @@ import {
   ClientesService,
   type EnderecoPublic,
   GeografiaService,
+  type VendaPublic,
   VendasService,
 } from "@/client"
 import RuaAutocomplete from "@/components/Common/RuaAutocomplete"
@@ -54,6 +61,52 @@ function formatEndereco(e: EnderecoPublic): string {
   return `${e.rua_nome}, ${e.numero}${e.complemento ? ` (${e.complemento})` : ""} — ${e.bairro_nome}`
 }
 
+function formatDate(iso: string): string {
+  const [ano, mes, dia] = iso.split("-")
+  return `${dia}/${mes}/${ano}`
+}
+
+function formatMoney(valor: string | number): string {
+  return Number(valor).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  })
+}
+
+// Mesmo limite usado no backend (DIAS_ATRASO_VALE em vendas.py) --
+// contado a partir de data_venda, só pra decidir o badge de status.
+const DIAS_ATRASO_VALE = 30
+
+function isAtrasado(dataVendaISO: string): boolean {
+  const dataVenda = new Date(`${dataVendaISO}T00:00:00`)
+  const limite = new Date()
+  limite.setHours(0, 0, 0, 0)
+  limite.setDate(limite.getDate() - DIAS_ATRASO_VALE)
+  return dataVenda <= limite
+}
+
+/** Vendas fora de "vale" são pagas na hora (pago_em já vem
+ * preenchido na criação) -- só o vale passa pelos estados
+ * aberto/atraso/aguardando baixa/baixado (ver Recebimento de Vale). */
+function statusVenda(v: VendaPublic): { label: string; className: string } {
+  if (v.forma_pagamento !== "vale") {
+    return { label: "Pago", className: "bg-muted text-muted-foreground" }
+  }
+  if (v.pago_em) {
+    return { label: "Baixado", className: "bg-muted text-muted-foreground" }
+  }
+  if (v.recebido_em) {
+    return { label: "Aguardando baixa", className: "bg-sky-100 text-sky-800" }
+  }
+  if (isAtrasado(v.data_venda)) {
+    return {
+      label: "Em atraso",
+      className: "bg-destructive/15 text-destructive",
+    }
+  }
+  return { label: "Em aberto", className: "bg-muted text-muted-foreground" }
+}
+
 /** Formata dígitos como "(54) 99999-9999", progressivamente enquanto
  * digita. DDD 54 (Veranópolis/RS) já vem preenchido por padrão --
  * editável, o usuário pode apagar e trocar se precisar. */
@@ -63,6 +116,52 @@ function formatTelefone(raw: string): string {
   if (d.length <= 2) return `(${d}${d.length === 2 ? ") " : ""}`
   if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
+function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
+  const { data } = useQuery({
+    queryKey: ["historicoVendasCliente", clienteId],
+    queryFn: () =>
+      VendasService.readHistoricoVendasCliente({ clienteId, limit: 3 }),
+  })
+
+  if (!data || data.data.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        Histórico de vendas (últimas {data.data.length})
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {data.data.map((v) => {
+          const status = statusVenda(v)
+          return (
+            <div
+              key={v.id}
+              className="flex items-center gap-3 border-t pt-1.5 text-sm first:border-t-0 first:pt-0"
+            >
+              <span className="w-20 shrink-0 text-muted-foreground">
+                {formatDate(v.data_venda)}
+              </span>
+              <span className="w-20 shrink-0 font-medium">
+                {formatMoney(v.valor_pago)}
+              </span>
+              <span className="flex-1 truncate text-muted-foreground">
+                {v.endereco
+                  ? `${v.endereco.rua_nome}, ${v.endereco.numero}`
+                  : "—"}
+              </span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${status.className}`}
+              >
+                {status.label}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function ClienteSection({
@@ -167,6 +266,8 @@ export function ClienteSection({
             </>
           )}
         </div>
+
+        <HistoricoVendasCliente clienteId={cliente.id} />
       </div>
     )
   }

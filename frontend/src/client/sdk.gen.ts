@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -1024,6 +1024,36 @@ export class VendasService {
             url: '/api/v1/vendas/cliente/{cliente_id}/ultimo-endereco',
             path: {
                 cliente_id: data.clienteId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Historico Vendas Cliente
+     * Últimas vendas desse cliente (mais recente primeiro) -- pedido
+     * do Giovani: mostrar contexto rápido (data, valor pago, endereço,
+     * status) no painel de cliente da tela de Vendas, assim que o
+     * cliente é identificado. `count` é o total histórico do cliente
+     * (não só o que veio na página), pra a UI poder mostrar "últimas 3
+     * de N" se quiser.
+     * @param data The data for the request.
+     * @param data.clienteId
+     * @param data.limit
+     * @returns VendasPublic Successful Response
+     * @throws ApiError
+     */
+    public static readHistoricoVendasCliente(data: VendasReadHistoricoVendasClienteData): CancelablePromise<VendasReadHistoricoVendasClienteResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/cliente/{cliente_id}/historico',
+            path: {
+                cliente_id: data.clienteId
+            },
+            query: {
+                limit: data.limit
             },
             errors: {
                 422: 'Validation Error'

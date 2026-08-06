@@ -787,6 +787,13 @@ export type VendasReadUltimoEnderecoClienteData = {
 
 export type VendasReadUltimoEnderecoClienteResponse = ((EnderecoPublic | null));
 
+export type VendasReadHistoricoVendasClienteData = {
+    clienteId: string;
+    limit?: number;
+};
+
+export type VendasReadHistoricoVendasClienteResponse = (VendasPublic);
+
 export type VendasReadProximoNumeroValeData = {
     motoristaId: string;
 };

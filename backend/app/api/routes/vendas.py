@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:35:51
-# Endpoint de listagem passa a ter status=todos (default, junta aberto+atrasado+aguardando_baixa) ou aguardando_baixa (filtro)
+# [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977 | 2026-08-06 06:04:32
+# Novo endpoint GET /vendas/cliente/{id}/historico -- ultimas N vendas do cliente (pedido do Giovani)
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -215,6 +215,36 @@ def read_ultimo_endereco_cliente(session: SessionDep, cliente_id: uuid.UUID) -> 
     if not endereco:
         return None
     return _to_endereco_public(session, endereco)
+
+
+@router.get(
+    "/cliente/{cliente_id}/historico",
+    response_model=VendasPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_historico_vendas_cliente(
+    session: SessionDep, cliente_id: uuid.UUID, limit: int = 3
+) -> Any:
+    """Últimas vendas desse cliente (mais recente primeiro) -- pedido
+    do Giovani: mostrar contexto rápido (data, valor pago, endereço,
+    status) no painel de cliente da tela de Vendas, assim que o
+    cliente é identificado. `count` é o total histórico do cliente
+    (não só o que veio na página), pra a UI poder mostrar "últimas 3
+    de N" se quiser."""
+    count = session.exec(
+        select(func.count())
+        .select_from(Venda)
+        .where(Venda.cliente_id == cliente_id)
+    ).one()
+    vendas = session.exec(
+        select(Venda)
+        .where(Venda.cliente_id == cliente_id)
+        .order_by(col(Venda.created_at).desc())
+        .limit(limit)
+    ).all()
+    return VendasPublic(
+        data=[_to_venda_public(session, v) for v in vendas], count=count
+    )
 
 
 @router.get(
