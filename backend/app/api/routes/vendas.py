@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: inadimplentes-fix-tabela-so-atuais | plano: dbbcd17b | 2026-08-06 13:33:23
-# Adiciona _vendas_em_atraso_atual() e usa em read_inadimplentes (tabela) e read_inadimplentes_motoristas (dropdown) -- grafico/card continuam com _vendas_inadimplentes (historico)
+# [mcp-local harness] feature: venda-valida-vale-pertence-motorista | plano: a5c5b3f6 | 2026-08-06 13:59:40
+# Adiciona validacao: vale so pode ser usado em venda atribuida ao mesmo motorista dono do bloco de onde o vale veio
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -1159,8 +1159,11 @@ def create_venda(
             raise HTTPException(status_code=404, detail="Endereço não encontrado")
 
     # -----------------------------------------------------------
-    # Forma de pagamento = vale: resolve o número, valida reuso e
-    # bloqueia se o cliente já tiver vale em aberto
+    # Forma de pagamento = vale: resolve o número, valida reuso,
+    # valida DONO do vale (decisão confirmada com o Ricardo, achado
+    # revisando o Recebimento de Vale: sem essa trava, dava pra
+    # vender com o número de vale de OUTRO motorista) e bloqueia se
+    # o cliente já tiver vale em aberto
     # -----------------------------------------------------------
     vale = None
     data_pagamento_vale = venda_in.data_pagamento_vale
@@ -1182,6 +1185,22 @@ def create_venda(
             raise HTTPException(
                 status_code=404,
                 detail=f"Vale número {venda_in.vale_numero} não encontrado",
+            )
+
+        # O vale só pode ser usado numa venda atribuída ao MESMO
+        # motorista dono do bloco de onde ele veio -- sem isso seria
+        # possível "gastar" o talão de um motorista numa venda
+        # atribuída a outro (ou à Distribuidora).
+        bloco = session.get(BlocoVale, vale.bloco_id)
+        if not bloco or bloco.motorista_id != venda_in.motorista_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"O vale {venda_in.vale_numero} pertence ao bloco de outro "
+                    "motorista -- selecione o motorista dono desse bloco, ou "
+                    "use um número de vale do bloco atribuído ao motorista "
+                    "escolhido"
+                ),
             )
 
         ja_usado = session.exec(
