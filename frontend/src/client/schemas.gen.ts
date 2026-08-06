@@ -621,6 +621,42 @@ mesmo valor gravado em Venda.forma_pagamento); o label de exibição
 vendas JÁ PAGAS daquela forma, dentro do período ativo.`
 } as const;
 
+export const LivroVendasListPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/VendaPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        },
+        soma_preco: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Soma Preco'
+        },
+        soma_valor_pago: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Soma Valor Pago'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count', 'soma_preco', 'soma_valor_pago'],
+    title: 'LivroVendasListPublic',
+    description: `Resposta de GET /vendas/livro (a tabela) -- diferente de
+VendasPublic genérico porque inclui soma_preco/soma_valor_pago:
+o total das colunas 'Preço' (valor_total) e 'Valor pago'
+(valor_pago) de TODAS as vendas que batem com o filtro de data
+ativo (data_inicio/data_fim), não só as da página atual -- é o
+valor exibido na linha de totais no rodapé da tabela, que muda
+dinamicamente junto com o filtro 'Consulta vendas data'.`
+} as const;
+
 export const LivroVendasResumoPublicSchema = {
     properties: {
         em_caixa_qtd: {

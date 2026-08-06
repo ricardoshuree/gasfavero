@@ -174,6 +174,22 @@ export type LivroVendasFormaPagamentoValor = {
 };
 
 /**
+ * Resposta de GET /vendas/livro (a tabela) -- diferente de
+ * VendasPublic genérico porque inclui soma_preco/soma_valor_pago:
+ * o total das colunas 'Preço' (valor_total) e 'Valor pago'
+ * (valor_pago) de TODAS as vendas que batem com o filtro de data
+ * ativo (data_inicio/data_fim), não só as da página atual -- é o
+ * valor exibido na linha de totais no rodapé da tabela, que muda
+ * dinamicamente junto com o filtro 'Consulta vendas data'.
+ */
+export type LivroVendasListPublic = {
+    data: Array<VendaPublic>;
+    count: number;
+    soma_preco: string;
+    soma_valor_pago: string;
+};
+
+/**
  * Resposta de GET /vendas/livro/resumo -- os 2 cards ('Em caixa'
  * e 'Em aberto') + o período textual + os pontos do gráfico, tudo
  * já filtrado pelo escopo ativo do menu interativo (ano/mês/semana).
@@ -913,7 +929,7 @@ export type VendasReadLivroVendasData = {
     skip?: number;
 };
 
-export type VendasReadLivroVendasResponse = (VendasPublic);
+export type VendasReadLivroVendasResponse = (LivroVendasListPublic);
 
 export type VendasReadVendaData = {
     id: string;

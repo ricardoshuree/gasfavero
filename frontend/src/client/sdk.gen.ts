@@ -1236,12 +1236,21 @@ export class VendasService {
      * ordenada por data_venda mais recente primeiro -- independente do
      * menu interativo (ano/mês/semana), com seu próprio filtro opcional
      * de intervalo de datas.
+     *
+     * soma_preco/soma_valor_pago (linha de totais no rodapé da tabela,
+     * no frontend) são calculados sobre TODO o conjunto que bate com o
+     * filtro de data -- não só os `limit` registros da página atual.
+     * Os mesmos filtros (data_inicio/data_fim) são aplicados de forma
+     * independente em 3 queries (count, soma, listagem paginada) --
+     * evita reusar a subquery de uma pra fazer agregação de coluna da
+     * outra, o que gera SQL incorreto (a coluna mapeada Venda.x não
+     * corresponde à coluna da subquery).
      * @param data The data for the request.
      * @param data.dataInicio
      * @param data.dataFim
      * @param data.skip
      * @param data.limit
-     * @returns VendasPublic Successful Response
+     * @returns LivroVendasListPublic Successful Response
      * @throws ApiError
      */
     public static readLivroVendas(data: VendasReadLivroVendasData = {}): CancelablePromise<VendasReadLivroVendasResponse> {

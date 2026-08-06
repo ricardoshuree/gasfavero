@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: livro-vendas-breakdown-forma-pagamento | plano: 34083fa6 | 2026-08-06 10:00:05
-# Insere LivroVendasFormaPagamentoValor e o campo em_caixa_por_forma_pagamento em LivroVendasResumoPublic
+# [mcp-local harness] feature: livro-vendas-totais-tabela | plano: 8a3b8cf6 | 2026-08-06 10:26:59
+# Adiciona LivroVendasListPublic (data+count+soma_preco+soma_valor_pago) apos AnosDisponiveisPublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -901,6 +901,20 @@ class AnosDisponiveisPublic(SQLModel):
     não aparece aqui (mas continua acessível via escopo 'todos_anos',
     que não depende desta lista)."""
     anos: list[int]
+
+
+class LivroVendasListPublic(SQLModel):
+    """Resposta de GET /vendas/livro (a tabela) -- diferente de
+    VendasPublic genérico porque inclui soma_preco/soma_valor_pago:
+    o total das colunas 'Preço' (valor_total) e 'Valor pago'
+    (valor_pago) de TODAS as vendas que batem com o filtro de data
+    ativo (data_inicio/data_fim), não só as da página atual -- é o
+    valor exibido na linha de totais no rodapé da tabela, que muda
+    dinamicamente junto com o filtro 'Consulta vendas data'."""
+    data: list[VendaPublic]
+    count: int
+    soma_preco: Decimal
+    soma_valor_pago: Decimal
 
 
 # ---------------------------------------------------------------------------

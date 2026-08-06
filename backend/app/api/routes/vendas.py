@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: livro-vendas-breakdown-forma-pagamento | plano: 94fc3005 | 2026-08-06 10:02:03
-# Import LivroVendasFormaPagamentoValor, constante FORMAS_PAGAMENTO_ORDEM, e calculo/retorno de em_caixa_por_forma_pagamento em read_livro_resumo
+# [mcp-local harness] feature: livro-vendas-totais-tabela | plano: 0a43512a | 2026-08-06 10:31:33
+# Fix: aplica filtros de data independentemente em 3 queries (count/soma/listagem) via helper local, evitando referenciar Venda.x sobre a subquery de outra (que gerava SQL incorreto)
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -33,6 +33,7 @@ from app.models import (
     Item,
     LivroVendasBucket,
     LivroVendasFormaPagamentoValor,
+    LivroVendasListPublic,
     LivroVendasResumoPublic,
     Preco,
     ProximoValeNumeroPublic,
@@ -553,7 +554,11 @@ def baixar_vale(
 #                            "agora", ignorando ano/mês selecionados.
 #
 # A TABELA (GET /livro) é independente desse menu -- não filtra pelo
-# escopo, tem paginação e filtro próprio de intervalo de datas.
+# escopo, tem paginação e filtro próprio de intervalo de datas. Além
+# dos itens da página, retorna soma_preco/soma_valor_pago (ver
+# LivroVendasListPublic, models.py) -- o total das colunas
+# "Preço"/"Valor pago" de TODO o conjunto filtrado (não só a página
+# atual), usado na linha de totais no rodapé da tabela.
 #
 # Precisam vir ANTES de "/{id}" nesse arquivo -- mesmo motivo do bloco
 # de Recebimento de Vale acima.
@@ -749,7 +754,7 @@ def read_livro_resumo(
 
 @router.get(
     "/livro",
-    response_model=VendasPublic,
+    response_model=LivroVendasListPublic,
     dependencies=[Depends(require_module_permission(MODULE_LIVRO, action="read"))],
 )
 def read_livro_vendas(
@@ -762,23 +767,49 @@ def read_livro_vendas(
     """Tabela de TODAS as vendas (qualquer forma de pagamento),
     ordenada por data_venda mais recente primeiro -- independente do
     menu interativo (ano/mês/semana), com seu próprio filtro opcional
-    de intervalo de datas."""
-    query = select(Venda)
-    if data_inicio is not None:
-        query = query.where(Venda.data_venda >= data_inicio)
-    if data_fim is not None:
-        query = query.where(Venda.data_venda <= data_fim)
+    de intervalo de datas.
 
-    count = session.exec(select(func.count()).select_from(query.subquery())).one()
+    soma_preco/soma_valor_pago (linha de totais no rodapé da tabela,
+    no frontend) são calculados sobre TODO o conjunto que bate com o
+    filtro de data -- não só os `limit` registros da página atual.
+    Os mesmos filtros (data_inicio/data_fim) são aplicados de forma
+    independente em 3 queries (count, soma, listagem paginada) --
+    evita reusar a subquery de uma pra fazer agregação de coluna da
+    outra, o que gera SQL incorreto (a coluna mapeada Venda.x não
+    corresponde à coluna da subquery)."""
+
+    def _aplicar_filtros_data(stmt):
+        if data_inicio is not None:
+            stmt = stmt.where(Venda.data_venda >= data_inicio)
+        if data_fim is not None:
+            stmt = stmt.where(Venda.data_venda <= data_fim)
+        return stmt
+
+    count = session.exec(
+        _aplicar_filtros_data(select(func.count()).select_from(Venda))
+    ).one()
+
+    soma_preco, soma_valor_pago = session.exec(
+        _aplicar_filtros_data(
+            select(
+                func.coalesce(func.sum(Venda.valor_total), 0),
+                func.coalesce(func.sum(Venda.valor_pago), 0),
+            )
+        )
+    ).one()
 
     vendas = session.exec(
-        query.order_by(col(Venda.data_venda).desc(), col(Venda.created_at).desc())
+        _aplicar_filtros_data(select(Venda))
+        .order_by(col(Venda.data_venda).desc(), col(Venda.created_at).desc())
         .offset(skip)
         .limit(limit)
     ).all()
 
-    return VendasPublic(
-        data=[_to_venda_public(session, v) for v in vendas], count=count
+    return LivroVendasListPublic(
+        data=[_to_venda_public(session, v) for v in vendas],
+        count=count,
+        soma_preco=soma_preco,
+        soma_valor_pago=soma_valor_pago,
     )
 
 

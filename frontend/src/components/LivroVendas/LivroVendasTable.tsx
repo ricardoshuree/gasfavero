@@ -1,11 +1,17 @@
-// [mcp-local harness] feature: livro-vendas-frontend-table | plano: d20e3442 | 2026-08-06 09:37:17
-// Tabela paginada com filtro proprio Inicio/Fim/Buscar -- independente do menu interativo, ordenada por data de venda mais recente
+// [mcp-local harness] feature: livro-vendas-totais-tabela | plano: 20e0e2dd | 2026-08-06 10:32:28
+// Adiciona TableFooter com linha de totais (soma_preco/soma_valor_pago do backend), dinamica com o filtro de data
 // Tabela do Livro de Vendas -- TODAS as vendas (qualquer forma de
 // pagamento), independente do menu interativo (ano/mês/semana) do
 // topo da tela. Filtro próprio de intervalo de datas (Início/Fim +
 // botão Buscar), paginada, ordenada por data de venda mais recente
 // primeiro. Server-side (não usa o DataTable genérico, que só pagina
 // em memória) -- mesmo padrão da ValesTable de Recebimento de Vale.
+//
+// Rodapé com linha de totais (soma de "Preço" e "Valor pago") --
+// soma_preco/soma_valor_pago vêm do backend já calculados sobre TODO
+// o conjunto que bate com o filtro de data ativo (não só a página
+// atual), então a linha de totais muda dinamicamente junto com
+// "Consulta vendas data" mas não com a paginação.
 import { useQuery } from "@tanstack/react-query"
 import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { useState } from "react"
@@ -18,6 +24,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -209,6 +216,22 @@ export function LivroVendasTable() {
               ))
             )}
           </TableBody>
+          {vendas.length > 0 && (
+            <TableFooter>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="text-right font-semibold">
+                  Total
+                </TableCell>
+                <TableCell className="text-right font-semibold">
+                  {formatMoney(data?.soma_preco ?? 0)}
+                </TableCell>
+                <TableCell className="text-right font-semibold">
+                  {formatMoney(data?.soma_valor_pago ?? 0)}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </div>
 
