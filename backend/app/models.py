@@ -1,5 +1,7 @@
-# [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: c4ccd590 | 2026-08-06 15:37:45
-# Adiciona classe LogradouroReferencia (table) apos Rua, e LogradouroReferenciaPublic/LogradourosReferenciaPublic apos RuasPublic
+# [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 0144c501 | 2026-08-06 20:15:39
+# Adiciona latitude/longitude (nullable) em Endereco e EnderecoPublic -- Fase 2 da Delegacao de Venda
+# [mcp-local harness] feature: delegacao-venda-fase1 | plano: fd600824 | 2026-08-06 18:26:01
+# Adiciona DemandaVenda + MotoristaLocalizacao (tabelas) e os response/create models de Delegação, inseridos após a seção de Inadimplentes e antes de Auth/Token
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -416,6 +418,21 @@ class Endereco(SQLModel, table=True):
     # etc, não vale a pena forçar numérico puro
     numero: str = Field(max_length=20)
     complemento: str | None = Field(default=None, max_length=255)
+    # Preenchidos por geocodificação (Fase 2 da Delegação de Venda --
+    # ver app/core/geocoding.py). NULL até o Google conseguir
+    # localizar o endereço, ou se a geocodificação nunca rodou (ex:
+    # endereços cadastrados antes desta feature existir, ou a API
+    # falhou/estava sem cota no momento da criação). Uma vez
+    # preenchidos, ficam CACHEADOS pra sempre -- endereço não muda de
+    # lugar, então nunca são re-consultados automaticamente depois.
+    # Retry manual disponível via POST /enderecos/{id}/geocodificar
+    # (geografia.py), pra cobrir endereços antigos ou falhas passadas.
+    latitude: Decimal | None = Field(
+        default=None, sa_column=Column(Numeric(9, 6), nullable=True)
+    )
+    longitude: Decimal | None = Field(
+        default=None, sa_column=Column(Numeric(9, 6), nullable=True)
+    )
     created_at: datetime = Field(
         default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
     )
@@ -476,6 +493,11 @@ class EnderecoPublic(SQLModel):
     rua_nome: str
     bairro_nome: str
     cidade_nome: str
+    # NULL enquanto não geocodificado -- ver comentário na classe
+    # Endereco. Frontend deve tratar ausência (mapa da Fase 3 simplesmente
+    # não plota um marcador pra esse endereço até isso ser preenchido).
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1008,6 +1030,115 @@ class InadimplentesMotoristasPublic(SQLModel):
     Motorista" -- "Todos Motoristas" (primeira opção) é sintético,
     montado só no frontend, não vem daqui."""
     data: list[InadimplentesMotoristaPublic]
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Delegação de Venda (Fase 1: espinha dorsal, sem push/mapa/app)
+#
+# DemandaVenda representa o despacho de uma demanda de venda pro
+# motorista mais próximo -- o atendente vê o cliente + endereço no
+# mapa (Fase 3) e decide qual motorista aciona. endereco_id é sempre
+# um Endereco REAL vinculado (nunca texto livre) -- sem isso não dá
+# pra geocodificar/plotar no mapa nas fases seguintes; observações
+# soltas (ex: "2 botijões P13", "portão azul") cabem em `observacao`,
+# mas NUNCA substituem o endereço estruturado.
+#
+# status fica como string livre (Literal na camada Pydantic, igual ao
+# padrão já usado em Venda.forma_pagamento) -- pendente/aceita/recusada
+# nesta fase. "Concluída" (a demanda virar de fato uma Venda) fica pra
+# quando o app do motorista existir (Fase 4) -- não é escopo daqui.
+#
+# MotoristaLocalizacao é upsert puro: 1 LINHA POR MOTORISTA (PK =
+# motorista_id), sobrescrita a cada ping. Decisão confirmada com o
+# Ricardo: não guardamos histórico de localização -- não interessa
+# pro negócio e evita crescimento de tabela sem necessidade (custo
+# Supabase). Sem Relationship() bidirecional, mesmo motivo já
+# documentado no bloco de Geografia acima (evita o bug de FK do Role).
+# ---------------------------------------------------------------------------
+
+class DemandaVenda(SQLModel, table=True):
+    __tablename__ = "demanda_venda"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
+    endereco_id: uuid.UUID = Field(foreign_key="endereco.id", ondelete="RESTRICT")
+    motorista_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    observacao: str | None = Field(default=None, max_length=500)
+    # pendente | aceita | recusada -- ver Literal em DemandaVendaCreate.
+    # String livre no banco (mesmo padrão de Venda.forma_pagamento),
+    # validação mora no Pydantic da camada de API.
+    status: str = Field(default="pendente", max_length=20)
+    criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+    # preenchido quando o motorista aceita ou recusa (NULL = pendente)
+    respondida_em: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+
+
+class MotoristaLocalizacao(SQLModel, table=True):
+    __tablename__ = "motorista_localizacao"
+
+    motorista_id: uuid.UUID = Field(
+        foreign_key="user.id", primary_key=True, ondelete="CASCADE"
+    )
+    latitude: Decimal = Field(sa_column=Column(Numeric(9, 6), nullable=False))
+    longitude: Decimal = Field(sa_column=Column(Numeric(9, 6), nullable=False))
+    atualizado_em: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+# ---- Response/Create models de Delegação (endpoints em delegacao.py) ----
+
+class DemandaVendaCreate(SQLModel):
+    """Corpo de POST /demandas-venda/ -- despacha uma demanda de venda
+    pro motorista escolhido. endereco_id é obrigatório e precisa
+    apontar pra um Endereco já cadastrado (do cliente ou outro) --
+    nunca texto livre."""
+    cliente_id: uuid.UUID
+    endereco_id: uuid.UUID
+    motorista_id: uuid.UUID
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class DemandaVendaPublic(SQLModel):
+    id: uuid.UUID
+    cliente_id: uuid.UUID
+    cliente_nome: str
+    endereco: EnderecoPublic
+    motorista_id: uuid.UUID
+    motorista_nome: str
+    observacao: str | None = None
+    status: str
+    criado_por_id: uuid.UUID
+    created_at: datetime
+    respondida_em: datetime | None = None
+
+
+class DemandasVendaPublic(SQLModel):
+    data: list[DemandaVendaPublic]
+
+
+class MotoristaLocalizacaoUpdate(SQLModel):
+    """Corpo de PUT /motoristas/{motorista_id}/localizacao -- upsert
+    de ping de localização (sobrescreve sempre, sem histórico)."""
+    latitude: Decimal = Field(ge=-90, le=90, decimal_places=6)
+    longitude: Decimal = Field(ge=-180, le=180, decimal_places=6)
+
+
+class MotoristaLocalizacaoPublic(SQLModel):
+    motorista_id: uuid.UUID
+    motorista_nome: str
+    latitude: Decimal
+    longitude: Decimal
+    atualizado_em: datetime
+
+
+class MotoristasLocalizacaoPublic(SQLModel):
+    data: list[MotoristaLocalizacaoPublic]
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: 086978c1 | 2026-08-06 15:45:01
-# Adiciona GET /bairros/logradouros-referencia, posicionado ANTES de /{bairro_id}/ruas por clareza (nao ha colisao de rota real, mas evita confusao)
+# [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 0144c501 | 2026-08-06 20:16:41
+# Adiciona endpoint POST /enderecos/{id}/geocodificar para retry manual de geocodificacao
 """
 Rotas de leitura da geografia (Cidade > Bairro > Rua) -- dado de
 referência puro, sem informação sensível, então só exige usuário
@@ -12,6 +12,13 @@ cadastro fixo (seed via migration); Rua "cresce por uso" -- é criada
 automaticamente pelo endpoint de Cliente (ver clientes.py) na hora
 que alguém cadastra o primeiro endereço numa rua nova, não por um
 CRUD dedicado.
+
+Exceção: POST /enderecos/{id}/geocodificar -- não é leitura pura, é
+um endpoint de RETRY manual de geocodificação (Fase 2 da Delegação de
+Venda) pra endereços que ficaram sem latitude/longitude (cadastrados
+antes desta feature existir, ou que falharam na tentativa automática
+em clientes.py). Fica aqui e não em clientes.py porque opera sobre
+Endereco diretamente, não sobre Cliente.
 """
 import uuid
 from typing import Any
@@ -20,10 +27,14 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.geocoding import geocode
 from app.models import (
     Bairro,
     BairroPublic,
     BairrosPublic,
+    Cidade,
+    Endereco,
+    EnderecoPublic,
     LogradouroReferencia,
     LogradouroReferenciaPublic,
     LogradourosReferenciaPublic,
@@ -33,6 +44,8 @@ from app.models import (
 )
 
 router = APIRouter(prefix="/bairros", tags=["geografia"])
+
+enderecos_router = APIRouter(prefix="/enderecos", tags=["geografia"])
 
 
 @router.get("/", response_model=BairrosPublic)
@@ -72,3 +85,57 @@ def read_ruas(session: SessionDep, current_user: CurrentUser, bairro_id: uuid.UU
         select(Rua).where(Rua.bairro_id == bairro_id).order_by(Rua.nome)
     ).all()
     return RuasPublic(data=[RuaPublic.model_validate(r) for r in ruas])
+
+
+def _to_endereco_public(session: SessionDep, endereco: Endereco) -> EnderecoPublic:
+    rua = session.get(Rua, endereco.rua_id)
+    bairro = session.get(Bairro, rua.bairro_id) if rua else None
+    cidade = session.get(Cidade, bairro.cidade_id) if bairro else None
+    return EnderecoPublic(
+        id=endereco.id,
+        numero=endereco.numero,
+        complemento=endereco.complemento,
+        rua_nome=rua.nome if rua else "",
+        bairro_nome=bairro.nome if bairro else "",
+        cidade_nome=cidade.nome if cidade else "",
+        latitude=endereco.latitude,
+        longitude=endereco.longitude,
+    )
+
+
+@enderecos_router.post("/{endereco_id}/geocodificar", response_model=EnderecoPublic)
+def geocodificar_endereco(
+    session: SessionDep, current_user: CurrentUser, endereco_id: uuid.UUID
+) -> Any:
+    """Retry manual de geocodificação -- pra endereços cadastrados
+    antes da Fase 2 existir, ou que falharam na tentativa automática
+    (sem cota, API fora do ar, etc). SEMPRE tenta de novo quando
+    chamado (diferente da criação, que só tenta uma vez) -- é uma ação
+    explícita do usuário, não um retry silencioso em background."""
+    endereco = session.get(Endereco, endereco_id)
+    if not endereco:
+        raise HTTPException(status_code=404, detail="Endereço não encontrado")
+
+    rua = session.get(Rua, endereco.rua_id)
+    if not rua:
+        raise HTTPException(
+            status_code=400, detail="Rua do endereço não encontrada (dado inconsistente)"
+        )
+    bairro = session.get(Bairro, rua.bairro_id)
+    if not bairro:
+        raise HTTPException(
+            status_code=400, detail="Bairro do endereço não encontrado (dado inconsistente)"
+        )
+
+    coordenadas = geocode(rua_nome=rua.nome, numero=endereco.numero, bairro_nome=bairro.nome)
+    if coordenadas is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Não foi possível geocodificar este endereço (não encontrado, API indisponível, ou cota diária esgotada)",
+        )
+
+    endereco.latitude, endereco.longitude = coordenadas
+    session.add(endereco)
+    session.commit()
+    session.refresh(endereco)
+    return _to_endereco_public(session, endereco)

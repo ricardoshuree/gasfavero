@@ -359,6 +359,131 @@ export const ClientesPublicSchema = {
     title: 'ClientesPublic'
 } as const;
 
+export const DemandaVendaCreateSchema = {
+    properties: {
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        endereco_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Endereco Id'
+        },
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        observacao: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Observacao'
+        }
+    },
+    type: 'object',
+    required: ['cliente_id', 'endereco_id', 'motorista_id'],
+    title: 'DemandaVendaCreate',
+    description: `Corpo de POST /demandas-venda/ -- despacha uma demanda de venda
+pro motorista escolhido. endereco_id é obrigatório e precisa
+apontar pra um Endereco já cadastrado (do cliente ou outro) --
+nunca texto livre.`
+} as const;
+
+export const DemandaVendaPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        cliente_nome: {
+            type: 'string',
+            title: 'Cliente Nome'
+        },
+        endereco: {
+            '$ref': '#/components/schemas/EnderecoPublic'
+        },
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        motorista_nome: {
+            type: 'string',
+            title: 'Motorista Nome'
+        },
+        observacao: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Observacao'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        criado_por_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Criado Por Id'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        respondida_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Respondida Em'
+        }
+    },
+    type: 'object',
+    required: ['id', 'cliente_id', 'cliente_nome', 'endereco', 'motorista_id', 'motorista_nome', 'status', 'criado_por_id', 'created_at'],
+    title: 'DemandaVendaPublic'
+} as const;
+
+export const DemandasVendaPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/DemandaVendaPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'DemandasVendaPublic'
+} as const;
+
 export const EnderecoCreateSchema = {
     properties: {
         bairro_id: {
@@ -1024,6 +1149,91 @@ export const ModulesPublicSchema = {
     type: 'object',
     required: ['data'],
     title: 'ModulesPublic'
+} as const;
+
+export const MotoristaLocalizacaoPublicSchema = {
+    properties: {
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        motorista_nome: {
+            type: 'string',
+            title: 'Motorista Nome'
+        },
+        latitude: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Latitude'
+        },
+        longitude: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Longitude'
+        },
+        atualizado_em: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Atualizado Em'
+        }
+    },
+    type: 'object',
+    required: ['motorista_id', 'motorista_nome', 'latitude', 'longitude', 'atualizado_em'],
+    title: 'MotoristaLocalizacaoPublic'
+} as const;
+
+export const MotoristaLocalizacaoUpdateSchema = {
+    properties: {
+        latitude: {
+            anyOf: [
+                {
+                    type: 'number',
+                    maximum: 90,
+                    minimum: -90
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,6}0*$'
+                }
+            ],
+            title: 'Latitude'
+        },
+        longitude: {
+            anyOf: [
+                {
+                    type: 'number',
+                    maximum: 180,
+                    minimum: -180
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,6}0*$'
+                }
+            ],
+            title: 'Longitude'
+        }
+    },
+    type: 'object',
+    required: ['latitude', 'longitude'],
+    title: 'MotoristaLocalizacaoUpdate',
+    description: `Corpo de PUT /motoristas/{motorista_id}/localizacao -- upsert
+de ping de localização (sobrescreve sempre, sem histórico).`
+} as const;
+
+export const MotoristasLocalizacaoPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/MotoristaLocalizacaoPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'MotoristasLocalizacaoPublic'
 } as const;
 
 export const NewPasswordSchema = {

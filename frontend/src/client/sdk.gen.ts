@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -124,6 +124,143 @@ export class ClientesService {
             errors: {
                 422: 'Validation Error'
             }
+        });
+    }
+}
+
+export class DelegacaoService {
+    /**
+     * Read Demandas Venda
+     * Lista demandas de venda, mais recentes primeiro. Filtros
+     * opcionais por motorista (fila "Minhas Demandas" do motorista) e/ou
+     * status.
+     * @param data The data for the request.
+     * @param data.motoristaId
+     * @param data.status
+     * @returns DemandasVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static readDemandasVenda(data: DelegacaoReadDemandasVendaData = {}): CancelablePromise<DelegacaoReadDemandasVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/demandas-venda/',
+            query: {
+                motorista_id: data.motoristaId,
+                status: data.status
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Demanda Venda
+     * Despacha uma demanda de venda pro motorista escolhido pelo
+     * atendente. Sempre nasce com status 'pendente'.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns DemandaVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static createDemandaVenda(data: DelegacaoCreateDemandaVendaData): CancelablePromise<DelegacaoCreateDemandaVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/demandas-venda/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Aceitar Demanda Venda
+     * Motorista aceita a demanda -- só é permitido a partir de
+     * 'pendente' (não dá pra aceitar uma demanda já recusada).
+     * @param data The data for the request.
+     * @param data.demandaId
+     * @returns DemandaVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static aceitarDemandaVenda(data: DelegacaoAceitarDemandaVendaData): CancelablePromise<DelegacaoAceitarDemandaVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/demandas-venda/{demanda_id}/aceitar',
+            path: {
+                demanda_id: data.demandaId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Recusar Demanda Venda
+     * Motorista recusa a demanda -- só é permitido a partir de
+     * 'pendente'. Não existe endpoint de reatribuição automática aqui
+     * (Fase 1): o atendente vê a recusa na lista e despacha uma demanda
+     * NOVA pra outro motorista, se for o caso.
+     * @param data The data for the request.
+     * @param data.demandaId
+     * @returns DemandaVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static recusarDemandaVenda(data: DelegacaoRecusarDemandaVendaData): CancelablePromise<DelegacaoRecusarDemandaVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/demandas-venda/{demanda_id}/recusar',
+            path: {
+                demanda_id: data.demandaId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Upsert Localizacao Motorista
+     * Ping de localização -- upsert puro (1 linha por motorista,
+     * sobrescrita sempre). Sem histórico de propósito (ver comentário em
+     * MotoristaLocalizacao, models.py). Gate de permissão é o módulo
+     * 'delegacao' por enquanto -- quando o app do motorista existir
+     * (Fase 4) isso pode restringir pra 'o próprio motorista só atualiza
+     * a própria localização', mas essa regra ainda não foi desenhada.
+     * @param data The data for the request.
+     * @param data.motoristaId
+     * @param data.requestBody
+     * @returns MotoristaLocalizacaoPublic Successful Response
+     * @throws ApiError
+     */
+    public static upsertLocalizacaoMotorista(data: DelegacaoUpsertLocalizacaoMotoristaData): CancelablePromise<DelegacaoUpsertLocalizacaoMotoristaResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/motoristas/{motorista_id}/localizacao',
+            path: {
+                motorista_id: data.motoristaId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Localizacoes Motoristas
+     * Última posição conhecida de cada motorista que já deu ao menos
+     * 1 ping -- base pros marcadores do mapa do atendente (Fase 3).
+     * @returns MotoristasLocalizacaoPublic Successful Response
+     * @throws ApiError
+     */
+    public static readLocalizacoesMotoristas(): CancelablePromise<DelegacaoReadLocalizacoesMotoristasResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/motoristas/localizacao'
         });
     }
 }

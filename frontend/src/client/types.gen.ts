@@ -102,6 +102,37 @@ export type ClienteUpdate = {
     telefone?: (string | null);
 };
 
+export type DemandasVendaPublic = {
+    data: Array<DemandaVendaPublic>;
+};
+
+/**
+ * Corpo de POST /demandas-venda/ -- despacha uma demanda de venda
+ * pro motorista escolhido. endereco_id é obrigatório e precisa
+ * apontar pra um Endereco já cadastrado (do cliente ou outro) --
+ * nunca texto livre.
+ */
+export type DemandaVendaCreate = {
+    cliente_id: string;
+    endereco_id: string;
+    motorista_id: string;
+    observacao?: (string | null);
+};
+
+export type DemandaVendaPublic = {
+    id: string;
+    cliente_id: string;
+    cliente_nome: string;
+    endereco: EnderecoPublic;
+    motorista_id: string;
+    motorista_nome: string;
+    observacao?: (string | null);
+    status: string;
+    criado_por_id: string;
+    created_at: string;
+    respondida_em?: (string | null);
+};
+
 /**
  * Corpo usado para criar (ou trocar) o endereço de um cliente.
  *
@@ -328,6 +359,27 @@ export type ModulesPublic = {
 export type ModuleUpdate = {
     label?: (string | null);
     description?: (string | null);
+};
+
+export type MotoristaLocalizacaoPublic = {
+    motorista_id: string;
+    motorista_nome: string;
+    latitude: string;
+    longitude: string;
+    atualizado_em: string;
+};
+
+/**
+ * Corpo de PUT /motoristas/{motorista_id}/localizacao -- upsert
+ * de ping de localização (sobrescreve sempre, sem histórico).
+ */
+export type MotoristaLocalizacaoUpdate = {
+    latitude: (number | string);
+    longitude: (number | string);
+};
+
+export type MotoristasLocalizacaoPublic = {
+    data: Array<MotoristaLocalizacaoPublic>;
 };
 
 export type NewPassword = {
@@ -699,6 +751,40 @@ export type ClientesTrocarEnderecoData = {
 };
 
 export type ClientesTrocarEnderecoResponse = (ClientePublic);
+
+export type DelegacaoReadDemandasVendaData = {
+    motoristaId?: (string | null);
+    status?: ('pendente' | 'aceita' | 'recusada' | null);
+};
+
+export type DelegacaoReadDemandasVendaResponse = (DemandasVendaPublic);
+
+export type DelegacaoCreateDemandaVendaData = {
+    requestBody: DemandaVendaCreate;
+};
+
+export type DelegacaoCreateDemandaVendaResponse = (DemandaVendaPublic);
+
+export type DelegacaoAceitarDemandaVendaData = {
+    demandaId: string;
+};
+
+export type DelegacaoAceitarDemandaVendaResponse = (DemandaVendaPublic);
+
+export type DelegacaoRecusarDemandaVendaData = {
+    demandaId: string;
+};
+
+export type DelegacaoRecusarDemandaVendaResponse = (DemandaVendaPublic);
+
+export type DelegacaoUpsertLocalizacaoMotoristaData = {
+    motoristaId: string;
+    requestBody: MotoristaLocalizacaoUpdate;
+};
+
+export type DelegacaoUpsertLocalizacaoMotoristaResponse = (MotoristaLocalizacaoPublic);
+
+export type DelegacaoReadLocalizacoesMotoristasResponse = (MotoristasLocalizacaoPublic);
 
 export type GeografiaReadBairrosResponse = (BairrosPublic);
 

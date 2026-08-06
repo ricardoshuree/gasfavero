@@ -1,18 +1,5 @@
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:32:15
-# Adiciona telefone e torna endereco opcional na criacao de Cliente
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:25:56
-# CRUD de Cliente + Endereco, com troca de endereco fechando o historico
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed
-#
-# [mcp-local harness] fix: or_ importado de sqlalchemy (nao sqlmodel) --
-# func/col ja sao confirmados via items.py, mas or_ nunca foi usado no
-# projeto ainda; import direto da fonte evita risco de ImportError.
-#
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12
-# Cliente ganha telefone; endereco na criacao passa a ser OPCIONAL no
-# backend (quem exige endereco obrigatorio agora e a validacao da tela
-# /clientes, nao mais o backend -- a tela de Venda cadastra cliente
-# rapido sem endereco).
+# [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 0144c501 | 2026-08-06 20:16:18
+# Chama geocode() automaticamente em _create_endereco (best-effort), inclui lat/lng em EnderecoPublic
 """
 Rotas de Cliente + Endereço. Controle de acesso via módulo RBAC
 "clientes".
@@ -23,6 +10,11 @@ mas endereço agora é opcional -- ver ClienteCreate). Trocar de
 endereço depois é um endpoint separado (POST /clientes/{id}/endereco)
 porque precisa FECHAR o histórico antigo (valid_to = agora), não é um
 UPDATE simples -- ver ClienteEndereco em models.py.
+
+Geocodificação (Fase 2 da Delegação de Venda): todo Endereco novo
+tenta ser geocodificado automaticamente na criação (best-effort, ver
+app/core/geocoding.py) -- falha silenciosa, nunca impede o cadastro
+do cliente/endereço em si.
 """
 import uuid
 from typing import Any
@@ -32,6 +24,7 @@ from sqlalchemy import or_
 from sqlmodel import col, func, select
 
 from app.api.deps import SessionDep, require_module_permission
+from app.core.geocoding import geocode
 from app.models import (
     Bairro,
     Cidade,
@@ -83,10 +76,18 @@ def _create_endereco(session: SessionDep, endereco_in: EnderecoCreate) -> Endere
 
     rua = _resolve_or_create_rua(session, bairro.id, endereco_in.rua_nome)
 
+    # Geocodificação best-effort: se falhar por qualquer motivo (sem
+    # API key, sem cota, endereço não encontrado, timeout), geocode()
+    # retorna None e o endereço é criado normalmente com lat/lng nulos
+    # -- nunca bloqueia o cadastro do cliente. Ver app/core/geocoding.py.
+    coordenadas = geocode(rua_nome=rua.nome, numero=endereco_in.numero, bairro_nome=bairro.nome)
+
     endereco = Endereco(
         rua_id=rua.id,
         numero=endereco_in.numero,
         complemento=endereco_in.complemento,
+        latitude=coordenadas[0] if coordenadas else None,
+        longitude=coordenadas[1] if coordenadas else None,
     )
     session.add(endereco)
     session.flush()
@@ -104,6 +105,8 @@ def _to_endereco_public(session: SessionDep, endereco: Endereco) -> EnderecoPubl
         rua_nome=rua.nome if rua else "",
         bairro_nome=bairro.nome if bairro else "",
         cidade_nome=cidade.nome if cidade else "",
+        latitude=endereco.latitude,
+        longitude=endereco.longitude,
     )
 
 

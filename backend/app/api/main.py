@@ -1,14 +1,10 @@
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12 | 2026-08-05 10:34:47
-# Registra vendas.router
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed
-# Registra os routers de geografia, clientes, precos e vales
-#
-# [mcp-local harness] feature: fluxo-vendas-distribuidora | plano: 3f2bec12
-# Registra o router de vendas
+# [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 938523a3 | 2026-08-06 20:17:03
+# Registra geografia.enderecos_router
 from fastapi import APIRouter
 
 from app.api.routes import (
     clientes,
+    delegacao,
     geografia,
     items,
     login,
@@ -31,10 +27,12 @@ api_router.include_router(modules.router)
 api_router.include_router(utils.router)
 api_router.include_router(items.router)
 api_router.include_router(geografia.router)
+api_router.include_router(geografia.enderecos_router)
 api_router.include_router(clientes.router)
 api_router.include_router(precos.router)
 api_router.include_router(vales.router)
 api_router.include_router(vendas.router)
+api_router.include_router(delegacao.router)
 
 
 if settings.ENVIRONMENT == "local":
