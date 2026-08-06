@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: livro-vendas-totais-tabela | plano: 8a3b8cf6 | 2026-08-06 10:26:59
-# Adiciona LivroVendasListPublic (data+count+soma_preco+soma_valor_pago) apos AnosDisponiveisPublic
+# [mcp-local harness] feature: inadimplentes-backend-models | plano: 95cd4259 | 2026-08-06 12:48:02
+# Adiciona InadimplentesResumoPublic, InadimplentesMotoristaPublic, InadimplentesMotoristasPublic apos LivroVendasListPublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -899,7 +899,10 @@ class AnosDisponiveisPublic(SQLModel):
     decrescente. Usado pra montar os botões da linha 'Ano' do menu
     interativo -- se houver um 6º ano de histórico ele simplesmente
     não aparece aqui (mas continua acessível via escopo 'todos_anos',
-    que não depende desta lista)."""
+    que não depende desta lista).
+
+    Reaproveitado tal e qual por GET /vendas/inadimplentes/anos-
+    disponiveis (mesma forma: só uma lista de anos)."""
     anos: list[int]
 
 
@@ -910,11 +913,64 @@ class LivroVendasListPublic(SQLModel):
     (valor_pago) de TODAS as vendas que batem com o filtro de data
     ativo (data_inicio/data_fim), não só as da página atual -- é o
     valor exibido na linha de totais no rodapé da tabela, que muda
-    dinamicamente junto com o filtro 'Consulta vendas data'."""
+    dinamicamente junto com o filtro 'Consulta vendas data'.
+
+    Reaproveitado tal e qual por GET /vendas/inadimplentes (mesma
+    forma: data + count + soma_preco + soma_valor_pago) -- não faz
+    sentido duplicar o model só porque o nome da tela é outro."""
     data: list[VendaPublic]
     count: int
     soma_preco: Decimal
     soma_valor_pago: Decimal
+
+
+# ---- Inadimplentes (endpoints em vendas.py) ----
+#
+# Tela dedicada a vendas em vale que "estiveram em atraso" em algum
+# momento -- não é só "o que está em aberto agora" (isso já existe no
+# card 'Em aberto' do Livro de Vendas). Aqui entra qualquer venda que:
+#   - já foi paga, mas levou mais de DIAS_ATRASO_VALE dias entre
+#     data_venda e pago_em (esteve atrasada antes de quitar), OU
+#   - continua em aberto e já passou de DIAS_ATRASO_VALE dias desde
+#     data_venda (atraso ainda em curso, mesma regra do resto do
+#     sistema)
+# Ver _esteve_em_atraso() em vendas.py pra o cálculo exato -- não
+# depende de nenhuma coluna nova, é 100% derivado de data_venda/
+# pago_em já existentes (decisão confirmada com o Ricardo: não vale a
+# pena um snapshot histórico à parte).
+#
+# O agrupamento por período (menu Ano/Mês, sem linha de Semana) usa
+# data_pagamento_vale (quando o vale VENCEU), não data_venda -- outra
+# decisão confirmada.
+
+class InadimplentesResumoPublic(SQLModel):
+    """Resposta de GET /vendas/inadimplentes/resumo -- o único card
+    da tela ('Atraso maior que 30 dias': qtd + valor) + o período
+    textual + os pontos do gráfico, filtrados pelo escopo ativo do
+    menu (todos_anos/ano/mes, agrupado por data_pagamento_vale).
+
+    valor soma valor_total (o que ficou em aberto na época; para
+    quem já pagou depois, valor_total continua sendo o total original
+    da venda, não é afetado pelo pagamento)."""
+    qtd: int
+    valor: Decimal
+    periodo_inicio: date
+    periodo_fim: date
+    grafico: list[LivroVendasBucket]
+
+
+class InadimplentesMotoristaPublic(SQLModel):
+    id: uuid.UUID
+    nome: str
+
+
+class InadimplentesMotoristasPublic(SQLModel):
+    """Resposta de GET /vendas/inadimplentes/motoristas -- só os
+    motoristas que aparecem em ao menos 1 venda 'esteve em atraso'
+    (não a lista de usuários inteira), pra montar o dropdown "Nome
+    Motorista" -- "Todos Motoristas" (primeira opção) é sintético,
+    montado só no frontend, não vem daqui."""
+    data: list[InadimplentesMotoristaPublic]
 
 
 # ---------------------------------------------------------------------------

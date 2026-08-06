@@ -18,7 +18,10 @@ mais recentes com ao menos 1 venda (data_venda), em ordem
 decrescente. Usado pra montar os botões da linha 'Ano' do menu
 interativo -- se houver um 6º ano de histórico ele simplesmente
 não aparece aqui (mas continua acessível via escopo 'todos_anos',
-que não depende desta lista).`
+que não depende desta lista).
+
+Reaproveitado tal e qual por GET /vendas/inadimplentes/anos-
+disponiveis (mesma forma: só uma lista de anos).`
 } as const;
 
 export const BairroPublicSchema = {
@@ -453,6 +456,85 @@ export const HTTPValidationErrorSchema = {
     title: 'HTTPValidationError'
 } as const;
 
+export const InadimplentesMotoristaPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        nome: {
+            type: 'string',
+            title: 'Nome'
+        }
+    },
+    type: 'object',
+    required: ['id', 'nome'],
+    title: 'InadimplentesMotoristaPublic'
+} as const;
+
+export const InadimplentesMotoristasPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/InadimplentesMotoristaPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'InadimplentesMotoristasPublic',
+    description: `Resposta de GET /vendas/inadimplentes/motoristas -- só os
+motoristas que aparecem em ao menos 1 venda 'esteve em atraso'
+(não a lista de usuários inteira), pra montar o dropdown "Nome
+Motorista" -- "Todos Motoristas" (primeira opção) é sintético,
+montado só no frontend, não vem daqui.`
+} as const;
+
+export const InadimplentesResumoPublicSchema = {
+    properties: {
+        qtd: {
+            type: 'integer',
+            title: 'Qtd'
+        },
+        valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor'
+        },
+        periodo_inicio: {
+            type: 'string',
+            format: 'date',
+            title: 'Periodo Inicio'
+        },
+        periodo_fim: {
+            type: 'string',
+            format: 'date',
+            title: 'Periodo Fim'
+        },
+        grafico: {
+            items: {
+                '$ref': '#/components/schemas/LivroVendasBucket'
+            },
+            type: 'array',
+            title: 'Grafico'
+        }
+    },
+    type: 'object',
+    required: ['qtd', 'valor', 'periodo_inicio', 'periodo_fim', 'grafico'],
+    title: 'InadimplentesResumoPublic',
+    description: `Resposta de GET /vendas/inadimplentes/resumo -- o único card
+da tela ('Atraso maior que 30 dias': qtd + valor) + o período
+textual + os pontos do gráfico, filtrados pelo escopo ativo do
+menu (todos_anos/ano/mes, agrupado por data_pagamento_vale).
+
+valor soma valor_total (o que ficou em aberto na época; para
+quem já pagou depois, valor_total continua sendo o total original
+da venda, não é afetado pelo pagamento).`
+} as const;
+
 export const ItemCreateSchema = {
     properties: {
         title: {
@@ -654,7 +736,11 @@ o total das colunas 'Preço' (valor_total) e 'Valor pago'
 (valor_pago) de TODAS as vendas que batem com o filtro de data
 ativo (data_inicio/data_fim), não só as da página atual -- é o
 valor exibido na linha de totais no rodapé da tabela, que muda
-dinamicamente junto com o filtro 'Consulta vendas data'.`
+dinamicamente junto com o filtro 'Consulta vendas data'.
+
+Reaproveitado tal e qual por GET /vendas/inadimplentes (mesma
+forma: data + count + soma_preco + soma_valor_pago) -- não faz
+sentido duplicar o model só porque o nome da tela é outro.`
 } as const;
 
 export const LivroVendasResumoPublicSchema = {

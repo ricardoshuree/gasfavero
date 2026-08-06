@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -1261,6 +1261,95 @@ export class VendasService {
                 data_inicio: data.dataInicio,
                 data_fim: data.dataFim,
                 status: data.status,
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Inadimplentes Anos Disponiveis
+     * Até os 5 anos mais recentes de data_pagamento_vale entre as
+     * vendas 'esteve em atraso', em ordem decrescente -- monta os
+     * botões da linha 'Ano' do menu interativo.
+     * @returns AnosDisponiveisPublic Successful Response
+     * @throws ApiError
+     */
+    public static readInadimplentesAnosDisponiveis(): CancelablePromise<VendasReadInadimplentesAnosDisponiveisResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/inadimplentes/anos-disponiveis'
+        });
+    }
+    
+    /**
+     * Read Inadimplentes Motoristas
+     * Só os motoristas que aparecem em ao menos 1 venda 'esteve em
+     * atraso' -- monta o dropdown 'Nome Motorista' (a opção 'Todos
+     * Motoristas' é sintética, montada só no frontend).
+     * @returns InadimplentesMotoristasPublic Successful Response
+     * @throws ApiError
+     */
+    public static readInadimplentesMotoristas(): CancelablePromise<VendasReadInadimplentesMotoristasResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/inadimplentes/motoristas'
+        });
+    }
+    
+    /**
+     * Read Inadimplentes Resumo
+     * O único card da tela ('Atraso maior que 30 dias') + o gráfico
+     * -- SEM linha de Semana no menu (diferente do Livro de Vendas),
+     * agrupado por data_pagamento_vale (quando o vale venceu).
+     * @param data The data for the request.
+     * @param data.escopo
+     * @param data.ano
+     * @param data.mes
+     * @returns InadimplentesResumoPublic Successful Response
+     * @throws ApiError
+     */
+    public static readInadimplentesResumo(data: VendasReadInadimplentesResumoData = {}): CancelablePromise<VendasReadInadimplentesResumoResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/inadimplentes/resumo',
+            query: {
+                escopo: data.escopo,
+                ano: data.ano,
+                mes: data.mes
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Inadimplentes
+     * Tabela de Inadimplentes -- TODAS as vendas 'esteve em atraso'
+     * (sem filtro de período, independente do menu Ano/Mês do topo da
+     * tela), ordenada por data_venda mais ANTIGA primeiro (oposto do
+     * Livro de Vendas). motorista_id opcional filtra pra um motorista só
+     * ('Todos Motoristas', no frontend, simplesmente omite o parâmetro).
+     *
+     * soma_preco/soma_valor_pago somam TODO o conjunto filtrado (não só
+     * a página atual), igual ao Livro de Vendas.
+     * @param data The data for the request.
+     * @param data.motoristaId
+     * @param data.skip
+     * @param data.limit
+     * @returns LivroVendasListPublic Successful Response
+     * @throws ApiError
+     */
+    public static readInadimplentes(data: VendasReadInadimplentesData = {}): CancelablePromise<VendasReadInadimplentesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/inadimplentes',
+            query: {
+                motorista_id: data.motoristaId,
                 skip: data.skip,
                 limit: data.limit
             },

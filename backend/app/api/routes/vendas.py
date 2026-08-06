@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: livro-vendas-filtro-status-e-datas-default | plano: abff5167 | 2026-08-06 10:52:59
-# Adiciona filtro de status (todos/pago/em_aberto/em_atraso) aplicado nas 3 queries via helper local
+# [mcp-local harness] feature: inadimplentes-fix-tabela-so-atuais | plano: dbbcd17b | 2026-08-06 13:33:23
+# Adiciona _vendas_em_atraso_atual() e usa em read_inadimplentes (tabela) e read_inadimplentes_motoristas (dropdown) -- grafico/card continuam com _vendas_inadimplentes (historico)
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -31,6 +31,9 @@ from app.models import (
     Cliente,
     Endereco,
     EnderecoPublic,
+    InadimplentesMotoristaPublic,
+    InadimplentesMotoristasPublic,
+    InadimplentesResumoPublic,
     Item,
     LivroVendasBucket,
     LivroVendasFormaPagamentoValor,
@@ -62,6 +65,12 @@ MODULE = "vendas"
 # independentemente (ex: só "gerente"), diferente do Recebimento de
 # Vale que reaproveita o módulo "vendas".
 MODULE_LIVRO = "livro_vendas"
+
+# Módulo da tela de Inadimplentes -- reaproveita "inadimplencia", já
+# cadastrado no banco desde a migration de módulos de negócio
+# (b7c8d9e0f1a2) e nunca usado até agora. Não precisou de migration
+# nova.
+MODULE_INADIMPLENCIA = "inadimplencia"
 
 # Limite de dias corridos desde a venda pra considerar um vale em
 # aberto "em atraso" (contado a partir de data_venda, decisão do
@@ -834,6 +843,283 @@ def read_livro_vendas(
 
     return LivroVendasListPublic(
         data=[_to_venda_public(session, v) for v in vendas],
+        count=count,
+        soma_preco=soma_preco,
+        soma_valor_pago=soma_valor_pago,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Inadimplentes
+#
+# Duas visões DELIBERADAMENTE diferentes na mesma tela (decisão
+# confirmada com o Ricardo depois de ver a primeira versão em uso):
+#
+#   1) CARD + GRÁFICO (topo, menu Ano/Mês) -- visão HISTÓRICA/contábil:
+#      "quantos estavam devendo naquele mês de vencimento", incluindo
+#      quem já pagou depois de ficar mais de DIAS_ATRASO_VALE dias sem
+#      quitar. Usa _vendas_inadimplentes() (todo o conjunto "esteve em
+#      atraso"). Serve pra entender como a inadimplência se comportou
+#      ao longo do tempo, não pra cobrança.
+#
+#   2) TABELA (embaixo, com filtro de motorista + Exportar PDF) --
+#      visão de COBRANÇA: só quem está em aberto E em atraso AGORA
+#      (pago_em IS NULL) -- exatamente os clientes que cada motorista
+#      (inclusive o usuário-sistema "Distribuidora Gás Favero", que
+#      "entrega" as vendas de balcão) precisa cobrar. Quem já pagou
+#      NÃO aparece aqui, mesmo que tenha estado atrasado no passado --
+#      ver _vendas_em_atraso_atual().
+#
+# _esteve_em_atraso() continua sendo a base das duas: não depende de
+# nenhuma coluna nova, é 100% derivado de data_venda/pago_em já
+# existentes (decisão confirmada: não vale a pena um snapshot
+# histórico à parte).
+#
+#   - se JÁ PAGA: esteve em atraso se (pago_em.date() - data_venda)
+#     foi >= DIAS_ATRASO_VALE (demorou pra pagar, mesmo que hoje
+#     esteja quitada) -- só entra no card/gráfico (visão 1)
+#   - se AINDA EM ABERTO: esteve em atraso se (hoje - data_venda) já
+#     é >= DIAS_ATRASO_VALE -- entra nas DUAS visões
+#
+# Menu interativo tem só 2 linhas (Ano / Mês, SEM linha de Semana,
+# diferente do Livro de Vendas) e agrupa por data_pagamento_vale
+# (quando o vale VENCEU), não por data_venda -- decisão confirmada.
+#
+# A TABELA (GET /inadimplentes) é independente do menu -- sem filtro
+# de período, só filtrável por motorista_id (pra cada motorista gerar
+# seu próprio PDF de cobrança), ordenada por data_venda mais ANTIGA
+# primeiro (quem está esperando há mais tempo primeiro).
+#
+# Exportar PDF é gerado 100% no frontend (dump simples da tabela já
+# carregada, respeitando o filtro de motorista ativo) -- não existe
+# endpoint de PDF aqui.
+#
+# Módulo RBAC "inadimplencia" (reaproveitado, ver MODULE_INADIMPLENCIA
+# acima). Precisam vir ANTES de "/{id}" nesse arquivo -- mesmo motivo
+# dos blocos anteriores.
+# ---------------------------------------------------------------------------
+
+def _esteve_em_atraso(venda: Venda, hoje: date) -> bool:
+    """Ver bloco de comentário acima -- base das duas visões (card/
+    gráfico histórico E tabela de cobrança atual)."""
+    if venda.forma_pagamento != "vale":
+        return False
+    if venda.pago_em is not None:
+        dias = (venda.pago_em.date() - venda.data_venda).days
+        return dias >= DIAS_ATRASO_VALE
+    dias = (hoje - venda.data_venda).days
+    return dias >= DIAS_ATRASO_VALE
+
+
+def _vendas_inadimplentes(session: SessionDep) -> list[Venda]:
+    """Todas as vendas 'esteve em atraso' (ver acima) -- inclui quem
+    já pagou. Usado SÓ pelo card/gráfico (visão histórica/contábil),
+    agrupado por data_pagamento_vale. NÃO usar pra tabela/PDF de
+    cobrança -- ver _vendas_em_atraso_atual() pra isso.
+
+    Só busca candidatas com forma_pagamento='vale' no banco (o resto
+    do filtro é em Python, já que a condição de data não dá pra
+    expressar de forma portável entre SQLite/Postgres com
+    func.julianday/func.date -- mesmo padrão Python-loop já usado no
+    resto deste arquivo)."""
+    hoje = date.today()
+    candidatas = session.exec(
+        select(Venda).where(Venda.forma_pagamento == "vale")
+    ).all()
+    return [v for v in candidatas if _esteve_em_atraso(v, hoje)]
+
+
+def _vendas_em_atraso_atual(session: SessionDep) -> list[Venda]:
+    """Só quem está em aberto E em atraso AGORA (pago_em IS NULL) --
+    usado pela tabela de cobrança e pelo dropdown de motoristas (não
+    faz sentido oferecer pra cobrar um motorista cujos clientes já
+    quitaram tudo). Quem já pagou nunca aparece aqui, mesmo que tenha
+    estado atrasado no passado (esse caso só aparece no card/gráfico,
+    via _vendas_inadimplentes)."""
+    return [v for v in _vendas_inadimplentes(session) if v.pago_em is None]
+
+
+@router.get(
+    "/inadimplentes/anos-disponiveis",
+    response_model=AnosDisponiveisPublic,
+    dependencies=[
+        Depends(require_module_permission(MODULE_INADIMPLENCIA, action="read"))
+    ],
+)
+def read_inadimplentes_anos_disponiveis(session: SessionDep) -> Any:
+    """Até os 5 anos mais recentes de data_pagamento_vale entre as
+    vendas 'esteve em atraso' (visão histórica -- inclui quem já
+    pagou), em ordem decrescente -- monta os botões da linha 'Ano' do
+    menu interativo, que dirige o card/gráfico."""
+    vendas = _vendas_inadimplentes(session)
+    anos = sorted(
+        {v.data_pagamento_vale.year for v in vendas if v.data_pagamento_vale},
+        reverse=True,
+    )[:5]
+    return AnosDisponiveisPublic(anos=anos)
+
+
+@router.get(
+    "/inadimplentes/motoristas",
+    response_model=InadimplentesMotoristasPublic,
+    dependencies=[
+        Depends(require_module_permission(MODULE_INADIMPLENCIA, action="read"))
+    ],
+)
+def read_inadimplentes_motoristas(session: SessionDep) -> Any:
+    """Só os motoristas que têm ao menos 1 cliente em atraso AGORA
+    (visão de cobrança, não histórica) -- monta o dropdown 'Nome
+    Motorista' (a opção 'Todos Motoristas' é sintética, montada só no
+    frontend). Inclui o usuário-sistema 'Distribuidora Gás Favero'
+    normalmente, como qualquer outro motorista."""
+    vendas = _vendas_em_atraso_atual(session)
+    motorista_ids = {v.motorista_id for v in vendas}
+
+    motoristas = []
+    for motorista_id in motorista_ids:
+        motorista = session.get(User, motorista_id)
+        if motorista:
+            motoristas.append(
+                InadimplentesMotoristaPublic(
+                    id=motorista.id,
+                    nome=motorista.full_name or motorista.email,
+                )
+            )
+    motoristas.sort(key=lambda m: m.nome.lower())
+    return InadimplentesMotoristasPublic(data=motoristas)
+
+
+@router.get(
+    "/inadimplentes/resumo",
+    response_model=InadimplentesResumoPublic,
+    dependencies=[
+        Depends(require_module_permission(MODULE_INADIMPLENCIA, action="read"))
+    ],
+)
+def read_inadimplentes_resumo(
+    session: SessionDep,
+    escopo: Literal["todos_anos", "ano", "mes"] = "mes",
+    ano: int | None = None,
+    mes: int | None = None,
+) -> Any:
+    """O único card da tela ('Atraso maior que 30 dias') + o gráfico
+    -- visão HISTÓRICA (inclui quem já pagou depois de atrasar), SEM
+    linha de Semana no menu (diferente do Livro de Vendas), agrupado
+    por data_pagamento_vale (quando o vale venceu)."""
+    hoje = date.today()
+    vendas = _vendas_inadimplentes(session)
+
+    if escopo == "mes":
+        ano_efetivo = ano or hoje.year
+        mes_efetivo = mes or hoje.month
+        if not (1 <= mes_efetivo <= 12):
+            raise HTTPException(status_code=400, detail="Mês inválido")
+
+        ultimo_dia = calendar.monthrange(ano_efetivo, mes_efetivo)[1]
+        periodo_inicio = date(ano_efetivo, mes_efetivo, 1)
+        periodo_fim = date(ano_efetivo, mes_efetivo, ultimo_dia)
+        buckets_def = [
+            (_label_bucket_semana(ini, fim), ini, fim)
+            for ini, fim in _semanas_do_mes(ano_efetivo, mes_efetivo)
+        ]
+
+    elif escopo == "ano":
+        if ano is None:
+            raise HTTPException(status_code=400, detail="Informe o ano")
+        periodo_inicio = date(ano, 1, 1)
+        periodo_fim = date(ano, 12, 31)
+        buckets_def = [
+            (
+                MESES_ABREV[m - 1],
+                date(ano, m, 1),
+                date(ano, m, calendar.monthrange(ano, m)[1]),
+            )
+            for m in range(1, 13)
+        ]
+
+    else:  # todos_anos -- intervalo de anos com data_pagamento_vale
+        # presente entre as vendas inadimplentes (pode incluir anos
+        # futuros, já que vencimento nem sempre já passou)
+        datas_pagamento = [
+            v.data_pagamento_vale for v in vendas if v.data_pagamento_vale
+        ]
+        if datas_pagamento:
+            ano_inicio = min(d.year for d in datas_pagamento)
+            ano_fim = max(d.year for d in datas_pagamento)
+        else:
+            ano_inicio = ano_fim = hoje.year
+        periodo_inicio = date(ano_inicio, 1, 1)
+        periodo_fim = date(ano_fim, 12, 31)
+        buckets_def = [
+            (str(a), date(a, 1, 1), date(a, 12, 31))
+            for a in range(ano_inicio, ano_fim + 1)
+        ]
+
+    vendas_periodo = [
+        v
+        for v in vendas
+        if v.data_pagamento_vale
+        and periodo_inicio <= v.data_pagamento_vale <= periodo_fim
+    ]
+
+    grafico = []
+    for label, bucket_inicio, bucket_fim in buckets_def:
+        valor_bucket = sum(
+            (
+                v.valor_total
+                for v in vendas_periodo
+                if bucket_inicio <= v.data_pagamento_vale <= bucket_fim
+            ),
+            Decimal("0"),
+        )
+        grafico.append(LivroVendasBucket(label=label, valor=valor_bucket))
+
+    return InadimplentesResumoPublic(
+        qtd=len(vendas_periodo),
+        valor=sum((v.valor_total for v in vendas_periodo), Decimal("0")),
+        periodo_inicio=periodo_inicio,
+        periodo_fim=periodo_fim,
+        grafico=grafico,
+    )
+
+
+@router.get(
+    "/inadimplentes",
+    response_model=LivroVendasListPublic,
+    dependencies=[
+        Depends(require_module_permission(MODULE_INADIMPLENCIA, action="read"))
+    ],
+)
+def read_inadimplentes(
+    session: SessionDep,
+    motorista_id: uuid.UUID | None = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> Any:
+    """Tabela de cobrança -- só quem está em aberto E em atraso AGORA
+    (visão atual, não histórica -- quem já pagou não aparece aqui,
+    mesmo que tenha estado atrasado no passado), sem filtro de período
+    (independente do menu Ano/Mês do topo da tela), ordenada por
+    data_venda mais ANTIGA primeiro. motorista_id opcional filtra pra
+    um motorista só ('Todos Motoristas', no frontend, simplesmente
+    omite o parâmetro) -- é o que alimenta o PDF de cobrança de cada
+    motorista.
+
+    soma_preco/soma_valor_pago somam TODO o conjunto filtrado (não só
+    a página atual), igual ao Livro de Vendas."""
+    vendas = _vendas_em_atraso_atual(session)
+    if motorista_id is not None:
+        vendas = [v for v in vendas if v.motorista_id == motorista_id]
+
+    vendas.sort(key=lambda v: (v.data_venda, v.created_at))
+
+    count = len(vendas)
+    soma_preco = sum((v.valor_total for v in vendas), Decimal("0"))
+    soma_valor_pago = sum((v.valor_pago for v in vendas), Decimal("0"))
+    pagina = vendas[skip : skip + limit]
+
+    return LivroVendasListPublic(
+        data=[_to_venda_public(session, v) for v in pagina],
         count=count,
         soma_preco=soma_preco,
         soma_valor_pago=soma_valor_pago,

@@ -1,3 +1,11 @@
+// [mcp-local harness] feature: recebimento-vale-coluna-motorista | plano: fdeef474 | 2026-08-06 13:34:12
+// Adiciona coluna Motorista (venda.motorista_nome) entre Endereco e Vale no, ajusta colSpan do estado vazio de 6 para 7
+// [mcp-local harness] feature: recebimento-vale-coluna-motorista
+// Adiciona coluna Motorista (venda.motorista_nome, ja vinha na API)
+// entre Endereco e Vale no -- pedido do Ricardo ao notar a ausencia
+// enquanto revisava a tela de Inadimplentes (cada motorista precisa
+// saber de quem cobrar).
+//
 // [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:36:25
 // status = todos (default, junta os 3 estados) | aguardando_baixa (filtro); badge por linha distingue Em aberto/Em atraso/Aguardando baixa
 // [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835
@@ -166,6 +174,7 @@ export function ValesTable({
                 <SortIcon coluna="cliente" />
               </TableHead>
               <TableHead>Endereço</TableHead>
+              <TableHead>Motorista</TableHead>
               <TableHead>Vale nº</TableHead>
               <TableHead
                 className="cursor-pointer select-none"
@@ -188,7 +197,7 @@ export function ValesTable({
             {vendas.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-32 text-center text-muted-foreground"
                 >
                   {isFetching ? "Carregando..." : "Nenhum vale encontrado"}
@@ -207,6 +216,7 @@ export function ValesTable({
                       ? `${venda.endereco.rua_nome}, ${venda.endereco.numero} — ${venda.endereco.bairro_nome}`
                       : "—"}
                   </TableCell>
+                  <TableCell>{venda.motorista_nome}</TableCell>
                   <TableCell>{venda.vale_numero ?? "—"}</TableCell>
                   <TableCell>{formatDate(venda.data_venda)}</TableCell>
                   <TableCell className="text-right">

@@ -7,6 +7,9 @@
  * interativo -- se houver um 6º ano de histórico ele simplesmente
  * não aparece aqui (mas continua acessível via escopo 'todos_anos',
  * que não depende desta lista).
+ *
+ * Reaproveitado tal e qual por GET /vendas/inadimplentes/anos-
+ * disponiveis (mesma forma: só uma lista de anos).
  */
 export type AnosDisponiveisPublic = {
     anos: Array<(number)>;
@@ -127,6 +130,40 @@ export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
 
+export type InadimplentesMotoristaPublic = {
+    id: string;
+    nome: string;
+};
+
+/**
+ * Resposta de GET /vendas/inadimplentes/motoristas -- só os
+ * motoristas que aparecem em ao menos 1 venda 'esteve em atraso'
+ * (não a lista de usuários inteira), pra montar o dropdown "Nome
+ * Motorista" -- "Todos Motoristas" (primeira opção) é sintético,
+ * montado só no frontend, não vem daqui.
+ */
+export type InadimplentesMotoristasPublic = {
+    data: Array<InadimplentesMotoristaPublic>;
+};
+
+/**
+ * Resposta de GET /vendas/inadimplentes/resumo -- o único card
+ * da tela ('Atraso maior que 30 dias': qtd + valor) + o período
+ * textual + os pontos do gráfico, filtrados pelo escopo ativo do
+ * menu (todos_anos/ano/mes, agrupado por data_pagamento_vale).
+ *
+ * valor soma valor_total (o que ficou em aberto na época; para
+ * quem já pagou depois, valor_total continua sendo o total original
+ * da venda, não é afetado pelo pagamento).
+ */
+export type InadimplentesResumoPublic = {
+    qtd: number;
+    valor: string;
+    periodo_inicio: string;
+    periodo_fim: string;
+    grafico: Array<LivroVendasBucket>;
+};
+
 export type ItemCreate = {
     title: string;
     description?: (string | null);
@@ -181,6 +218,10 @@ export type LivroVendasFormaPagamentoValor = {
  * ativo (data_inicio/data_fim), não só as da página atual -- é o
  * valor exibido na linha de totais no rodapé da tabela, que muda
  * dinamicamente junto com o filtro 'Consulta vendas data'.
+ *
+ * Reaproveitado tal e qual por GET /vendas/inadimplentes (mesma
+ * forma: data + count + soma_preco + soma_valor_pago) -- não faz
+ * sentido duplicar o model só porque o nome da tela é outro.
  */
 export type LivroVendasListPublic = {
     data: Array<VendaPublic>;
@@ -931,6 +972,26 @@ export type VendasReadLivroVendasData = {
 };
 
 export type VendasReadLivroVendasResponse = (LivroVendasListPublic);
+
+export type VendasReadInadimplentesAnosDisponiveisResponse = (AnosDisponiveisPublic);
+
+export type VendasReadInadimplentesMotoristasResponse = (InadimplentesMotoristasPublic);
+
+export type VendasReadInadimplentesResumoData = {
+    ano?: (number | null);
+    escopo?: 'todos_anos' | 'ano' | 'mes';
+    mes?: (number | null);
+};
+
+export type VendasReadInadimplentesResumoResponse = (InadimplentesResumoPublic);
+
+export type VendasReadInadimplentesData = {
+    limit?: number;
+    motoristaId?: (string | null);
+    skip?: number;
+};
+
+export type VendasReadInadimplentesResponse = (LivroVendasListPublic);
 
 export type VendasReadVendaData = {
     id: string;

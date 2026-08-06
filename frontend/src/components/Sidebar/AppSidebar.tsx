@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: livro-vendas-sidebar | plano: ae9b7056 | 2026-08-06 09:34:32
-// Item "Livro de Vendas" (modulo livro_vendas) logo abaixo de Recebimento de Vale
+// [mcp-local harness] feature: inadimplentes-frontend | plano: 9164ae80 | 2026-08-06 12:54:06
+// Item "Inadimplentes" (modulo inadimplencia) logo abaixo de Livro de Vendas
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -12,6 +12,9 @@
  *   - Livro de Vendas    → módulo "livro_vendas" (módulo próprio, não
  *                           reaproveita "vendas" -- pode ser restrito
  *                           independentemente, ex: só "gerente")
+ *   - Inadimplentes      → módulo "inadimplencia" (já existia
+ *                           cadastrado no banco desde a migration de
+ *                           módulos de negócio, nunca usado até agora)
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -30,6 +33,7 @@
  */
 
 import {
+  AlertTriangle,
   Banknote,
   Book,
   Box,
@@ -75,6 +79,12 @@ const MODULE_ITEMS: Array<Item & { module: string }> = [
     icon: Book,
     title: "Livro de Vendas",
     path: "/livro-vendas",
+  },
+  {
+    module: "inadimplencia",
+    icon: AlertTriangle,
+    title: "Inadimplentes",
+    path: "/inadimplentes",
   },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
