@@ -1,3 +1,11 @@
+// [mcp-local harness] feature: cores-status-solido | plano: 8740e5ce | 2026-08-06 06:29:16
+// Fundo solido vermelho/verde com letra branca (em vez de fundo claro + letra colorida)
+// [mcp-local harness] feature: cores-status-solido | plano: 8740e5ce
+// Fundo solido (vermelho/verde) + letra branca, em vez de fundo claro
+// com letra colorida
+// [mcp-local harness] feature: cores-status-historico | plano: ea3ad35c
+// Cores dos badges: Em aberto/Em atraso em vermelho, Pago/Baixado em verde
+// (Aguardando baixa continua azul -- nao foi pedido pra mudar)
 // [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977 | 2026-08-06 06:05:38
 // Adiciona bloco Historico de vendas (ultimas 3) no painel de cliente, pedido do Giovani
 // [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977
@@ -87,13 +95,17 @@ function isAtrasado(dataVendaISO: string): boolean {
 
 /** Vendas fora de "vale" são pagas na hora (pago_em já vem
  * preenchido na criação) -- só o vale passa pelos estados
- * aberto/atraso/aguardando baixa/baixado (ver Recebimento de Vale). */
+ * aberto/atraso/aguardando baixa/baixado (ver Recebimento de Vale).
+ * Cores (pedido do Ricardo): pago/baixado = fundo verde solido +
+ * letra branca; aberto/atraso = fundo vermelho solido + letra
+ * branca; aguardando baixa fica azul claro (não fazia parte do
+ * pedido). */
 function statusVenda(v: VendaPublic): { label: string; className: string } {
   if (v.forma_pagamento !== "vale") {
-    return { label: "Pago", className: "bg-muted text-muted-foreground" }
+    return { label: "Pago", className: "bg-green-600 text-white" }
   }
   if (v.pago_em) {
-    return { label: "Baixado", className: "bg-muted text-muted-foreground" }
+    return { label: "Baixado", className: "bg-green-600 text-white" }
   }
   if (v.recebido_em) {
     return { label: "Aguardando baixa", className: "bg-sky-100 text-sky-800" }
@@ -101,10 +113,10 @@ function statusVenda(v: VendaPublic): { label: string; className: string } {
   if (isAtrasado(v.data_venda)) {
     return {
       label: "Em atraso",
-      className: "bg-destructive/15 text-destructive",
+      className: "bg-red-600 text-white",
     }
   }
-  return { label: "Em aberto", className: "bg-muted text-muted-foreground" }
+  return { label: "Em aberto", className: "bg-red-600 text-white" }
 }
 
 /** Formata dígitos como "(54) 99999-9999", progressivamente enquanto
