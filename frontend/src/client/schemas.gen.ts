@@ -814,6 +814,43 @@ escopo ativo, pro frontend montar o label '(dd/mm/aaaa -
 dd/mm/aaaa)'.`
 } as const;
 
+export const LogradouroReferenciaPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        nome: {
+            type: 'string',
+            title: 'Nome'
+        }
+    },
+    type: 'object',
+    required: ['id', 'nome'],
+    title: 'LogradouroReferenciaPublic'
+} as const;
+
+export const LogradourosReferenciaPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/LogradouroReferenciaPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'LogradourosReferenciaPublic',
+    description: `Resposta de GET /bairros/logradouros-referencia -- a lista
+inteira (hoje ~239 nomes), sem paginação nem busca no servidor,
+já que o volume é pequeno. Usado no frontend como fonte extra de
+sugestão no RuaAutocomplete, mesclado com as ruas já cadastradas
+no bairro selecionado (ver comentário em LogradouroReferencia).`
+} as const;
+
 export const MessageSchema = {
     properties: {
         message: {

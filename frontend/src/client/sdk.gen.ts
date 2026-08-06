@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -139,6 +139,25 @@ export class GeografiaService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/bairros/'
+        });
+    }
+    
+    /**
+     * Read Logradouros Referencia
+     * Catálogo de nomes de rua conhecidos da cidade (~239, ver
+     * migration g2h3i4j5k6l7) -- SEM bairro associado (ver comentário em
+     * LogradouroReferencia, models.py). Retorna a lista inteira, sem
+     * paginação/busca no servidor (volume pequeno) -- o frontend mescla
+     * isso com as ruas já cadastradas no bairro selecionado
+     * (GET /bairros/{bairro_id}/ruas) pra alimentar o RuaAutocomplete
+     * com sugestões, independente de bairro.
+     * @returns LogradourosReferenciaPublic Successful Response
+     * @throws ApiError
+     */
+    public static readLogradourosReferencia(): CancelablePromise<GeografiaReadLogradourosReferenciaResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/bairros/logradouros-referencia'
         });
     }
     
@@ -1273,8 +1292,9 @@ export class VendasService {
     /**
      * Read Inadimplentes Anos Disponiveis
      * Até os 5 anos mais recentes de data_pagamento_vale entre as
-     * vendas 'esteve em atraso', em ordem decrescente -- monta os
-     * botões da linha 'Ano' do menu interativo.
+     * vendas 'esteve em atraso' (visão histórica -- inclui quem já
+     * pagou), em ordem decrescente -- monta os botões da linha 'Ano' do
+     * menu interativo, que dirige o card/gráfico.
      * @returns AnosDisponiveisPublic Successful Response
      * @throws ApiError
      */
@@ -1287,9 +1307,11 @@ export class VendasService {
     
     /**
      * Read Inadimplentes Motoristas
-     * Só os motoristas que aparecem em ao menos 1 venda 'esteve em
-     * atraso' -- monta o dropdown 'Nome Motorista' (a opção 'Todos
-     * Motoristas' é sintética, montada só no frontend).
+     * Só os motoristas que têm ao menos 1 cliente em atraso AGORA
+     * (visão de cobrança, não histórica) -- monta o dropdown 'Nome
+     * Motorista' (a opção 'Todos Motoristas' é sintética, montada só no
+     * frontend). Inclui o usuário-sistema 'Distribuidora Gás Favero'
+     * normalmente, como qualquer outro motorista.
      * @returns InadimplentesMotoristasPublic Successful Response
      * @throws ApiError
      */
@@ -1303,8 +1325,9 @@ export class VendasService {
     /**
      * Read Inadimplentes Resumo
      * O único card da tela ('Atraso maior que 30 dias') + o gráfico
-     * -- SEM linha de Semana no menu (diferente do Livro de Vendas),
-     * agrupado por data_pagamento_vale (quando o vale venceu).
+     * -- visão HISTÓRICA (inclui quem já pagou depois de atrasar), SEM
+     * linha de Semana no menu (diferente do Livro de Vendas), agrupado
+     * por data_pagamento_vale (quando o vale venceu).
      * @param data The data for the request.
      * @param data.escopo
      * @param data.ano
@@ -1329,11 +1352,14 @@ export class VendasService {
     
     /**
      * Read Inadimplentes
-     * Tabela de Inadimplentes -- TODAS as vendas 'esteve em atraso'
-     * (sem filtro de período, independente do menu Ano/Mês do topo da
-     * tela), ordenada por data_venda mais ANTIGA primeiro (oposto do
-     * Livro de Vendas). motorista_id opcional filtra pra um motorista só
-     * ('Todos Motoristas', no frontend, simplesmente omite o parâmetro).
+     * Tabela de cobrança -- só quem está em aberto E em atraso AGORA
+     * (visão atual, não histórica -- quem já pagou não aparece aqui,
+     * mesmo que tenha estado atrasado no passado), sem filtro de período
+     * (independente do menu Ano/Mês do topo da tela), ordenada por
+     * data_venda mais ANTIGA primeiro. motorista_id opcional filtra pra
+     * um motorista só ('Todos Motoristas', no frontend, simplesmente
+     * omite o parâmetro) -- é o que alimenta o PDF de cobrança de cada
+     * motorista.
      *
      * soma_preco/soma_valor_pago somam TODO o conjunto filtrado (não só
      * a página atual), igual ao Livro de Vendas.

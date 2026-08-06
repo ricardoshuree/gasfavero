@@ -1,3 +1,8 @@
+// [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: f032de2c | 2026-08-06 15:48:51
+// Substitui useQuery(ruas) por useSugestoesRua em QuickAddCliente
+// [mcp-local harness] feature: logradouros-referencia-autocomplete
+// QuickAddCliente: troca useQuery(ruas) local por useSugestoesRua
+//
 // [mcp-local harness] feature: cores-status-solido | plano: 8740e5ce | 2026-08-06 06:29:16
 // Fundo solido vermelho/verde com letra branca (em vez de fundo claro + letra colorida)
 // [mcp-local harness] feature: cores-status-solido | plano: 8740e5ce
@@ -56,6 +61,7 @@ import {
 } from "@/components/ui/select"
 import TrocarEnderecoDialog from "@/components/Vendas/TrocarEnderecoDialog"
 import useCustomToast from "@/hooks/useCustomToast"
+import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
 
 interface ClienteSectionProps {
@@ -372,11 +378,9 @@ function QuickAddCliente({
     queryFn: () => GeografiaService.readBairros(),
     enabled: incluirEndereco,
   })
-  const { data: ruas } = useQuery({
-    queryKey: ["ruas", bairroId],
-    queryFn: () => GeografiaService.readRuas({ bairroId }),
-    enabled: incluirEndereco && !!bairroId,
-  })
+  const { opcoes: ruasSugeridas } = useSugestoesRua(
+    incluirEndereco ? bairroId : undefined,
+  )
 
   const mutation = useMutation({
     mutationFn: (data: ClienteCreate) =>
@@ -481,7 +485,7 @@ function QuickAddCliente({
               id="qc-rua"
               value={ruaNome}
               onChange={setRuaNome}
-              opcoes={ruas?.data}
+              opcoes={ruasSugeridas}
               disabled={!bairroId}
             />
           </div>

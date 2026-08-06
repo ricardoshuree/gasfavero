@@ -1,3 +1,8 @@
+// [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: f032de2c | 2026-08-06 15:47:25
+// Substitui useQuery(ruas) por useSugestoesRua(bairroId)
+// [mcp-local harness] feature: logradouros-referencia-autocomplete
+// Troca useQuery(ruas) local por useSugestoesRua
+//
 // [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:35:23
 // RuaAutocomplete no lugar do datalist
 // [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:33:52
@@ -45,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
+import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
 
 const formSchema = z.object({
@@ -86,11 +92,7 @@ const TrocarEndereco = ({ cliente, onSuccess }: TrocarEnderecoProps) => {
     enabled: isOpen,
   })
 
-  const { data: ruas } = useQuery({
-    queryKey: ["ruas", bairroId],
-    queryFn: () => GeografiaService.readRuas({ bairroId }),
-    enabled: !!bairroId,
-  })
+  const { opcoes: ruasSugeridas } = useSugestoesRua(bairroId)
 
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
@@ -187,7 +189,7 @@ const TrocarEndereco = ({ cliente, onSuccess }: TrocarEnderecoProps) => {
                       <RuaAutocomplete
                         value={field.value}
                         onChange={field.onChange}
-                        opcoes={ruas?.data}
+                        opcoes={ruasSugeridas}
                         disabled={!bairroId}
                       />
                     </FormControl>

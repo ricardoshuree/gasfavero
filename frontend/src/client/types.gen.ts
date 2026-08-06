@@ -264,6 +264,22 @@ export type LivroVendasResumoPublic = {
     grafico: Array<LivroVendasBucket>;
 };
 
+export type LogradouroReferenciaPublic = {
+    id: string;
+    nome: string;
+};
+
+/**
+ * Resposta de GET /bairros/logradouros-referencia -- a lista
+ * inteira (hoje ~239 nomes), sem paginação nem busca no servidor,
+ * já que o volume é pequeno. Usado no frontend como fonte extra de
+ * sugestão no RuaAutocomplete, mesclado com as ruas já cadastradas
+ * no bairro selecionado (ver comentário em LogradouroReferencia).
+ */
+export type LogradourosReferenciaPublic = {
+    data: Array<LogradouroReferenciaPublic>;
+};
+
 export type Message = {
     message: string;
 };
@@ -685,6 +701,8 @@ export type ClientesTrocarEnderecoData = {
 export type ClientesTrocarEnderecoResponse = (ClientePublic);
 
 export type GeografiaReadBairrosResponse = (BairrosPublic);
+
+export type GeografiaReadLogradourosReferenciaResponse = (LogradourosReferenciaPublic);
 
 export type GeografiaReadRuasData = {
     bairroId: string;

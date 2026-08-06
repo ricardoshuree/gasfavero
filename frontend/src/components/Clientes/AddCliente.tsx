@@ -1,3 +1,9 @@
+// [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: f032de2c | 2026-08-06 15:47:01
+// Substitui useQuery(ruas) por useSugestoesRua(bairroId)
+// [mcp-local harness] feature: logradouros-referencia-autocomplete
+// Troca useQuery(ruas) local por useSugestoesRua (mescla ruas do
+// bairro + catalogo de referencia da cidade)
+//
 // [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:34:37
 // CPF/CNPJ label, mascara telefone, RuaAutocomplete
 // [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:32:36
@@ -53,6 +59,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
+import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
 
 /** Formata dígitos como "(54) 99999-9999" progressivamente. */
@@ -103,13 +110,11 @@ const AddCliente = () => {
     queryFn: () => GeografiaService.readBairros(),
   })
 
-  // Sugestões de rua já cadastradas nesse bairro -- não é uma lista
-  // fechada, o campo continua sendo texto livre (ver EnderecoCreate).
-  const { data: ruas } = useQuery({
-    queryKey: ["ruas", bairroId],
-    queryFn: () => GeografiaService.readRuas({ bairroId }),
-    enabled: !!bairroId,
-  })
+  // Sugestões de rua: mescla o que já foi cadastrado nesse bairro com
+  // o catálogo de referência da cidade (ver useSugestoesRua) -- não é
+  // uma lista fechada, o campo continua sendo texto livre (ver
+  // EnderecoCreate.rua_nome, "cresce por uso").
+  const { opcoes: ruasSugeridas } = useSugestoesRua(bairroId)
 
   const mutation = useMutation({
     mutationFn: (data: ClienteCreate) =>
@@ -264,7 +269,7 @@ const AddCliente = () => {
                       <RuaAutocomplete
                         value={field.value}
                         onChange={field.onChange}
-                        opcoes={ruas?.data}
+                        opcoes={ruasSugeridas}
                         disabled={!bairroId}
                       />
                     </FormControl>

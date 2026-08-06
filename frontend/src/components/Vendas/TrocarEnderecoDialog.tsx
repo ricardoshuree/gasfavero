@@ -1,3 +1,8 @@
+// [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: f032de2c | 2026-08-06 15:47:51
+// Substitui useQuery(ruas) por useSugestoesRua(bairroId)
+// [mcp-local harness] feature: logradouros-referencia-autocomplete
+// Troca useQuery(ruas) local por useSugestoesRua
+//
 // [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:54:14
 // Dialog de adicionar/trocar endereco reutilizavel na tela de Vendas
 // Dialog de adicionar/trocar endereço, usado na tela de Vendas.
@@ -45,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
+import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
 
 const formSchema = z.object({
@@ -83,11 +89,7 @@ export function TrocarEnderecoDialog({
     queryFn: () => GeografiaService.readBairros(),
     enabled: isOpen,
   })
-  const { data: ruas } = useQuery({
-    queryKey: ["ruas", bairroId],
-    queryFn: () => GeografiaService.readRuas({ bairroId }),
-    enabled: !!bairroId,
-  })
+  const { opcoes: ruasSugeridas } = useSugestoesRua(bairroId)
 
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
@@ -193,7 +195,7 @@ export function TrocarEnderecoDialog({
                       <RuaAutocomplete
                         value={field.value}
                         onChange={field.onChange}
-                        opcoes={ruas?.data}
+                        opcoes={ruasSugeridas}
                         disabled={!bairroId}
                       />
                     </FormControl>

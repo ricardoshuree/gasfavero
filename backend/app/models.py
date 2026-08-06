@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: inadimplentes-backend-models | plano: 95cd4259 | 2026-08-06 12:48:02
-# Adiciona InadimplentesResumoPublic, InadimplentesMotoristaPublic, InadimplentesMotoristasPublic apos LivroVendasListPublic
+# [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: c4ccd590 | 2026-08-06 15:37:45
+# Adiciona classe LogradouroReferencia (table) apos Rua, e LogradouroReferenciaPublic/LogradourosReferenciaPublic apos RuasPublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -386,6 +386,29 @@ class Rua(SQLModel, table=True):
     nome: str = Field(max_length=255)
 
 
+# LogradouroReferencia -- catálogo de nomes de rua conhecidos da
+# cidade (fonte: lista pública de logradouros de Veranópolis),
+# DELIBERADAMENTE sem vínculo a bairro. Tentamos descobrir a
+# associação rua↔bairro via Google Maps e Correios (busca CEP) e
+# nenhuma das duas fontes é confiável pra Veranópolis -- Correios só
+# tem CEP individual pra meia dúzia de logradouros centrais (o resto
+# cai no CEP genérico do município), e o Maps não devolve isso de
+# forma estruturada. Decisão confirmada com o Ricardo: cadastrar só
+# os NOMES por enquanto (sem bairro) e usar como fonte extra de
+# sugestão no autocomplete de endereço -- a associação com bairro
+# fica pra depois, feita manualmente por quem conhece a cidade.
+#
+# Continua sem afetar em nada o "cresce por uso" da tabela Rua
+# (bairro-scoped) -- as duas tabelas convivem: Rua é o que já foi
+# efetivamente usado num endereço real; LogradouroReferencia é só
+# uma lista de nomes prováveis pra sugerir.
+class LogradouroReferencia(SQLModel, table=True):
+    __tablename__ = "logradouro_referencia"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    nome: str = Field(unique=True, max_length=255)
+
+
 class Endereco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     rua_id: uuid.UUID = Field(foreign_key="rua.id", ondelete="RESTRICT")
@@ -416,6 +439,20 @@ class RuaPublic(SQLModel):
 
 class RuasPublic(SQLModel):
     data: list[RuaPublic]
+
+
+class LogradouroReferenciaPublic(SQLModel):
+    id: uuid.UUID
+    nome: str
+
+
+class LogradourosReferenciaPublic(SQLModel):
+    """Resposta de GET /bairros/logradouros-referencia -- a lista
+    inteira (hoje ~239 nomes), sem paginação nem busca no servidor,
+    já que o volume é pequeno. Usado no frontend como fonte extra de
+    sugestão no RuaAutocomplete, mesclado com as ruas já cadastradas
+    no bairro selecionado (ver comentário em LogradouroReferencia)."""
+    data: list[LogradouroReferenciaPublic]
 
 
 class EnderecoCreate(SQLModel):
