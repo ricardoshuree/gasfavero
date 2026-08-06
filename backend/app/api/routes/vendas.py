@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: livro-vendas-totais-tabela | plano: 0a43512a | 2026-08-06 10:31:33
-# Fix: aplica filtros de data independentemente em 3 queries (count/soma/listagem) via helper local, evitando referenciar Venda.x sobre a subquery de outra (que gerava SQL incorreto)
+# [mcp-local harness] feature: livro-vendas-filtro-status-e-datas-default | plano: abff5167 | 2026-08-06 10:52:59
+# Adiciona filtro de status (todos/pago/em_aberto/em_atraso) aplicado nas 3 queries via helper local
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, require_module_permission
@@ -554,11 +555,20 @@ def baixar_vale(
 #                            "agora", ignorando ano/mês selecionados.
 #
 # A TABELA (GET /livro) é independente desse menu -- não filtra pelo
-# escopo, tem paginação e filtro próprio de intervalo de datas. Além
-# dos itens da página, retorna soma_preco/soma_valor_pago (ver
-# LivroVendasListPublic, models.py) -- o total das colunas
+# escopo, tem paginação, filtro próprio de intervalo de datas e filtro
+# de status. Além dos itens da página, retorna soma_preco/soma_valor_pago
+# (ver LivroVendasListPublic, models.py) -- o total das colunas
 # "Preço"/"Valor pago" de TODO o conjunto filtrado (não só a página
 # atual), usado na linha de totais no rodapé da tabela.
+#
+# Status possíveis pro filtro da tabela (independente do status
+# calculado no frontend pro badge de cada linha, mas com a MESMA
+# lógica):
+#   "todos"     -- sem filtro (default)
+#   "pago"      -- pago_em IS NOT NULL
+#   "em_aberto" -- pago_em IS NULL E NÃO (vale com data_venda antiga)
+#   "em_atraso" -- pago_em IS NULL E forma_pagamento=vale E
+#                  data_venda <= hoje - DIAS_ATRASO_VALE
 #
 # Precisam vir ANTES de "/{id}" nesse arquivo -- mesmo motivo do bloco
 # de Recebimento de Vale acima.
@@ -761,36 +771,53 @@ def read_livro_vendas(
     session: SessionDep,
     data_inicio: date | None = None,
     data_fim: date | None = None,
+    status: Literal["todos", "pago", "em_aberto", "em_atraso"] = "todos",
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
     """Tabela de TODAS as vendas (qualquer forma de pagamento),
     ordenada por data_venda mais recente primeiro -- independente do
-    menu interativo (ano/mês/semana), com seu próprio filtro opcional
-    de intervalo de datas.
+    menu interativo (ano/mês/semana), com filtro próprio de intervalo
+    de datas e de status.
 
     soma_preco/soma_valor_pago (linha de totais no rodapé da tabela,
-    no frontend) são calculados sobre TODO o conjunto que bate com o
-    filtro de data -- não só os `limit` registros da página atual.
-    Os mesmos filtros (data_inicio/data_fim) são aplicados de forma
-    independente em 3 queries (count, soma, listagem paginada) --
-    evita reusar a subquery de uma pra fazer agregação de coluna da
-    outra, o que gera SQL incorreto (a coluna mapeada Venda.x não
-    corresponde à coluna da subquery)."""
+    no frontend) são calculados sobre TODO o conjunto que bate com os
+    filtros ativos -- não só os `limit` registros da página atual.
+    Os mesmos filtros são aplicados de forma independente em 3 queries
+    (count, soma, listagem paginada) -- evita reusar a subquery de uma
+    pra fazer agregação de coluna da outra, o que gera SQL incorreto
+    (a coluna mapeada Venda.x não corresponde à coluna da subquery)."""
+    limite_atraso = date.today() - timedelta(days=DIAS_ATRASO_VALE)
 
-    def _aplicar_filtros_data(stmt):
+    def _aplicar_filtros(stmt):
         if data_inicio is not None:
             stmt = stmt.where(Venda.data_venda >= data_inicio)
         if data_fim is not None:
             stmt = stmt.where(Venda.data_venda <= data_fim)
+
+        if status == "pago":
+            stmt = stmt.where(col(Venda.pago_em).is_not(None))
+        elif status == "em_aberto":
+            stmt = stmt.where(col(Venda.pago_em).is_(None)).where(
+                or_(
+                    Venda.forma_pagamento != "vale",
+                    Venda.data_venda > limite_atraso,
+                )
+            )
+        elif status == "em_atraso":
+            stmt = (
+                stmt.where(col(Venda.pago_em).is_(None))
+                .where(Venda.forma_pagamento == "vale")
+                .where(Venda.data_venda <= limite_atraso)
+            )
         return stmt
 
     count = session.exec(
-        _aplicar_filtros_data(select(func.count()).select_from(Venda))
+        _aplicar_filtros(select(func.count()).select_from(Venda))
     ).one()
 
     soma_preco, soma_valor_pago = session.exec(
-        _aplicar_filtros_data(
+        _aplicar_filtros(
             select(
                 func.coalesce(func.sum(Venda.valor_total), 0),
                 func.coalesce(func.sum(Venda.valor_pago), 0),
@@ -799,7 +826,7 @@ def read_livro_vendas(
     ).one()
 
     vendas = session.exec(
-        _aplicar_filtros_data(select(Venda))
+        _aplicar_filtros(select(Venda))
         .order_by(col(Venda.data_venda).desc(), col(Venda.created_at).desc())
         .offset(skip)
         .limit(limit)

@@ -927,6 +927,7 @@ export type VendasReadLivroVendasData = {
     dataInicio?: (string | null);
     limit?: number;
     skip?: number;
+    status?: 'todos' | 'pago' | 'em_aberto' | 'em_atraso';
 };
 
 export type VendasReadLivroVendasResponse = (LivroVendasListPublic);

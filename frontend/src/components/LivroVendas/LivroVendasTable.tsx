@@ -1,17 +1,19 @@
-// [mcp-local harness] feature: livro-vendas-totais-tabela | plano: 20e0e2dd | 2026-08-06 10:32:28
-// Adiciona TableFooter com linha de totais (soma_preco/soma_valor_pago do backend), dinamica com o filtro de data
+// [mcp-local harness] feature: livro-vendas-filtro-status-e-datas-default | plano: 29899004 | 2026-08-06 10:53:57
+// Datas default = mes vigente, select de status (aplica na hora), label renomeado para "Consultar vendas por datas"
 // Tabela do Livro de Vendas -- TODAS as vendas (qualquer forma de
 // pagamento), independente do menu interativo (ano/mês/semana) do
-// topo da tela. Filtro próprio de intervalo de datas (Início/Fim +
-// botão Buscar), paginada, ordenada por data de venda mais recente
-// primeiro. Server-side (não usa o DataTable genérico, que só pagina
-// em memória) -- mesmo padrão da ValesTable de Recebimento de Vale.
+// topo da tela. Filtro próprio de intervalo de datas (Início/Fim,
+// default = mês vigente, + botão Buscar) e filtro de status (aplica
+// na hora, sem precisar clicar em Buscar) -- paginada, ordenada por
+// data de venda mais recente primeiro. Server-side (não usa o
+// DataTable genérico, que só pagina em memória) -- mesmo padrão da
+// ValesTable de Recebimento de Vale.
 //
 // Rodapé com linha de totais (soma de "Preço" e "Valor pago") --
 // soma_preco/soma_valor_pago vêm do backend já calculados sobre TODO
-// o conjunto que bate com o filtro de data ativo (não só a página
-// atual), então a linha de totais muda dinamicamente junto com
-// "Consulta vendas data" mas não com a paginação.
+// o conjunto que bate com os filtros ativos (não só a página atual),
+// então a linha de totais muda dinamicamente junto com "Consultar
+// vendas por datas" e o filtro de status, mas não com a paginação.
 import { useQuery } from "@tanstack/react-query"
 import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { useState } from "react"
@@ -20,6 +22,13 @@ import { VendasService } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -42,6 +51,15 @@ const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
   dinheiro: "Dinheiro",
   vale: "Vale",
 }
+
+type StatusFiltro = "todos" | "pago" | "em_aberto" | "em_atraso"
+
+const STATUS_OPTIONS: Array<{ value: StatusFiltro; label: string }> = [
+  { value: "todos", label: "Todos os status" },
+  { value: "pago", label: "Pago" },
+  { value: "em_aberto", label: "Em aberto" },
+  { value: "em_atraso", label: "Em atraso" },
+]
 
 function formatMoney(valor: string | number): string {
   return Number(valor).toLocaleString("pt-BR", {
@@ -94,13 +112,33 @@ function StatusBadge({
   )
 }
 
+// dd formatado em ISO (yyyy-mm-dd) -- formato nativo do <input
+// type="date"> e também o que a API espera.
+function primeiroDiaMesAtualISO(): string {
+  const hoje = new Date()
+  const y = hoje.getFullYear()
+  const m = String(hoje.getMonth() + 1).padStart(2, "0")
+  return `${y}-${m}-01`
+}
+
+function ultimoDiaMesAtualISO(): string {
+  const hoje = new Date()
+  const y = hoje.getFullYear()
+  const ultimoDia = new Date(y, hoje.getMonth() + 1, 0).getDate()
+  const m = String(hoje.getMonth() + 1).padStart(2, "0")
+  return `${y}-${m}-${String(ultimoDia).padStart(2, "0")}`
+}
+
 export function LivroVendasTable() {
-  const [inicioInput, setInicioInput] = useState("")
-  const [fimInput, setFimInput] = useState("")
+  // Estado padrão ao carregar a tela: mês vigente (pedido do
+  // Ricardo) -- primeiro e último dia do mês atual.
+  const [inicioInput, setInicioInput] = useState(primeiroDiaMesAtualISO())
+  const [fimInput, setFimInput] = useState(ultimoDiaMesAtualISO())
   const [filtro, setFiltro] = useState<{ inicio: string; fim: string }>({
-    inicio: "",
-    fim: "",
+    inicio: primeiroDiaMesAtualISO(),
+    fim: ultimoDiaMesAtualISO(),
   })
+  const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("todos")
   const [page, setPage] = useState(0)
 
   function handleBuscar() {
@@ -108,12 +146,18 @@ export function LivroVendasTable() {
     setPage(0)
   }
 
+  function handleStatusChange(value: StatusFiltro) {
+    setStatusFiltro(value)
+    setPage(0)
+  }
+
   const { data, isFetching } = useQuery({
-    queryKey: ["livroVendas", filtro.inicio, filtro.fim, page],
+    queryKey: ["livroVendas", filtro.inicio, filtro.fim, statusFiltro, page],
     queryFn: () =>
       VendasService.readLivroVendas({
         dataInicio: filtro.inicio || undefined,
         dataFim: filtro.fim || undefined,
+        status: statusFiltro,
         skip: page * PAGE_SIZE,
         limit: PAGE_SIZE,
       }),
@@ -126,7 +170,7 @@ export function LivroVendasTable() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold">Consulta vendas data</p>
+        <p className="text-sm font-semibold">Consultar vendas por datas</p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor="livro-data-inicio" className="text-xs">
@@ -155,6 +199,24 @@ export function LivroVendasTable() {
           <Button type="button" onClick={handleBuscar} size="icon">
             <Search className="size-4" />
           </Button>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="livro-status" className="text-xs">
+              Status
+            </Label>
+            <Select value={statusFiltro} onValueChange={handleStatusChange}>
+              <SelectTrigger id="livro-status" className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
