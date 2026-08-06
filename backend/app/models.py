@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: recebimento-vale-card-mes | plano: 3ab86d3c | 2026-08-05 21:51:21
-# Adiciona pagos_mes_qtd/pagos_mes_valor ao ResumoRecebimentoValePublic
+# [mcp-local harness] feature: livro-vendas-backend-models | plano: 895e2ddf | 2026-08-06 09:31:30
+# Adiciona LivroVendasBucket, LivroVendasResumoPublic e AnosDisponiveisPublic logo apos ResumoRecebimentoValePublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -829,6 +829,61 @@ class ResumoRecebimentoValePublic(SQLModel):
     aguardando_baixa_valor: Decimal
     pagos_mes_qtd: int
     pagos_mes_valor: Decimal
+
+
+# ---- Livro de Vendas (endpoints em vendas.py) ----
+#
+# Tela geral de todas as vendas (qualquer forma de pagamento --
+# diferente do Recebimento de Vale, que é só vale). Tem um menu
+# interativo de 3 linhas (Ano / Mês / Semana) que dirige a
+# granularidade do gráfico e o período usado pelos 2 cards; a tabela
+# de baixo é independente disso (tem seu próprio filtro de intervalo
+# de datas). Ver docstring de read_livro_resumo em vendas.py para a
+# lógica completa de drill-down.
+
+class LivroVendasBucket(SQLModel):
+    """Um ponto (barra) do gráfico -- label já formatado pro eixo X
+    (ex: 'Jan', '2025', 'Domingo', '01/08–02/08', dependendo da
+    granularidade ativa) e o valor em caixa (soma de valor_pago das
+    vendas já pagas) somado dentro daquele bucket de tempo."""
+    label: str
+    valor: Decimal
+
+
+class LivroVendasResumoPublic(SQLModel):
+    """Resposta de GET /vendas/livro/resumo -- os 2 cards ('Em caixa'
+    e 'Em aberto') + o período textual + os pontos do gráfico, tudo
+    já filtrado pelo escopo ativo do menu interativo (ano/mês/semana).
+
+    em_caixa: vendas já pagas (pago_em preenchido) com data_venda
+    dentro do período -- qtd e soma de valor_pago (o que de fato
+    entrou no caixa).
+
+    em_aberto: vendas ainda não pagas (pago_em nulo -- sempre vale em
+    aberto ou em atraso) com data_venda dentro do período -- qtd e
+    soma de valor_total (o que falta receber).
+
+    periodo_inicio/periodo_fim: limites do período correspondente ao
+    escopo ativo, pro frontend montar o label '(dd/mm/aaaa -
+    dd/mm/aaaa)'.
+    """
+    em_caixa_qtd: int
+    em_caixa_valor: Decimal
+    em_aberto_qtd: int
+    em_aberto_valor: Decimal
+    periodo_inicio: date
+    periodo_fim: date
+    grafico: list[LivroVendasBucket]
+
+
+class AnosDisponiveisPublic(SQLModel):
+    """Resposta de GET /vendas/livro/anos-disponiveis -- até os 5 anos
+    mais recentes com ao menos 1 venda (data_venda), em ordem
+    decrescente. Usado pra montar os botões da linha 'Ano' do menu
+    interativo -- se houver um 6º ano de histórico ele simplesmente
+    não aparece aqui (mas continua acessível via escopo 'todos_anos',
+    que não depende desta lista)."""
+    anos: list[int]
 
 
 # ---------------------------------------------------------------------------

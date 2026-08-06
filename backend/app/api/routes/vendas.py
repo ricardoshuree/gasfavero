@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977 | 2026-08-06 06:04:32
-# Novo endpoint GET /vendas/cliente/{id}/historico -- ultimas N vendas do cliente (pedido do Giovani)
+# [mcp-local harness] feature: livro-vendas-backend-endpoints | plano: 15fdb0c2 | 2026-08-06 09:33:43
+# Adiciona bloco Livro de Vendas (anos-disponiveis, resumo com drill-down, tabela paginada) antes da rota generica GET /{id}
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -23,6 +23,7 @@ from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, require_module_permission
 from app.models import (
+    AnosDisponiveisPublic,
     Bairro,
     BlocoVale,
     Cidade,
@@ -30,6 +31,8 @@ from app.models import (
     Endereco,
     EnderecoPublic,
     Item,
+    LivroVendasBucket,
+    LivroVendasResumoPublic,
     Preco,
     ProximoValeNumeroPublic,
     ResumoRecebimentoValePublic,
@@ -50,6 +53,12 @@ from app.models import (
 router = APIRouter(prefix="/vendas", tags=["vendas"])
 
 MODULE = "vendas"
+
+# Módulo próprio do Livro de Vendas -- separado de "vendas" de
+# propósito (decisão do Ricardo), pra poder restringir o acesso
+# independentemente (ex: só "gerente"), diferente do Recebimento de
+# Vale que reaproveita o módulo "vendas".
+MODULE_LIVRO = "livro_vendas"
 
 # Limite de dias corridos desde a venda pra considerar um vale em
 # aberto "em atraso" (contado a partir de data_venda, decisão do
@@ -505,6 +514,251 @@ def baixar_vale(
     session.commit()
     session.refresh(venda)
     return _to_venda_public(session, venda)
+
+
+# ---------------------------------------------------------------------------
+# Livro de Vendas
+#
+# Dashboard geral de TODAS as vendas (qualquer forma de pagamento --
+# diferente do Recebimento de Vale, que é só vale). Módulo RBAC
+# próprio ("livro_vendas", ver migration f1a2b3c4d5e6), separado de
+# "vendas".
+#
+# Menu interativo de 3 linhas, mutuamente exclusivas entre si (só um
+# "escopo" ativo por vez), decide o drill-down do gráfico e o período
+# usado pelos 2 cards (tudo agrupado por data_venda, nunca por
+# pago_em/recebido_em):
+#
+#   escopo="todos_anos"  -- todo o histórico. Gráfico: 1 barra por ano
+#                            com venda registrada.
+#   escopo="ano"          -- requer `ano`. Gráfico: 1 barra por mês
+#                            (Jan-Dez) daquele ano.
+#   escopo="mes"          -- requer `ano` + `mes`. Gráfico: 1 barra por
+#                            semana (dom-sáb, cortada nos limites do
+#                            mês) daquele mês. Usado tanto pelo clique
+#                            direto num mês quanto pelo atalho "todas
+#                            as semanas" (que sempre manda o mês/ano
+#                            VIGENTE, sobrescrevendo qualquer seleção
+#                            de ano/mês feita antes) -- e é o escopo
+#                            default ao carregar a tela.
+#   escopo="semana"       -- sem parâmetros (sempre a semana corrente,
+#                            dom-sáb). Gráfico: 1 barra por dia.
+#                            Atalho independente -- sempre pula pro
+#                            "agora", ignorando ano/mês selecionados.
+#
+# A TABELA (GET /livro) é independente desse menu -- não filtra pelo
+# escopo, tem paginação e filtro próprio de intervalo de datas.
+#
+# Precisam vir ANTES de "/{id}" nesse arquivo -- mesmo motivo do bloco
+# de Recebimento de Vale acima.
+# ---------------------------------------------------------------------------
+
+NOMES_DIA_SEMANA = [
+    "Domingo",
+    "Segunda",
+    "Terça",
+    "Quarta",
+    "Quinta",
+    "Sexta",
+    "Sábado",
+]
+
+MESES_ABREV = [
+    "Jan",
+    "Fev",
+    "Mar",
+    "Abr",
+    "Mai",
+    "Jun",
+    "Jul",
+    "Ago",
+    "Set",
+    "Out",
+    "Nov",
+    "Dez",
+]
+
+
+def _semana_atual(hoje: date | None = None) -> tuple[date, date]:
+    """(domingo, sábado) da semana corrente -- semana sempre começa
+    no domingo (decisão do Ricardo)."""
+    hoje = hoje or date.today()
+    # date.weekday(): segunda=0 ... domingo=6. Convertendo pra
+    # domingo=0 ... sábado=6 pra poder calcular o início da semana.
+    dow_domingo_zero = (hoje.weekday() + 1) % 7
+    inicio = hoje - timedelta(days=dow_domingo_zero)
+    fim = inicio + timedelta(days=6)
+    return inicio, fim
+
+
+def _semanas_do_mes(ano: int, mes: int) -> list[tuple[date, date]]:
+    """Divide o mês inteiro em buckets semanais (dom-sáb) -- o
+    primeiro bucket começa no dia 1 (pode ser um bucket "curto", se o
+    mês não começar num domingo) e o último termina no último dia do
+    mês (idem). Buckets intermediários são semanas cheias."""
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+    fim_mes = date(ano, mes, ultimo_dia)
+    cursor = date(ano, mes, 1)
+
+    buckets: list[tuple[date, date]] = []
+    while cursor <= fim_mes:
+        dow_domingo_zero = (cursor.weekday() + 1) % 7
+        dias_ate_sabado = 6 - dow_domingo_zero
+        fim_bucket = min(cursor + timedelta(days=dias_ate_sabado), fim_mes)
+        buckets.append((cursor, fim_bucket))
+        cursor = fim_bucket + timedelta(days=1)
+    return buckets
+
+
+def _label_bucket_semana(inicio: date, fim: date) -> str:
+    return f"{inicio.day:02d}/{inicio.month:02d}–{fim.day:02d}/{fim.month:02d}"
+
+
+@router.get(
+    "/livro/anos-disponiveis",
+    response_model=AnosDisponiveisPublic,
+    dependencies=[Depends(require_module_permission(MODULE_LIVRO, action="read"))],
+)
+def read_livro_anos_disponiveis(session: SessionDep) -> Any:
+    """Até os 5 anos mais recentes com ao menos 1 venda, em ordem
+    decrescente -- monta os botões da linha 'Ano' do menu interativo.
+    Se houver um 6º ano de histórico, ele fica de fora daqui (mas
+    continua acessível via escopo 'todos_anos', que não usa esta
+    lista)."""
+    datas = session.exec(select(Venda.data_venda)).all()
+    anos = sorted({d.year for d in datas}, reverse=True)[:5]
+    return AnosDisponiveisPublic(anos=anos)
+
+
+@router.get(
+    "/livro/resumo",
+    response_model=LivroVendasResumoPublic,
+    dependencies=[Depends(require_module_permission(MODULE_LIVRO, action="read"))],
+)
+def read_livro_resumo(
+    session: SessionDep,
+    escopo: Literal["todos_anos", "ano", "mes", "semana"] = "mes",
+    ano: int | None = None,
+    mes: int | None = None,
+) -> Any:
+    hoje = date.today()
+
+    if escopo == "semana":
+        periodo_inicio, periodo_fim = _semana_atual(hoje)
+        buckets_def = [
+            (
+                NOMES_DIA_SEMANA[i],
+                periodo_inicio + timedelta(days=i),
+                periodo_inicio + timedelta(days=i),
+            )
+            for i in range(7)
+        ]
+
+    elif escopo == "mes":
+        # Sem ano/mes informado (atalho "todas as semanas" e também o
+        # default de carregamento da tela): usa sempre o mês vigente.
+        ano_efetivo = ano or hoje.year
+        mes_efetivo = mes or hoje.month
+        if not (1 <= mes_efetivo <= 12):
+            raise HTTPException(status_code=400, detail="Mês inválido")
+
+        ultimo_dia = calendar.monthrange(ano_efetivo, mes_efetivo)[1]
+        periodo_inicio = date(ano_efetivo, mes_efetivo, 1)
+        periodo_fim = date(ano_efetivo, mes_efetivo, ultimo_dia)
+        buckets_def = [
+            (_label_bucket_semana(ini, fim), ini, fim)
+            for ini, fim in _semanas_do_mes(ano_efetivo, mes_efetivo)
+        ]
+
+    elif escopo == "ano":
+        if ano is None:
+            raise HTTPException(status_code=400, detail="Informe o ano")
+        periodo_inicio = date(ano, 1, 1)
+        periodo_fim = date(ano, 12, 31)
+        buckets_def = [
+            (
+                MESES_ABREV[m - 1],
+                date(ano, m, 1),
+                date(ano, m, calendar.monthrange(ano, m)[1]),
+            )
+            for m in range(1, 13)
+        ]
+
+    else:  # todos_anos
+        primeira_data_venda = session.exec(select(func.min(Venda.data_venda))).one()
+        ano_inicio = primeira_data_venda.year if primeira_data_venda else hoje.year
+        periodo_inicio = date(ano_inicio, 1, 1)
+        periodo_fim = date(hoje.year, 12, 31)
+        buckets_def = [
+            (str(a), date(a, 1, 1), date(a, 12, 31))
+            for a in range(ano_inicio, hoje.year + 1)
+        ]
+
+    vendas_periodo = session.exec(
+        select(Venda)
+        .where(Venda.data_venda >= periodo_inicio)
+        .where(Venda.data_venda <= periodo_fim)
+    ).all()
+
+    em_caixa = [v for v in vendas_periodo if v.pago_em is not None]
+    em_aberto = [v for v in vendas_periodo if v.pago_em is None]
+
+    grafico = []
+    for label, bucket_inicio, bucket_fim in buckets_def:
+        valor_bucket = sum(
+            (
+                v.valor_pago
+                for v in em_caixa
+                if bucket_inicio <= v.data_venda <= bucket_fim
+            ),
+            Decimal("0"),
+        )
+        grafico.append(LivroVendasBucket(label=label, valor=valor_bucket))
+
+    return LivroVendasResumoPublic(
+        em_caixa_qtd=len(em_caixa),
+        em_caixa_valor=sum((v.valor_pago for v in em_caixa), Decimal("0")),
+        em_aberto_qtd=len(em_aberto),
+        em_aberto_valor=sum((v.valor_total for v in em_aberto), Decimal("0")),
+        periodo_inicio=periodo_inicio,
+        periodo_fim=periodo_fim,
+        grafico=grafico,
+    )
+
+
+@router.get(
+    "/livro",
+    response_model=VendasPublic,
+    dependencies=[Depends(require_module_permission(MODULE_LIVRO, action="read"))],
+)
+def read_livro_vendas(
+    session: SessionDep,
+    data_inicio: date | None = None,
+    data_fim: date | None = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> Any:
+    """Tabela de TODAS as vendas (qualquer forma de pagamento),
+    ordenada por data_venda mais recente primeiro -- independente do
+    menu interativo (ano/mês/semana), com seu próprio filtro opcional
+    de intervalo de datas."""
+    query = select(Venda)
+    if data_inicio is not None:
+        query = query.where(Venda.data_venda >= data_inicio)
+    if data_fim is not None:
+        query = query.where(Venda.data_venda <= data_fim)
+
+    count = session.exec(select(func.count()).select_from(query.subquery())).one()
+
+    vendas = session.exec(
+        query.order_by(col(Venda.data_venda).desc(), col(Venda.created_at).desc())
+        .offset(skip)
+        .limit(limit)
+    ).all()
+
+    return VendasPublic(
+        data=[_to_venda_public(session, v) for v in vendas], count=count
+    )
 
 
 @router.get(

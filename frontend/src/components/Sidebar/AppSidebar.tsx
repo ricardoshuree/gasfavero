@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: recebimento-vale-frontend | plano: 18bab2b5 | 2026-08-05 15:55:32
-// Adiciona item "Recebimento de Vale" no menu lateral (modulo vendas)
+// [mcp-local harness] feature: livro-vendas-sidebar | plano: ae9b7056 | 2026-08-06 09:34:32
+// Item "Livro de Vendas" (modulo livro_vendas) logo abaixo de Recebimento de Vale
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -9,6 +9,9 @@
  * Itens controlados por módulo (visíveis se can_read):
  *   - Vendas             → módulo "vendas"
  *   - Recebimento de Vale → módulo "vendas" (mesma permissão de Vendas)
+ *   - Livro de Vendas    → módulo "livro_vendas" (módulo próprio, não
+ *                           reaproveita "vendas" -- pode ser restrito
+ *                           independentemente, ex: só "gerente")
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -28,6 +31,7 @@
 
 import {
   Banknote,
+  Book,
   Box,
   HandCoins,
   Home,
@@ -65,6 +69,12 @@ const MODULE_ITEMS: Array<Item & { module: string }> = [
     icon: HandCoins,
     title: "Recebimento de Vale",
     path: "/recebimento-vale",
+  },
+  {
+    module: "livro_vendas",
+    icon: Book,
+    title: "Livro de Vendas",
+    path: "/livro-vendas",
   },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },

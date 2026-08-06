@@ -17,6 +17,7 @@ import { Route as SignupB2cDisabledRouteImport } from './routes/signup-b2c-disab
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
+import { Route as LayoutLivroVendasRouteImport } from './routes/_layout/livro-vendas'
 import { Route as LayoutPermissionsRouteImport } from './routes/_layout/permissions'
 import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
@@ -64,6 +65,11 @@ const LayoutClientesRoute = LayoutClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutLivroVendasRoute = LayoutLivroVendasRouteImport.update({
+  id: '/livro-vendas',
+  path: '/livro-vendas',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutPermissionsRoute = LayoutPermissionsRouteImport.update({
   id: '/permissions',
   path: '/permissions',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
   '/clientes': typeof LayoutClientesRoute
+  '/livro-vendas': typeof LayoutLivroVendasRoute
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
   '/clientes': typeof LayoutClientesRoute
+  '/livro-vendas': typeof LayoutLivroVendasRoute
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/clientes': typeof LayoutClientesRoute
+  '/_layout/livro-vendas': typeof LayoutLivroVendasRoute
   '/_layout/permissions': typeof LayoutPermissionsRoute
   '/_layout/precos': typeof LayoutPrecosRoute
   '/_layout/produtos': typeof LayoutProdutosRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/admin'
     | '/clientes'
+    | '/livro-vendas'
     | '/permissions'
     | '/precos'
     | '/produtos'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/admin'
     | '/clientes'
+    | '/livro-vendas'
     | '/permissions'
     | '/precos'
     | '/produtos'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/_layout/admin'
     | '/_layout/clientes'
+    | '/_layout/livro-vendas'
     | '/_layout/permissions'
     | '/_layout/precos'
     | '/_layout/produtos'
@@ -268,6 +280,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutClientesRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/livro-vendas': {
+      id: '/_layout/livro-vendas'
+      path: '/livro-vendas'
+      fullPath: '/livro-vendas'
+      preLoaderRoute: typeof LayoutLivroVendasRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/permissions': {
       id: '/_layout/permissions'
       path: '/permissions'
@@ -323,6 +342,7 @@ declare module '@tanstack/react-router' {
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
   LayoutClientesRoute: typeof LayoutClientesRoute
+  LayoutLivroVendasRoute: typeof LayoutLivroVendasRoute
   LayoutPermissionsRoute: typeof LayoutPermissionsRoute
   LayoutPrecosRoute: typeof LayoutPrecosRoute
   LayoutProdutosRoute: typeof LayoutProdutosRoute
@@ -336,6 +356,7 @@ interface LayoutRouteChildren {
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
   LayoutClientesRoute: LayoutClientesRoute,
+  LayoutLivroVendasRoute: LayoutLivroVendasRoute,
   LayoutPermissionsRoute: LayoutPermissionsRoute,
   LayoutPrecosRoute: LayoutPrecosRoute,
   LayoutProdutosRoute: LayoutProdutosRoute,
