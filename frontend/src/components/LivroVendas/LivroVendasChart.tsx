@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: livro-vendas-frontend-chart-fix | plano: e5db18bf | 2026-08-06 09:38:44
-// formatDataBR com guarda contra string vazia
+// [mcp-local harness] feature: livro-vendas-fix-build-typescript | plano: 407bd393 | 2026-08-06 10:16:16
+// Remove anotacao de tipo explicita do parametro do formatter do Tooltip (deixa o TS inferir do tipo Formatter do recharts)
 // Gráfico de barras do Livro de Vendas -- eixo Y é o valor em caixa
 // (R$), eixo X é o bucket de tempo correspondente à granularidade do
 // escopo ativo (dia/semana/mês/ano, ver LivroVendasMenu). Renderiza
@@ -77,7 +77,7 @@ export function LivroVendasChart({
                 width={60}
               />
               <Tooltip
-                formatter={(value: number) => formatMoney(value)}
+                formatter={(value) => formatMoney(Number(value))}
                 cursor={{ fill: "var(--muted)", opacity: 0.4 }}
               />
               <Bar dataKey="valor" fill="var(--primary)" radius={[4, 4, 0, 0]} />
