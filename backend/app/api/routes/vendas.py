@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: livro-vendas-backend-endpoints | plano: 15fdb0c2 | 2026-08-06 09:33:43
-# Adiciona bloco Livro de Vendas (anos-disponiveis, resumo com drill-down, tabela paginada) antes da rota generica GET /{id}
+# [mcp-local harness] feature: livro-vendas-breakdown-forma-pagamento | plano: 94fc3005 | 2026-08-06 10:02:03
+# Import LivroVendasFormaPagamentoValor, constante FORMAS_PAGAMENTO_ORDEM, e calculo/retorno de em_caixa_por_forma_pagamento em read_livro_resumo
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -32,6 +32,7 @@ from app.models import (
     EnderecoPublic,
     Item,
     LivroVendasBucket,
+    LivroVendasFormaPagamentoValor,
     LivroVendasResumoPublic,
     Preco,
     ProximoValeNumeroPublic,
@@ -64,6 +65,11 @@ MODULE_LIVRO = "livro_vendas"
 # aberto "em atraso" (contado a partir de data_venda, decisão do
 # Ricardo -- não da data prevista de pagamento).
 DIAS_ATRASO_VALE = 30
+
+# Ordem fixa de exibição do detalhamento "Em caixa" por forma de
+# pagamento no Livro de Vendas (pedido do Ricardo) -- sempre as 4
+# presentes na resposta, mesmo com valor 0.
+FORMAS_PAGAMENTO_ORDEM = ["cartao", "pix", "dinheiro", "vale"]
 
 
 # ---------------------------------------------------------------------------
@@ -715,9 +721,24 @@ def read_livro_resumo(
         )
         grafico.append(LivroVendasBucket(label=label, valor=valor_bucket))
 
+    # Detalhamento de "Em caixa" por forma de pagamento -- sempre as 4
+    # formas presentes, na ordem fixa de FORMAS_PAGAMENTO_ORDEM, com
+    # valor 0 pra quem não teve venda paga no período.
+    em_caixa_por_forma_pagamento = [
+        LivroVendasFormaPagamentoValor(
+            forma_pagamento=forma,
+            valor=sum(
+                (v.valor_pago for v in em_caixa if v.forma_pagamento == forma),
+                Decimal("0"),
+            ),
+        )
+        for forma in FORMAS_PAGAMENTO_ORDEM
+    ]
+
     return LivroVendasResumoPublic(
         em_caixa_qtd=len(em_caixa),
         em_caixa_valor=sum((v.valor_pago for v in em_caixa), Decimal("0")),
+        em_caixa_por_forma_pagamento=em_caixa_por_forma_pagamento,
         em_aberto_qtd=len(em_aberto),
         em_aberto_valor=sum((v.valor_total for v in em_aberto), Decimal("0")),
         periodo_inicio=periodo_inicio,

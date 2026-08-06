@@ -599,6 +599,28 @@ granularidade ativa) e o valor em caixa (soma de valor_pago das
 vendas já pagas) somado dentro daquele bucket de tempo.`
 } as const;
 
+export const LivroVendasFormaPagamentoValorSchema = {
+    properties: {
+        forma_pagamento: {
+            type: 'string',
+            title: 'Forma Pagamento'
+        },
+        valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor'
+        }
+    },
+    type: 'object',
+    required: ['forma_pagamento', 'valor'],
+    title: 'LivroVendasFormaPagamentoValor',
+    description: `Uma linha do detalhamento de 'Em caixa' por forma de pagamento
+-- forma_pagamento é o slug técnico (cartao/pix/dinheiro/vale, o
+mesmo valor gravado em Venda.forma_pagamento); o label de exibição
+é responsabilidade do frontend. valor é a soma de valor_pago das
+vendas JÁ PAGAS daquela forma, dentro do período ativo.`
+} as const;
+
 export const LivroVendasResumoPublicSchema = {
     properties: {
         em_caixa_qtd: {
@@ -609,6 +631,13 @@ export const LivroVendasResumoPublicSchema = {
             type: 'string',
             pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
             title: 'Em Caixa Valor'
+        },
+        em_caixa_por_forma_pagamento: {
+            items: {
+                '$ref': '#/components/schemas/LivroVendasFormaPagamentoValor'
+            },
+            type: 'array',
+            title: 'Em Caixa Por Forma Pagamento'
         },
         em_aberto_qtd: {
             type: 'integer',
@@ -638,7 +667,7 @@ export const LivroVendasResumoPublicSchema = {
         }
     },
     type: 'object',
-    required: ['em_caixa_qtd', 'em_caixa_valor', 'em_aberto_qtd', 'em_aberto_valor', 'periodo_inicio', 'periodo_fim', 'grafico'],
+    required: ['em_caixa_qtd', 'em_caixa_valor', 'em_caixa_por_forma_pagamento', 'em_aberto_qtd', 'em_aberto_valor', 'periodo_inicio', 'periodo_fim', 'grafico'],
     title: 'LivroVendasResumoPublic',
     description: `Resposta de GET /vendas/livro/resumo -- os 2 cards ('Em caixa'
 e 'Em aberto') + o período textual + os pontos do gráfico, tudo
@@ -647,6 +676,12 @@ já filtrado pelo escopo ativo do menu interativo (ano/mês/semana).
 em_caixa: vendas já pagas (pago_em preenchido) com data_venda
 dentro do período -- qtd e soma de valor_pago (o que de fato
 entrou no caixa).
+
+em_caixa_por_forma_pagamento: o mesmo total de em_caixa_valor,
+detalhado por forma de pagamento (cartao/pix/dinheiro/vale) --
+sempre as 4 formas presentes na lista, mesmo com valor 0, nessa
+ordem fixa (pedido do Ricardo). A soma dos 4 valores sempre bate
+com em_caixa_valor.
 
 em_aberto: vendas ainda não pagas (pago_em nulo -- sempre vale em
 aberto ou em atraso) com data_venda dentro do período -- qtd e

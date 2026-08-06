@@ -162,6 +162,18 @@ export type LivroVendasBucket = {
 };
 
 /**
+ * Uma linha do detalhamento de 'Em caixa' por forma de pagamento
+ * -- forma_pagamento é o slug técnico (cartao/pix/dinheiro/vale, o
+ * mesmo valor gravado em Venda.forma_pagamento); o label de exibição
+ * é responsabilidade do frontend. valor é a soma de valor_pago das
+ * vendas JÁ PAGAS daquela forma, dentro do período ativo.
+ */
+export type LivroVendasFormaPagamentoValor = {
+    forma_pagamento: string;
+    valor: string;
+};
+
+/**
  * Resposta de GET /vendas/livro/resumo -- os 2 cards ('Em caixa'
  * e 'Em aberto') + o período textual + os pontos do gráfico, tudo
  * já filtrado pelo escopo ativo do menu interativo (ano/mês/semana).
@@ -169,6 +181,12 @@ export type LivroVendasBucket = {
  * em_caixa: vendas já pagas (pago_em preenchido) com data_venda
  * dentro do período -- qtd e soma de valor_pago (o que de fato
  * entrou no caixa).
+ *
+ * em_caixa_por_forma_pagamento: o mesmo total de em_caixa_valor,
+ * detalhado por forma de pagamento (cartao/pix/dinheiro/vale) --
+ * sempre as 4 formas presentes na lista, mesmo com valor 0, nessa
+ * ordem fixa (pedido do Ricardo). A soma dos 4 valores sempre bate
+ * com em_caixa_valor.
  *
  * em_aberto: vendas ainda não pagas (pago_em nulo -- sempre vale em
  * aberto ou em atraso) com data_venda dentro do período -- qtd e
@@ -181,6 +199,7 @@ export type LivroVendasBucket = {
 export type LivroVendasResumoPublic = {
     em_caixa_qtd: number;
     em_caixa_valor: string;
+    em_caixa_por_forma_pagamento: Array<LivroVendasFormaPagamentoValor>;
     em_aberto_qtd: number;
     em_aberto_valor: string;
     periodo_inicio: string;

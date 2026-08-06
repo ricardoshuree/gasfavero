@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: livro-vendas-frontend-route | plano: 0620b8c5 | 2026-08-06 09:37:46
-// Rota /livro-vendas -- gate via modulo livro_vendas, estado default mes vigente, orquestra menu/cards/grafico/tabela
+// [mcp-local harness] feature: livro-vendas-breakdown-forma-pagamento | plano: b1a54aef | 2026-08-06 10:02:40
+// Passa em_caixa_por_forma_pagamento pro LivroVendasCards
 // Pagina /livro-vendas -- gate via modulo "livro_vendas" (proprio,
 // nao reaproveita "vendas"). Dashboard geral de TODAS as vendas
 // (qualquer forma de pagamento) com menu interativo Ano/Mes/Semana
@@ -85,6 +85,7 @@ function LivroVendas() {
         <LivroVendasCards
           emCaixaQtd={resumo?.em_caixa_qtd ?? 0}
           emCaixaValor={resumo?.em_caixa_valor ?? 0}
+          emCaixaPorFormaPagamento={resumo?.em_caixa_por_forma_pagamento ?? []}
           emAbertoQtd={resumo?.em_aberto_qtd ?? 0}
           emAbertoValor={resumo?.em_aberto_valor ?? 0}
           isLoading={resumoLoading}

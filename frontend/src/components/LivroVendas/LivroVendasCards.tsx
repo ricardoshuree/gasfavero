@@ -1,10 +1,18 @@
-// [mcp-local harness] feature: livro-vendas-frontend-cards | plano: e38222cd | 2026-08-06 09:36:16
-// Cards "Em caixa" e "Em aberto" -- mesmo padrao visual do ResumoCards de Recebimento de Vale
+// [mcp-local harness] feature: livro-vendas-breakdown-forma-pagamento | plano: b1a54aef | 2026-08-06 10:02:23
+// Card "Em caixa" agora inclui a lista cartao/pix/dinheiro/vale abaixo, mantendo o card "Em aberto" como antes
 // Quadros informativos do Livro de Vendas -- "Em caixa" (vendas já
-// pagas) e "Em aberto" (vendas em vale ainda não pagas), ambos
-// filtrados pelo período do escopo ativo do menu interativo. Mesmo
-// padrão visual do ResumoCards de Recebimento de Vale.
+// pagas, com detalhamento por forma de pagamento logo abaixo) e "Em
+// aberto" (vendas em vale ainda não pagas), ambos filtrados pelo
+// período do escopo ativo do menu interativo. Mesmo padrão visual do
+// ResumoCards de Recebimento de Vale.
 import { Card, CardContent } from "@/components/ui/card"
+
+const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
+  cartao: "Cartão de crédito",
+  pix: "Pix",
+  dinheiro: "Dinheiro",
+  vale: "Vale",
+}
 
 function formatMoney(valor: string | number): string {
   return Number(valor).toLocaleString("pt-BR", {
@@ -22,40 +30,42 @@ interface ResumoCardProps {
 
 function ResumoCard({ titulo, qtd, valor, destaque }: ResumoCardProps) {
   return (
-    <Card className="flex-1 min-w-[220px]">
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-sm font-medium text-muted-foreground">{titulo}</p>
-        <div className="flex items-center gap-4">
-          <div
-            className={
-              "flex h-16 w-16 items-center justify-center rounded-md border text-2xl font-semibold " +
-              (destaque === "aberto" ? "border-destructive text-destructive" : "")
-            }
-          >
-            {qtd}
-          </div>
-          <div className="flex flex-col">
-            <span
-              className={
-                "text-lg font-semibold " +
-                (destaque === "aberto" ? "text-destructive" : "")
-              }
-            >
-              {formatMoney(valor)}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {qtd === 1 ? "venda" : "vendas"}
-            </span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-4">
+      <p className="sr-only">{titulo}</p>
+      <div
+        className={
+          "flex h-16 w-16 items-center justify-center rounded-md border text-2xl font-semibold " +
+          (destaque === "aberto" ? "border-destructive text-destructive" : "")
+        }
+      >
+        {qtd}
+      </div>
+      <div className="flex flex-col">
+        <span
+          className={
+            "text-lg font-semibold " +
+            (destaque === "aberto" ? "text-destructive" : "")
+          }
+        >
+          {formatMoney(valor)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {qtd === 1 ? "venda" : "vendas"}
+        </span>
+      </div>
+    </div>
   )
+}
+
+interface FormaPagamentoValor {
+  forma_pagamento: string
+  valor: string | number
 }
 
 interface LivroVendasCardsProps {
   emCaixaQtd: number
   emCaixaValor: string | number
+  emCaixaPorFormaPagamento: FormaPagamentoValor[]
   emAbertoQtd: number
   emAbertoValor: string | number
   isLoading?: boolean
@@ -64,6 +74,7 @@ interface LivroVendasCardsProps {
 export function LivroVendasCards({
   emCaixaQtd,
   emCaixaValor,
+  emCaixaPorFormaPagamento,
   emAbertoQtd,
   emAbertoValor,
   isLoading,
@@ -71,21 +82,51 @@ export function LivroVendasCards({
   if (isLoading) {
     return (
       <div className="flex flex-wrap gap-4">
-        <div className="h-32 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
-        <div className="h-32 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
+        <div className="h-48 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
+        <div className="h-48 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
       </div>
     )
   }
 
   return (
     <div className="flex flex-wrap items-stretch gap-4">
-      <ResumoCard titulo="Em caixa" qtd={emCaixaQtd} valor={emCaixaValor} />
-      <ResumoCard
-        titulo="Em aberto"
-        qtd={emAbertoQtd}
-        valor={emAbertoValor}
-        destaque="aberto"
-      />
+      <Card className="flex-1 min-w-[220px]">
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm font-medium text-muted-foreground">
+            Em caixa
+          </p>
+          <ResumoCard titulo="Em caixa" qtd={emCaixaQtd} valor={emCaixaValor} />
+
+          <div className="flex flex-col gap-1 border-t pt-3">
+            {emCaixaPorFormaPagamento.map((item) => (
+              <div
+                key={item.forma_pagamento}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="text-muted-foreground">
+                  {LABEL_FORMA_PAGAMENTO[item.forma_pagamento] ??
+                    item.forma_pagamento}
+                </span>
+                <span className="font-medium">{formatMoney(item.valor)}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="flex-1 min-w-[220px]">
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm font-medium text-muted-foreground">
+            Em aberto
+          </p>
+          <ResumoCard
+            titulo="Em aberto"
+            qtd={emAbertoQtd}
+            valor={emAbertoValor}
+            destaque="aberto"
+          />
+        </CardContent>
+      </Card>
     </div>
   )
 }
