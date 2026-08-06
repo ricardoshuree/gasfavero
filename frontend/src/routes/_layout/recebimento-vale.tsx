@@ -1,5 +1,8 @@
-// [mcp-local harness] feature: recebimento-vale-frontend | plano: 18bab2b5 | 2026-08-05 15:54:55
-// Rota /recebimento-vale que junta cards, tabela e painel de detalhe
+// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:36:49
+// status default 'todos'; link de volta atualizado pra 'ver todos'
+// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835
+// status default agora e "todos" (junta aberto+atrasado+aguardando_baixa);
+// "Pagos" filtra pra aguardando_baixa; link de volta atualizado
 // Pagina /recebimento-vale -- gate via modulo 'vendas' (mesma
 // permissao das outras telas de venda). Dashboard + tabela filtravel/
 // paginada + painel de detalhe com o fluxo Pago -> Baixa.
@@ -8,14 +11,14 @@ import { Search } from "lucide-react"
 import { useState } from "react"
 
 import { UsersService } from "@/client"
-import { Input } from "@/components/ui/input"
 import DetalheValeSheet from "@/components/RecebimentoVale/DetalheValeSheet"
 import ResumoCards from "@/components/RecebimentoVale/ResumoCards"
 import ValesTable from "@/components/RecebimentoVale/ValesTable"
+import { Input } from "@/components/ui/input"
 
 const MODULE = "vendas"
 
-type Status = "aberto" | "aguardando_baixa"
+type Status = "todos" | "aguardando_baixa"
 type OrderBy = "data_venda" | "valor_total" | "cliente"
 type OrderDir = "asc" | "desc"
 
@@ -40,14 +43,12 @@ export const Route = createFileRoute("/_layout/recebimento-vale")({
 })
 
 function RecebimentoVale() {
-  const [status, setStatus] = useState<Status>("aberto")
+  const [status, setStatus] = useState<Status>("todos")
   const [buscaTexto, setBuscaTexto] = useState("")
   const [page, setPage] = useState(0)
   const [orderBy, setOrderBy] = useState<OrderBy>("data_venda")
   const [orderDir, setOrderDir] = useState<OrderDir>("desc")
-  const [vendaSelecionada, setVendaSelecionada] = useState<string | null>(
-    null,
-  )
+  const [vendaSelecionada, setVendaSelecionada] = useState<string | null>(null)
 
   const buscaNumero = buscaTexto.trim() === "" ? undefined : Number(buscaTexto)
 
@@ -69,9 +70,8 @@ function RecebimentoVale() {
           Recebimento de Vale
         </h1>
         <p className="text-muted-foreground">
-          Consulta e baixa das vendas em vale -- separado da venda em si,
-          essa tela é só pra controlar o que já foi (ou ainda precisa ser)
-          recebido.
+          Consulta e baixa das vendas em vale -- separado da venda em si, essa
+          tela é só pra controlar o que já foi (ou ainda precisa ser) recebido.
         </p>
       </div>
 
@@ -96,9 +96,9 @@ function RecebimentoVale() {
           <button
             type="button"
             className="text-sm text-muted-foreground underline underline-offset-2"
-            onClick={() => handleStatusChange("aberto")}
+            onClick={() => handleStatusChange("todos")}
           >
-            ← voltar pra "em aberto"
+            ← ver todos
           </button>
         )}
       </div>

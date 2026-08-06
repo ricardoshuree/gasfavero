@@ -1,25 +1,24 @@
-// [mcp-local harness] feature: recebimento-vale-fix-conceitual | plano: 1e451713 | 2026-08-05 17:01:52
-// Baixa sempre fecha e encerra a venda; diferenca tratada como desconto, sem reabrir
+// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba | 2026-08-05 22:18:36
+// Trava valor pago e botao Pago apos marcar (so pode marcar uma vez); campo desabilitado mantendo os registros atuais
 // Painel (Sheet) da tela /recebimento-vale. Fluxo:
 //   1) campo "valor pago" editavel (pre-preenchido com o ja registrado)
 //   2) botao "Pago" (verde) -> marcar-pago -- registra o recebimento,
-//      NAO fecha a venda, so libera o botao de baixa
+//      NAO fecha a venda, so libera o botao de baixa. Uma vez marcado,
+//      tanto o campo "valor pago" quanto o botao "Pago" ficam travados
+//      (so pode marcar como pago uma unica vez -- pra corrigir o valor
+//      seria preciso a distribuidora dar baixa e o motorista/operador
+//      relancar, nao editar o registro ja feito)
 //   3) botao "Baixa do vale" (azul) -> abre um Dialog de confirmacao
 //      -- ao confirmar, chama baixar-vale, que SEMPRE fecha a venda
 //      (pago_em), nao importa o valor. Se o valor for menor que o
 //      total, a diferenca e tratada como desconto -- nunca deixa a
 //      venda em aberto de novo (decisao do Ricardo).
-import { useEffect, useState } from "react"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useState } from "react"
 
 import { VendasService } from "@/client"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -28,10 +27,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
@@ -126,7 +131,8 @@ export function DetalheValeSheet({
   }
 
   const diferenca = Number(venda.valor_total) - Number(venda.valor_pago)
-  const podeBaixar = venda.recebido_em != null
+  const jaMarcadoPago = venda.recebido_em != null
+  const podeBaixar = jaMarcadoPago
   const baixaEhTotal = Number(valorPago) >= Number(venda.valor_total)
 
   return (
@@ -194,7 +200,7 @@ export function DetalheValeSheet({
                 min="0"
                 value={valorPago}
                 onChange={(e) => setValorPago(e.target.value)}
-                disabled={baixarValeMutation.isPending}
+                disabled={jaMarcadoPago || baixarValeMutation.isPending}
               />
             </div>
 
@@ -202,6 +208,7 @@ export function DetalheValeSheet({
               <LoadingButton
                 className="bg-green-600 text-white hover:bg-green-700"
                 loading={marcarPagoMutation.isPending}
+                disabled={jaMarcadoPago}
                 onClick={() => marcarPagoMutation.mutate()}
               >
                 Pago

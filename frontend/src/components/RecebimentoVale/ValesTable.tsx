@@ -1,13 +1,24 @@
-// [mcp-local harness] feature: recebimento-vale-frontend | plano: 18bab2b5 | 2026-08-05 15:54:13
-// Tabela paginada/ordenavel de vendas em vale pendentes
+// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:36:25
+// status = todos (default, junta os 3 estados) | aguardando_baixa (filtro); badge por linha distingue Em aberto/Em atraso/Aguardando baixa
+// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835
+// status agora e "todos" (default, junta aberto+atrasado+aguardando_baixa)
+// ou "aguardando_baixa" (filtro do botao Pagos); badge por linha distingue
+// Em aberto / Em atraso / Aguardando baixa
 // Tabela da tela /recebimento-vale -- server-side (paginacao,
 // ordenacao e busca acontecem via query params no backend, nao no
 // tanstack-table client-side), por isso nao reaproveita o
 // components/Common/DataTable genérico (que só pagina em memória).
 import { useQuery } from "@tanstack/react-query"
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react"
 
 import { VendasService } from "@/client"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -16,13 +27,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
 
 type OrderBy = "data_venda" | "valor_total" | "cliente"
 type OrderDir = "asc" | "desc"
-type Status = "aberto" | "aguardando_baixa"
+type Status = "todos" | "aguardando_baixa"
 
 const PAGE_SIZE = 20
+
+// Mesmo limite usado no backend (DIAS_ATRASO_VALE em vendas.py) --
+// contado a partir de data_venda, só pra decidir a cor do badge.
+const DIAS_ATRASO_VALE = 30
 
 function formatMoney(valor: string | number): string {
   return Number(valor).toLocaleString("pt-BR", {
@@ -34,6 +48,14 @@ function formatMoney(valor: string | number): string {
 function formatDate(iso: string): string {
   const [ano, mes, dia] = iso.split("-")
   return `${dia}/${mes}/${ano}`
+}
+
+function isAtrasado(dataVendaISO: string): boolean {
+  const dataVenda = new Date(`${dataVendaISO}T00:00:00`)
+  const limite = new Date()
+  limite.setHours(0, 0, 0, 0)
+  limite.setDate(limite.getDate() - DIAS_ATRASO_VALE)
+  return dataVenda <= limite
 }
 
 interface ValesTableProps {
@@ -91,12 +113,42 @@ export function ValesTable({
 
   function SortIcon({ coluna }: { coluna: OrderBy }) {
     if (orderBy !== coluna) {
-      return <ArrowUpDown className="ml-1 inline size-3 text-muted-foreground" />
+      return (
+        <ArrowUpDown className="ml-1 inline size-3 text-muted-foreground" />
+      )
     }
     return orderDir === "desc" ? (
       <ArrowDown className="ml-1 inline size-3" />
     ) : (
       <ArrowUp className="ml-1 inline size-3" />
+    )
+  }
+
+  function StatusBadge({
+    recebidoEm,
+    dataVenda,
+  }: {
+    recebidoEm: string | null | undefined
+    dataVenda: string
+  }) {
+    if (recebidoEm) {
+      return (
+        <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
+          Aguardando baixa
+        </span>
+      )
+    }
+    if (isAtrasado(dataVenda)) {
+      return (
+        <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs text-destructive">
+          Em atraso
+        </span>
+      )
+    }
+    return (
+      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+        Em aberto
+      </span>
     )
   }
 
@@ -161,15 +213,10 @@ export function ValesTable({
                     {formatMoney(venda.valor_total)}
                   </TableCell>
                   <TableCell>
-                    {venda.recebido_em ? (
-                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
-                        Aguardando baixa
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        Em aberto
-                      </span>
-                    )}
+                    <StatusBadge
+                      recebidoEm={venda.recebido_em}
+                      dataVenda={venda.data_venda}
+                    />
                   </TableCell>
                 </TableRow>
               ))

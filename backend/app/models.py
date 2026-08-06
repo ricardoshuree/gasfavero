@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: recebimento-vale-fix-conceitual | plano: 1e451713 | 2026-08-05 16:58:47
-# Atualiza comentarios/docstrings: baixa sempre fecha a venda (valor menor = desconto, nao residuo); cards de resumo somam valor_total (aberto/atraso) e valor_pago (aguardando baixa)
+# [mcp-local harness] feature: recebimento-vale-card-mes | plano: 3ab86d3c | 2026-08-05 21:51:21
+# Adiciona pagos_mes_qtd/pagos_mes_valor ao ResumoRecebimentoValePublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -803,7 +803,7 @@ class VendaBaixarValeRequest(SQLModel):
 
 
 class ResumoRecebimentoValePublic(SQLModel):
-    """Resposta de GET /vendas/vales-recebimento/resumo -- os 3 cards
+    """Resposta de GET /vendas/vales-recebimento/resumo -- os 4 cards
     da tela de Recebimento de Vale.
 
     em_aberto_valor / atraso_valor: soma do valor_total das vendas
@@ -814,6 +814,12 @@ class ResumoRecebimentoValePublic(SQLModel):
     registrado como recebido, ainda não conferido/baixado na
     distribuidora) -- não o valor_total, porque o que importa aqui pro
     operador é quanto ele deve esperar receber/conferir em mãos.
+
+    pagos_mes_qtd / pagos_mes_valor: vendas em vale já BAIXADAS
+    (pago_em não nulo) cujo pago_em cai dentro do mês vigente (do dia
+    1 ao último dia do mês corrente) -- não é sobre quando a venda foi
+    feita, é sobre quando foi dada a baixa. pagos_mes_valor soma
+    valor_pago (o que de fato entrou no caixa naqueles vales).
     """
     em_aberto_qtd: int
     em_aberto_valor: Decimal
@@ -821,6 +827,8 @@ class ResumoRecebimentoValePublic(SQLModel):
     atraso_valor: Decimal
     aguardando_baixa_qtd: int
     aguardando_baixa_valor: Decimal
+    pagos_mes_qtd: int
+    pagos_mes_valor: Decimal
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,10 @@
+// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba | 2026-08-05 22:18:01
+// Adiciona campo Complemento faltante no cadastro rapido de cliente
+// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba
+// Adiciona campo Complemento no cadastro rapido de cliente (faltava,
+// so existia no TrocarEnderecoDialog)
+// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128
+// Botao Adicionar/Trocar endereco (TrocarEnderecoDialog) na secao de cliente
 // [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:33:18
 // CPF/CNPJ label, mascara de telefone (54) padrao, RuaAutocomplete
 // [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
@@ -32,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import TrocarEnderecoDialog from "@/components/Vendas/TrocarEnderecoDialog"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
@@ -128,6 +136,13 @@ export function ClienteSection({
               <span className="flex-1">
                 {formatEndereco(enderecoSelecionado)}
               </span>
+              <TrocarEnderecoDialog
+                cliente={cliente}
+                onSalvo={(clienteAtualizado) => {
+                  onClienteChange(clienteAtualizado)
+                  onEnderecoChange(clienteAtualizado.endereco ?? null)
+                }}
+              />
               <Button
                 type="button"
                 variant="ghost"
@@ -138,9 +153,18 @@ export function ClienteSection({
               </Button>
             </>
           ) : (
-            <span className="text-muted-foreground">
-              Sem endereço nessa venda (opcional)
-            </span>
+            <>
+              <span className="flex-1 text-muted-foreground">
+                Sem endereço nessa venda (opcional)
+              </span>
+              <TrocarEnderecoDialog
+                cliente={cliente}
+                onSalvo={(clienteAtualizado) => {
+                  onClienteChange(clienteAtualizado)
+                  onEnderecoChange(clienteAtualizado.endereco ?? null)
+                }}
+              />
+            </>
           )}
         </div>
       </div>
@@ -228,6 +252,7 @@ function QuickAddCliente({
   const [bairroId, setBairroId] = useState("")
   const [ruaNome, setRuaNome] = useState("")
   const [numero, setNumero] = useState("")
+  const [complemento, setComplemento] = useState("")
 
   const { data: bairros } = useQuery({
     queryKey: ["bairros"],
@@ -258,7 +283,12 @@ function QuickAddCliente({
       telefone: telefoneDigits.length > 2 ? telefone : undefined,
       endereco:
         incluirEndereco && bairroId && ruaNome && numero
-          ? { bairro_id: bairroId, rua_nome: ruaNome, numero }
+          ? {
+              bairro_id: bairroId,
+              rua_nome: ruaNome,
+              numero,
+              complemento: complemento || undefined,
+            }
           : undefined,
     })
   }
@@ -342,14 +372,25 @@ function QuickAddCliente({
               disabled={!bairroId}
             />
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="qc-numero">Número</Label>
-            <Input
-              id="qc-numero"
-              placeholder="123 ou s/n"
-              value={numero}
-              onChange={(e) => setNumero(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="qc-numero">Número</Label>
+              <Input
+                id="qc-numero"
+                placeholder="123 ou s/n"
+                value={numero}
+                onChange={(e) => setNumero(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="qc-complemento">Complemento</Label>
+              <Input
+                id="qc-complemento"
+                placeholder="Apto, bloco... (opcional)"
+                value={complemento}
+                onChange={(e) => setComplemento(e.target.value)}
+              />
+            </div>
           </div>
         </div>
       )}

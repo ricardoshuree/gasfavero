@@ -1071,6 +1071,10 @@ export class VendasService {
     
     /**
      * Read Vales Recebimento
+     * "todos" (default): junta em_aberto + em_atraso + aguardando_baixa
+     * (tudo que ainda não foi baixado). "aguardando_baixa": só o que já
+     * foi marcado como pago, esperando a baixa -- é o filtro que o botão
+     * "Pagos" da UI aplica em cima da mesma tabela, não uma tela separada.
      * @param data The data for the request.
      * @param data.status
      * @param data.buscaNumero
@@ -1129,10 +1133,11 @@ export class VendasService {
     /**
      * Baixar Vale
      * Confirma oficialmente o recebimento na distribuidora (sempre
-     * feito aqui, nunca em campo). Se o valor confirmado for igual ao
-     * valor_total, fecha a venda de vez (pago_em). Se for parcial,
-     * volta pra fila 'em aberto' com o saldo residual atualizado --
-     * aguardando um próximo recebimento.
+     * feito aqui, nunca em campo) e FECHA a venda de vez (pago_em) --
+     * não importa o valor. Se o valor confirmado for menor que
+     * valor_total, a diferença é um desconto: não deixa a venda em
+     * aberto de novo (decisão do Ricardo -- ver comentário em Venda,
+     * models.py).
      * @param data The data for the request.
      * @param data.id
      * @param data.requestBody

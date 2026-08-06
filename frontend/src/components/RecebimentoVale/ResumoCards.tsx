@@ -1,8 +1,12 @@
-// [mcp-local harness] feature: recebimento-vale-frontend | plano: 18bab2b5 | 2026-08-05 15:53:52
-// Cards de resumo (em aberto, em atraso, aguardando baixa) da tela de Recebimento de Vale
-// Cards do topo da tela /recebimento-vale: em aberto, em atraso, e
-// pago aguardando baixa. O terceiro tem um botao que troca o filtro
-// da tabela abaixo pra "aguardando_baixa" (repassado via onVerPagos).
+// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:55:10
+// Adiciona o 4o card 'Vales pagos: Mes Ano' ao dashboard de Recebimento de Vale
+// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128
+// Card novo: "Vales pagos: {Mes Ano}" (soma pagos_mes_qtd/valor do resumo)
+//
+// Cards do topo da tela /recebimento-vale: em aberto, em atraso,
+// pago aguardando baixa, e vales pagos no mes vigente. O terceiro tem
+// um botao que troca o filtro da tabela abaixo pra "aguardando_baixa"
+// (repassado via onVerPagos).
 import { useQuery } from "@tanstack/react-query"
 
 import { VendasService } from "@/client"
@@ -14,6 +18,26 @@ function formatMoney(valor: string | number): string {
     style: "currency",
     currency: "BRL",
   })
+}
+
+const MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+]
+
+function mesVigenteLabel(): string {
+  const agora = new Date()
+  return `${MESES[agora.getMonth()]} ${agora.getFullYear()}`
 }
 
 interface ResumoCardProps {
@@ -32,7 +56,9 @@ function ResumoCard({ titulo, qtd, valor, destaque }: ResumoCardProps) {
           <div
             className={
               "flex h-16 w-16 items-center justify-center rounded-md border text-2xl font-semibold " +
-              (destaque === "atraso" ? "border-destructive text-destructive" : "")
+              (destaque === "atraso"
+                ? "border-destructive text-destructive"
+                : "")
             }
           >
             {qtd}
@@ -72,6 +98,7 @@ export function ResumoCards({ onVerPagos }: ResumoCardsProps) {
         <div className="h-32 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
         <div className="h-32 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
         <div className="h-32 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
+        <div className="h-32 flex-1 min-w-[220px] animate-pulse rounded-xl border bg-muted/40" />
       </div>
     )
   }
@@ -102,6 +129,11 @@ export function ResumoCards({ onVerPagos }: ResumoCardsProps) {
           Pagos
         </Button>
       </div>
+      <ResumoCard
+        titulo={`Vales pagos: ${mesVigenteLabel()}`}
+        qtd={data.pagos_mes_qtd}
+        valor={data.pagos_mes_valor}
+      />
     </div>
   )
 }

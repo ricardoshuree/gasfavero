@@ -942,15 +942,37 @@ export const ResumoRecebimentoValePublicSchema = {
             type: 'string',
             pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
             title: 'Aguardando Baixa Valor'
+        },
+        pagos_mes_qtd: {
+            type: 'integer',
+            title: 'Pagos Mes Qtd'
+        },
+        pagos_mes_valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Pagos Mes Valor'
         }
     },
     type: 'object',
-    required: ['em_aberto_qtd', 'em_aberto_valor', 'atraso_qtd', 'atraso_valor', 'aguardando_baixa_qtd', 'aguardando_baixa_valor'],
+    required: ['em_aberto_qtd', 'em_aberto_valor', 'atraso_qtd', 'atraso_valor', 'aguardando_baixa_qtd', 'aguardando_baixa_valor', 'pagos_mes_qtd', 'pagos_mes_valor'],
     title: 'ResumoRecebimentoValePublic',
-    description: `Resposta de GET /vendas/vales-recebimento/resumo -- os 3 cards
-da tela de Recebimento de Vale. *_valor é sempre o saldo residual
-(valor_total - valor_pago) das vendas naquele grupo, nunca o valor
-total da venda.`
+    description: `Resposta de GET /vendas/vales-recebimento/resumo -- os 4 cards
+da tela de Recebimento de Vale.
+
+em_aberto_valor / atraso_valor: soma do valor_total das vendas
+naquele grupo (não desconta nada -- são vendas que ainda não
+tiveram nenhum recebimento registrado).
+
+aguardando_baixa_valor: soma do valor_pago (o que foi de fato
+registrado como recebido, ainda não conferido/baixado na
+distribuidora) -- não o valor_total, porque o que importa aqui pro
+operador é quanto ele deve esperar receber/conferir em mãos.
+
+pagos_mes_qtd / pagos_mes_valor: vendas em vale já BAIXADAS
+(pago_em não nulo) cujo pago_em cai dentro do mês vigente (do dia
+1 ao último dia do mês corrente) -- não é sobre quando a venda foi
+feita, é sobre quando foi dada a baixa. pagos_mes_valor soma
+valor_pago (o que de fato entrou no caixa naqueles vales).`
 } as const;
 
 export const RoleCreateSchema = {
@@ -1623,10 +1645,11 @@ export const VendaBaixarValeRequestSchema = {
     title: 'VendaBaixarValeRequest',
     description: `Corpo de PATCH /vendas/{id}/baixar-vale -- confirma
 oficialmente o recebimento na distribuidora (sempre feito ali,
-nunca em campo). valor_pago é opcional: se omitido, usa o valor
-já registrado por marcar-pago. Se o valor confirmado for igual ao
-valor_total, a venda fecha de vez (pago_em); se for parcial, volta
-pra fila de 'em aberto' com o saldo residual atualizado.`
+nunca em campo) e FECHA a venda de vez (pago_em), não importa o
+valor. valor_pago é opcional: se omitido, usa o valor já
+registrado por marcar-pago. Se for menor que valor_total, a
+diferença é um desconto -- não deixa a venda em aberto de novo
+(ver comentário em Venda, models.py).`
 } as const;
 
 export const VendaCreateSchema = {
@@ -1806,7 +1829,7 @@ export const VendaMarcarPagoRequestSchema = {
 valor foi recebido (hoje: por um operador na tela de Recebimento
 de Vale; no futuro: por um motorista numa interface própria em
 campo). NÃO fecha a venda -- só a baixa (endpoint separado, só
-na distribuidora) faz isso. Pode ser um valor parcial.`
+na distribuidora) faz isso.`
 } as const;
 
 export const VendaPublicSchema = {

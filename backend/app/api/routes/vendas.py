@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: recebimento-vale-fix-conceitual | plano: 1e451713 | 2026-08-05 17:00:53
-# Baixa sempre fecha a venda (remove reabertura parcial); cards de resumo passam a somar valor_total (aberto/atraso) e valor_pago (aguardando baixa)
+# [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:35:51
+# Endpoint de listagem passa a ter status=todos (default, junta aberto+atrasado+aguardando_baixa) ou aguardando_baixa (filtro)
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -108,6 +108,18 @@ def _quinto_dia_util_proximo_mes(hoje: date | None = None) -> date:
         d += timedelta(days=1)
     # Fallback teórico (não deveria acontecer num mês normal)
     return d
+
+
+def _limites_mes_vigente(hoje: date) -> tuple[date, date]:
+    """(primeiro dia do mês atual, primeiro dia do mês seguinte) --
+    intervalo [primeiro, proximo) usado pro card 'vales pagos no mês'
+    (filtra por pago_em, não por data_venda)."""
+    primeiro = hoje.replace(day=1)
+    if hoje.month == 12:
+        proximo = date(hoje.year + 1, 1, 1)
+    else:
+        proximo = date(hoje.year, hoje.month + 1, 1)
+    return primeiro, proximo
 
 
 def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
@@ -243,17 +255,29 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
 #
 # Estados de uma venda em vale (ver bloco de comentário em models.py,
 # na classe Venda):
-#   1) em aberto        -- recebido_em IS NULL, pago_em IS NULL
-#   2) aguardando baixa -- recebido_em IS NOT NULL, pago_em IS NULL
-#   3) baixada          -- pago_em IS NOT NULL (SEMPRE definitivo --
+#   1) em aberto        -- recebido_em IS NULL, pago_em IS NULL, <30 dias
+#   2) em atraso         -- recebido_em IS NULL, pago_em IS NULL, >=30 dias
+#      (mesma condição de banco que "em aberto" -- a diferença é só a
+#      data_venda, não um campo separado)
+#   3) aguardando baixa -- recebido_em IS NOT NULL, pago_em IS NULL
+#   4) baixada          -- pago_em IS NOT NULL (SEMPRE definitivo --
 #      a baixa nunca reabre a venda, mesmo com valor menor que o
 #      total; a diferença é tratada como desconto)
+#
+# A TABELA da tela (GET /vales-recebimento) mostra os estados 1+2+3
+# juntos por padrão (status="todos") -- só o que já foi baixado (4)
+# nunca aparece. O botão "Pagos" da UI só filtra pra status="aguardando_baixa"
+# (só o estado 3), não é uma view exclusiva/separada.
 #
 # Precisam vir ANTES de "/{id}" nesse arquivo -- senão o FastAPI casa
 # "vales-recebimento" como se fosse o {id} da rota genérica abaixo.
 # ---------------------------------------------------------------------------
 
 def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
+    """Usado só pelo cálculo dos cards do resumo (que precisa separar
+    aberto de aguardando_baixa pra contar cada um). A listagem da
+    tabela (read_vales_recebimento) usa uma query própria, que por
+    padrão junta aberto+atrasado+aguardando_baixa."""
     query = (
         select(Venda)
         .where(Venda.forma_pagamento == "vale")
@@ -270,13 +294,26 @@ def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def read_resumo_recebimento_vale(session: SessionDep) -> Any:
-    limite_atraso = date.today() - timedelta(days=DIAS_ATRASO_VALE)
+    hoje = date.today()
+    limite_atraso = hoje - timedelta(days=DIAS_ATRASO_VALE)
+    primeiro_dia_mes, primeiro_dia_prox_mes = _limites_mes_vigente(hoje)
 
     em_aberto = session.exec(_query_base_vale_pendente(status="aberto")).all()
     aguardando_baixa = session.exec(
         _query_base_vale_pendente(status="aguardando_baixa")
     ).all()
     atraso = [v for v in em_aberto if v.data_venda <= limite_atraso]
+
+    # "Vales pagos no mês": baixados (pago_em preenchido) cujo pago_em
+    # cai no mês vigente -- filtra por QUANDO foi dada a baixa, não
+    # por quando a venda foi feita.
+    pagos_mes = session.exec(
+        select(Venda)
+        .where(Venda.forma_pagamento == "vale")
+        .where(col(Venda.pago_em).is_not(None))
+        .where(func.date(Venda.pago_em) >= primeiro_dia_mes)
+        .where(func.date(Venda.pago_em) < primeiro_dia_prox_mes)
+    ).all()
 
     def soma_valor_total(vendas: list[Venda]) -> Decimal:
         return sum((v.valor_total for v in vendas), Decimal("0"))
@@ -291,6 +328,8 @@ def read_resumo_recebimento_vale(session: SessionDep) -> Any:
         atraso_valor=soma_valor_total(atraso),
         aguardando_baixa_qtd=len(aguardando_baixa),
         aguardando_baixa_valor=soma_valor_pago(aguardando_baixa),
+        pagos_mes_qtd=len(pagos_mes),
+        pagos_mes_valor=soma_valor_pago(pagos_mes),
     )
 
 
@@ -301,14 +340,24 @@ def read_resumo_recebimento_vale(session: SessionDep) -> Any:
 )
 def read_vales_recebimento(
     session: SessionDep,
-    status: Literal["aberto", "aguardando_baixa"] = "aberto",
+    status: Literal["todos", "aguardando_baixa"] = "todos",
     busca_numero: int | None = None,
     order_by: Literal["data_venda", "valor_total", "cliente"] = "data_venda",
     order_dir: Literal["asc", "desc"] = "desc",
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
-    query = _query_base_vale_pendente(status=status)
+    """"todos" (default): junta em_aberto + em_atraso + aguardando_baixa
+    (tudo que ainda não foi baixado). "aguardando_baixa": só o que já
+    foi marcado como pago, esperando a baixa -- é o filtro que o botão
+    "Pagos" da UI aplica em cima da mesma tabela, não uma tela separada."""
+    query = (
+        select(Venda)
+        .where(Venda.forma_pagamento == "vale")
+        .where(col(Venda.pago_em).is_(None))
+    )
+    if status == "aguardando_baixa":
+        query = query.where(col(Venda.recebido_em).is_not(None))
 
     if busca_numero is not None:
         vale_ids = select(Vale.id).where(Vale.numero == busca_numero)

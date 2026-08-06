@@ -1,3 +1,10 @@
+// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:55:56
+// Data a ser pago do vale pre-preenchida com hoje+30 dias
+// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128
+// "Data a ser pago" do vale pre-preenchida com hoje+30 dias (so preenche
+// se ainda estiver vazio, nao sobrescreve edicao manual) -- se o usuario
+// limpar o campo, mantem a regra existente: backend calcula o 5o dia
+// util do mes seguinte automaticamente.
 // [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:34:03
 // Sugere automaticamente o proximo numero de vale do bloco do motorista selecionado
 // [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
@@ -49,6 +56,13 @@ const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
 
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+/** ISO (yyyy-mm-dd) + N dias corridos, também em ISO. */
+function somarDiasISO(isoDate: string, dias: number): string {
+  const d = new Date(`${isoDate}T00:00:00`)
+  d.setDate(d.getDate() + dias)
+  return d.toISOString().slice(0, 10)
 }
 
 export const Route = createFileRoute("/_layout/vendas")({
@@ -116,6 +130,17 @@ function Vendas() {
       })
       .catch(() => {})
   }, [formaPagamento, motoristaId])
+
+  // Ao escolher "Vale", pré-preenche "Data a ser pago" com hoje + 30
+  // dias -- só se o campo ainda estiver vazio (não sobrescreve edição
+  // manual). Se o usuário limpar o campo de propósito, o backend
+  // continua calculando o 5º dia útil do mês seguinte automaticamente.
+  useEffect(() => {
+    if (formaPagamento !== "vale") return
+    setDataPagamentoVale((atual) =>
+      atual ? atual : somarDiasISO(hojeISO(), 30),
+    )
+  }, [formaPagamento])
 
   const total = sacola.reduce(
     (acc, item) => acc + Number(item.precoUnitario) * item.quantidade,
