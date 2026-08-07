@@ -1,0 +1,22 @@
+<!--
+[mcp-local harness] feature: frontend-motorista-scaffold | plano: 10966b4b | 2026-08-07 16:26:28
+HTML raiz -- viewport travado (sem zoom/scroll de pagina, comportamento de app)
+-->
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover + user-scalable=no: comportamento de app
+         nativo, não de página web (sem pinch-zoom, respeita notch/
+         safe-area do aparelho) -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Gás Favero Motorista</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

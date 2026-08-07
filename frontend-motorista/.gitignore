@@ -1,0 +1,15 @@
+# [mcp-local harness] feature: frontend-motorista-scaffold | plano: 10966b4b | 2026-08-07 16:27:06
+# Ignora node_modules, build e a pasta android/ gerada pelo Capacitor (gerada localmente via npx cap add android -- nao versionada por enquanto)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Pasta nativa gerada pelo Capacitor (npx cap add android).
+# Fica de fora do versionamento por enquanto -- decisão a revisitar
+# quando o app estiver mais maduro (times de build/CI podem exigir
+# versionar android/ mais pra frente).
+android/
+
+.env
+.env.local

@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: chamado-filtro-motoristas | plano: 79e7af14 | 2026-08-07 20:00:30
+// Filtra o combo Motorista para so role "Motorista" (mantendo "Qualquer motorista disponivel")
 // [mcp-local harness] feature: chamado-tela | plano: 4507b69c | 2026-08-07 07:58:43
 // Tela /chamado -- despacho de entrega pelo atendente
 // Página /chamado -- gate via módulo "delegacao" (mesmo módulo dos
@@ -45,6 +47,13 @@ import { handleError } from "@/utils"
 
 const MODULE = "delegacao"
 
+// Nome exato da role RBAC "Motorista" (ver tela /permissions --
+// "Gerenciar Roles"). Usado só pra filtrar o combo abaixo; se a role
+// for renomeada um dia, este filtro para de bater e o combo volta a
+// aparecer vazio -- não há acoplamento por id porque roles não têm
+// id fixo conhecido em tempo de build.
+const ROLE_MOTORISTA = "Motorista"
+
 // Sentinela pro <Select> -- Radix não aceita value="" em SelectItem,
 // então usamos essa string pra representar "sem motorista específico"
 // e traduzimos pra undefined na hora de montar o corpo da requisição.
@@ -86,6 +95,13 @@ function Chamado() {
     queryKey: ["users", "chamado"],
     queryFn: () => UsersService.readUsers({ limit: 100 }),
   })
+
+  // Só motoristas de verdade no combo -- antes listava todo mundo
+  // (admin, gerente, viewer...), o que não fazia sentido pra
+  // despachar uma entrega.
+  const motoristas = (users?.data ?? []).filter((u) =>
+    u.roles?.includes(ROLE_MOTORISTA),
+  )
 
   const quantidadesNaSacola = Object.fromEntries(
     sacola.map((i) => [i.produtoId, i.quantidade]),
@@ -230,12 +246,9 @@ function Chamado() {
               <SelectItem value={QUALQUER_MOTORISTA}>
                 Qualquer motorista disponível
               </SelectItem>
-              {users?.data.map((u) => (
+              {motoristas.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.full_name || u.email}
-                  {u.roles && u.roles.length > 0
-                    ? ` (${u.roles.join(", ")})`
-                    : ""}
                 </SelectItem>
               ))}
             </SelectContent>
