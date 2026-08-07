@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: nome-motorista-no-mapa | plano: 2957ed47 | 2026-08-07 12:08:40
-// Adiciona user-select:none no overlay pra evitar selecao de texto acidental ao clicar
+// [mcp-local harness] feature: fonte-menor-nome-motorista | plano: a35ae2e9 | 2026-08-07 12:30:40
+// Fonte do nome no mapa: 12px -> 11px
 // Componente do mapa com polling de localizacao dos motoristas +
 // pins de destino dos chamados ativos (pendente/aceita) de hoje.
 import { useQuery } from "@tanstack/react-query"
@@ -118,7 +118,7 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
       caption.style.borderRadius = "4px"
       caption.style.background = "#ffffff"
       caption.style.color = "#0f172a"
-      caption.style.fontSize = "12px"
+      caption.style.fontSize = "11px"
       caption.style.fontWeight = "600"
       caption.style.whiteSpace = "nowrap"
       caption.style.boxShadow = "0 1px 3px rgba(0,0,0,0.35)"
