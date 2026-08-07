@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: painel-mapa-backend | plano: 326a78ae | 2026-08-07 09:38:06
-# Adiciona endpoint GET /vendas/ranking-semana
+# [mcp-local harness] feature: ranking-so-motoristas | plano: 241c372b | 2026-08-07 12:03:14
+# Ranking so lista quem tem role Motorista, sempre 3 slots mesmo com 0 vendas
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func as sa_func
 from sqlalchemy import or_
 from sqlmodel import col, func, select
 
@@ -44,8 +45,10 @@ from app.models import (
     RankingMotoristaPublic,
     RankingSemanaPublic,
     ResumoRecebimentoValePublic,
+    Role,
     Rua,
     User,
+    UserRole,
     Vale,
     Venda,
     VendaBaixarValeRequest,
@@ -569,8 +572,10 @@ def baixar_vale(
 # escopo, tem paginação, filtro próprio de intervalo de datas e filtro
 # de status. Além dos itens da página, retorna soma_preco/soma_valor_pago
 # (ver LivroVendasListPublic, models.py) -- o total das colunas
-# "Preço"/"Valor pago" de TODO o conjunto filtrado (não só a página
-# atual), usado na linha de totais no rodapé da tabela.
+# "Preço"/"Valor pago" de TODAS as vendas que batem com o filtro de data
+# ativo (data_inicio/data_fim), não só as da página atual -- é o
+# valor exibido na linha de totais no rodapé da tabela, que muda
+# dinamicamente junto com o filtro 'Consulta vendas data'.
 #
 # Status possíveis pro filtro da tabela (independente do status
 # calculado no frontend pro badge de cada linha, mas com a MESMA
@@ -867,7 +872,18 @@ def read_ranking_semana(session: SessionDep) -> Any:
     """Top 3 motoristas por QUANTIDADE de vendas na semana corrente
     (domingo-sábado) -- conta todas as vendas independente de forma
     de pagamento ou status de pagamento (é volume de atendimento, não
-    faturamento)."""
+    faturamento).
+
+    Só considera usuários com a role RBAC "Motorista" (decisão
+    confirmada com o Ricardo) -- isso exclui automaticamente o
+    usuário-sistema "Distribuidora Gás Favero" (vendas de balcão),
+    que não tem essa role, mesmo que ele acumule vendas na semana.
+
+    Sempre retorna até 3 motoristas, mesmo que algum deles não tenha
+    NENHUMA venda na semana (quantidade=0) -- não é "top 3 de quem
+    vendeu", é "top 3 dos motoristas cadastrados, ordenados por
+    quantidade". Só retorna menos de 3 se houver menos de 3
+    motoristas com essa role cadastrados."""
     periodo_inicio, periodo_fim = _semana_atual()
     vendas_periodo = session.exec(
         select(Venda)
@@ -879,17 +895,32 @@ def read_ranking_semana(session: SessionDep) -> Any:
     for v in vendas_periodo:
         contagem[v.motorista_id] = contagem.get(v.motorista_id, 0) + 1
 
-    ranking = []
-    for motorista_id, quantidade in contagem.items():
-        motorista = session.get(User, motorista_id)
-        if motorista:
-            ranking.append(
-                RankingMotoristaPublic(
-                    motorista_id=motorista_id,
-                    motorista_nome=motorista.full_name or motorista.email,
-                    quantidade=quantidade,
+    # Case-insensitive de propósito -- mesmo padrão já usado em outras
+    # buscas por nome neste projeto (ex: resolução de Rua em
+    # clientes.py), evita depender de capitalização exata da role.
+    role_motorista = session.exec(
+        select(Role).where(sa_func.lower(Role.name) == "motorista")
+    ).first()
+
+    ranking: list[RankingMotoristaPublic] = []
+    if role_motorista:
+        motorista_ids = session.exec(
+            select(UserRole.user_id).where(UserRole.role_id == role_motorista.id)
+        ).all()
+        for motorista_id in motorista_ids:
+            motorista = session.get(User, motorista_id)
+            if motorista:
+                ranking.append(
+                    RankingMotoristaPublic(
+                        motorista_id=motorista_id,
+                        motorista_nome=motorista.full_name or motorista.email,
+                        quantidade=contagem.get(motorista_id, 0),
+                    )
                 )
-            )
+
+    # Desempate por nome (A-Z) -- só pra ordem determinística entre
+    # motoristas com a mesma quantidade (inclusive todos com 0).
+    ranking.sort(key=lambda r: r.motorista_nome.lower())
     ranking.sort(key=lambda r: r.quantidade, reverse=True)
 
     return RankingSemanaPublic(

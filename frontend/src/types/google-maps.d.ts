@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: painel-mapa-frontend | plano: 660739b7 | 2026-08-07 09:40:03
-// Adiciona Size/Icon (icone raster customizado) na tipagem ambiente do Google Maps
+// [mcp-local harness] feature: nome-motorista-no-mapa | plano: 2957ed47 | 2026-08-07 12:03:58
+// Adiciona tipagem minima de OverlayView + InfoWindow.setPosition
 // Tipagem mínima ambiente para a fatia da API do Google Maps
 // JavaScript usada pelo MapaMotoristas (Fase 3 da Delegação de
 // Venda) -- evita depender do pacote @types/google.maps só por
@@ -69,6 +69,7 @@ declare namespace google.maps {
 
   interface InfoWindowOptions {
     content?: string
+    position?: LatLngLiteral
   }
 
   class InfoWindow {
@@ -76,6 +77,29 @@ declare namespace google.maps {
     open(map?: Map, anchor?: Marker): void
     close(): void
     setContent(content: string): void
+    setPosition(latLng: LatLngLiteral): void
+  }
+
+  // ---- OverlayView -- usado pro marcador customizado do motorista
+  // (ícone + nome do motorista sempre visível abaixo, não só no
+  // clique). A API real do Google exige estender essa classe e
+  // implementar onAdd/draw/onRemove -- tipagem mínima aqui, só o
+  // suficiente pro que MapaMotoristas.tsx usa.
+  interface MapPanes {
+    overlayMouseTarget: HTMLElement
+    overlayLayer: HTMLElement
+    floatPane: HTMLElement
+  }
+
+  interface MapCanvasProjection {
+    fromLatLngToDivPixel(latLng: LatLngLiteral): { x: number; y: number } | null
+  }
+
+  class OverlayView {
+    setMap(map: Map | null): void
+    getMap(): Map | null
+    getPanes(): MapPanes | undefined
+    getProjection(): MapCanvasProjection
   }
 }
 

@@ -1,15 +1,11 @@
-// [mcp-local harness] feature: pin-destino-padrao | plano: 8e2a1a1e | 2026-08-07 10:19:33
-// Remove icone customizado do pin de destino, volta ao pin padrao vermelho do Google
+// [mcp-local harness] feature: nome-motorista-no-mapa | plano: 2957ed47 | 2026-08-07 12:08:40
+// Adiciona user-select:none no overlay pra evitar selecao de texto acidental ao clicar
 // Componente do mapa com polling de localizacao dos motoristas +
 // pins de destino dos chamados ativos (pendente/aceita) de hoje.
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef } from "react"
 
-import {
-  DelegacaoService,
-  type DemandaVendaPublic,
-  type MotoristaLocalizacaoPublic,
-} from "@/client"
+import { DelegacaoService } from "@/client"
 import { useGoogleMapsScript } from "@/hooks/useGoogleMapsScript"
 
 // Centro padrão: Veranópolis/RS -- mesma cidade fixa usada na
@@ -29,27 +25,10 @@ const CENTRO_VERANOPOLIS: google.maps.LatLngLiteral = {
 const POLLING_MS = 12_000
 
 // Ícone customizado do marcador de motorista, fornecido pelo Ricardo
-// -- ver frontend/public/images/. 40x40 fica proporcional ao zoom 14
-// sem tampar ruas pequenas no mapa.
-const ICONE_MOTORISTA: google.maps.Icon = {
-  url: "/images/caminhao-motorista.png",
-  scaledSize: { width: 40, height: 40 },
-}
-
-// Pin de DESTINO (endereço do chamado ativo): usa o marcador PADRÃO
-// vermelho do Google, sem ícone customizado (decisão do Ricardo --
-// testamos com /images/produto-gas.png e ele preferiu voltar pro
-// pin padrão pra diferenciar melhor visualmente do marcador de
-// motorista). Basta omitir a opção `icon` na criação do Marker.
-
-// InfoWindow do Google sempre renderiza com fundo branco -- mas o
-// app roda em tema escuro por padrão, e a cor de texto do <body>
-// (branca no dark mode) vaza pra dentro do conteúdo HTML injetado
-// no popup via cascata CSS normal (o InfoWindow não tem isolamento
-// de estilo próprio). Sem essa cor fixa, o texto ficava branco
-// sobre fundo branco -- invisível. `color: #0f172a` = slate-900,
-// sempre escuro, independente do tema ativo no resto do app.
-const INFOWINDOW_TEXT_STYLE = "color:#0f172a"
+// -- ver frontend/public/images/. Tamanho em pixels ajustável aqui
+// (era 40px, aumentado a pedido do Ricardo -- "parece bem pequeno").
+const ICONE_MOTORISTA_SRC = "/images/caminhao-motorista.png"
+const ICONE_MOTORISTA_SIZE_PX = 56
 
 function formatarAtualizadoEm(atualizadoEm: string): string {
   const segundos = Math.floor(
@@ -60,6 +39,126 @@ function formatarAtualizadoEm(atualizadoEm: string): string {
   if (minutos < 60) return `há ${minutos}min`
   const horas = Math.floor(minutos / 60)
   return `há ${horas}h`
+}
+
+// ---------------------------------------------------------------------------
+// Marcador customizado do motorista -- o Marker padrão do Google não
+// suporta "ícone + texto sempre visível abaixo" (o `label` da API só
+// aceita texto curto sobreposto ao ícone, não uma legenda separada
+// embaixo). Um OverlayView desenha um <div> HTML de verdade (imagem +
+// nome) ancorado na posição lat/lng, atualizado a cada pan/zoom via
+// draw() -- é o jeito "correto" do Google Maps pra isso, mesmo dando
+// mais código que um Marker simples.
+//
+// A classe só pode ser definida DEPOIS do script do Google carregar
+// (precisa herdar de window.google.maps.OverlayView, que não existe
+// antes disso) -- por isso a definição fica atrás de
+// getMotoristaOverlayCtor(), memoizada em variável de módulo (só
+// precisa existir 1 vez, não por instância do componente).
+// ---------------------------------------------------------------------------
+
+interface MotoristaOverlayInstance extends google.maps.OverlayView {
+  setPosition(position: google.maps.LatLngLiteral): void
+  setLabel(label: string): void
+}
+
+type MotoristaOverlayCtor = new (
+  position: google.maps.LatLngLiteral,
+  label: string,
+  onClick: () => void,
+) => MotoristaOverlayInstance
+
+let motoristaOverlayCtor: MotoristaOverlayCtor | null = null
+
+function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
+  if (motoristaOverlayCtor) return motoristaOverlayCtor
+
+  class MotoristaOverlay
+    extends window.google!.maps.OverlayView
+    implements MotoristaOverlayInstance
+  {
+    private position: google.maps.LatLngLiteral
+    private label: string
+    private onClickHandler: () => void
+    private div: HTMLDivElement | null = null
+
+    constructor(
+      position: google.maps.LatLngLiteral,
+      label: string,
+      onClick: () => void,
+    ) {
+      super()
+      this.position = position
+      this.label = label
+      this.onClickHandler = onClick
+    }
+
+    onAdd() {
+      const div = document.createElement("div")
+      div.style.position = "absolute"
+      div.style.transform = "translate(-50%, -100%)"
+      div.style.display = "flex"
+      div.style.flexDirection = "column"
+      div.style.alignItems = "center"
+      div.style.cursor = "pointer"
+      div.style.pointerEvents = "auto"
+      div.style.userSelect = "none"
+
+      const img = document.createElement("img")
+      img.src = ICONE_MOTORISTA_SRC
+      img.style.width = `${ICONE_MOTORISTA_SIZE_PX}px`
+      img.style.height = `${ICONE_MOTORISTA_SIZE_PX}px`
+      img.style.display = "block"
+      img.draggable = false
+
+      const caption = document.createElement("span")
+      caption.textContent = this.label
+      caption.style.marginTop = "2px"
+      caption.style.padding = "1px 6px"
+      caption.style.borderRadius = "4px"
+      caption.style.background = "#ffffff"
+      caption.style.color = "#0f172a"
+      caption.style.fontSize = "12px"
+      caption.style.fontWeight = "600"
+      caption.style.whiteSpace = "nowrap"
+      caption.style.boxShadow = "0 1px 3px rgba(0,0,0,0.35)"
+
+      div.appendChild(img)
+      div.appendChild(caption)
+      div.addEventListener("click", () => this.onClickHandler())
+
+      this.div = div
+      this.getPanes()?.overlayMouseTarget.appendChild(div)
+    }
+
+    draw() {
+      if (!this.div) return
+      const point = this.getProjection().fromLatLngToDivPixel(this.position)
+      if (point) {
+        this.div.style.left = `${point.x}px`
+        this.div.style.top = `${point.y}px`
+      }
+    }
+
+    onRemove() {
+      this.div?.remove()
+      this.div = null
+    }
+
+    setPosition(position: google.maps.LatLngLiteral) {
+      this.position = position
+      this.draw()
+    }
+
+    setLabel(label: string) {
+      this.label = label
+      const caption = this.div?.querySelector("span")
+      if (caption) caption.textContent = label
+    }
+  }
+
+  motoristaOverlayCtor = MotoristaOverlay
+  return motoristaOverlayCtor
 }
 
 interface MapaMotoristasProps {
@@ -75,28 +174,13 @@ export function MapaMotoristas({
   const { loaded, error: scriptError } = useGoogleMapsScript()
   const mapDivRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
-  const markersRef = useRef<globalThis.Map<string, google.maps.Marker>>(
+  const overlaysRef = useRef<globalThis.Map<string, MotoristaOverlayInstance>>(
     new globalThis.Map(),
   )
   const destinoMarkersRef = useRef<globalThis.Map<string, google.maps.Marker>>(
     new globalThis.Map(),
   )
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null)
-
-  // Dado mais recente por id -- os listeners de clique dos
-  // marcadores leem DAQUI na hora do clique (não fecham sobre o
-  // objeto do momento da criação do marcador). Sem isso, um marcador
-  // já existente (só teve a posição atualizada via setPosition, não
-  // recriado) continuava abrindo o InfoWindow com o texto de quando
-  // foi criado pela primeira vez -- ex: clicar de novo depois do
-  // motorista aceitar um chamado aberto continuava mostrando "Aberto
-  // -- qualquer motorista" (bug real, encontrado em teste manual).
-  const motoristasDataRef = useRef<globalThis.Map<string, MotoristaLocalizacaoPublic>>(
-    new globalThis.Map(),
-  )
-  const demandasDataRef = useRef<globalThis.Map<string, DemandaVendaPublic>>(
-    new globalThis.Map(),
-  )
 
   const {
     data,
@@ -137,51 +221,41 @@ export function MapaMotoristas({
 
   // Sincroniza os marcadores de MOTORISTA com os dados mais recentes
   // -- upsert por motorista_id (mesma lógica de upsert do backend:
-  // sobrescreve posição do marcador existente, nunca acumula
+  // sobrescreve posição/legenda do overlay existente, nunca acumula
   // duplicado)
   useEffect(() => {
     if (!mapRef.current || !data || !window.google) return
 
     const idsAtuais = new Set(data.data.map((m) => m.motorista_id))
 
-    // remove marcadores de motoristas que saíram da lista -- defensivo
-    // (não deveria acontecer hoje, já que não há DELETE de
-    // localização, mas evita marcador órfão se o dado mudar)
-    for (const [id, marker] of markersRef.current) {
+    for (const [id, overlay] of overlaysRef.current) {
       if (!idsAtuais.has(id)) {
-        marker.setMap(null)
-        markersRef.current.delete(id)
-        motoristasDataRef.current.delete(id)
+        overlay.setMap(null)
+        overlaysRef.current.delete(id)
       }
     }
 
     for (const motorista of data.data) {
-      motoristasDataRef.current.set(motorista.motorista_id, motorista)
-
       const position: google.maps.LatLngLiteral = {
         lat: Number(motorista.latitude),
         lng: Number(motorista.longitude),
       }
-      const existente = markersRef.current.get(motorista.motorista_id)
+      const existente = overlaysRef.current.get(motorista.motorista_id)
 
       if (existente) {
         existente.setPosition(position)
+        existente.setLabel(motorista.motorista_nome)
       } else {
-        const marker = new window.google.maps.Marker({
-          position,
-          map: mapRef.current,
-          title: motorista.motorista_nome,
-          icon: ICONE_MOTORISTA,
-        })
-        marker.addListener("click", () => {
-          const atual = motoristasDataRef.current.get(motorista.motorista_id)
-          if (!atual) return
+        const OverlayCtor = getMotoristaOverlayCtor()
+        const overlay = new OverlayCtor(position, motorista.motorista_nome, () => {
           infoWindowRef.current?.setContent(
-            `<div style="${INFOWINDOW_TEXT_STYLE}"><strong>${atual.motorista_nome}</strong><br/>Atualizado ${formatarAtualizadoEm(atual.atualizado_em)}</div>`,
+            `<div style="color:#0f172a"><strong>${motorista.motorista_nome}</strong><br/>Atualizado ${formatarAtualizadoEm(motorista.atualizado_em)}</div>`,
           )
-          infoWindowRef.current?.open(mapRef.current ?? undefined, marker)
+          infoWindowRef.current?.setPosition(position)
+          infoWindowRef.current?.open(mapRef.current ?? undefined)
         })
-        markersRef.current.set(motorista.motorista_id, marker)
+        overlay.setMap(mapRef.current)
+        overlaysRef.current.set(motorista.motorista_id, overlay)
       }
     }
   }, [data])
@@ -190,7 +264,9 @@ export function MapaMotoristas({
   // upsert por demanda.id. Sem linha ligando motorista↔destino de
   // propósito (decisão do Ricardo: evitar custo de Directions API) --
   // o InfoWindow do pin já deixa explícito qual motorista aceitou
-  // (ou "Aberto", se ainda não tiver dono).
+  // (ou "Aberto", se ainda não tiver dono). Continua usando o Marker
+  // padrão do Google (pin vermelho) -- só o marcador de motorista
+  // virou overlay customizado.
   useEffect(() => {
     if (!mapRef.current || !demandasHoje || !window.google) return
 
@@ -203,13 +279,10 @@ export function MapaMotoristas({
       if (!idsAtivos.has(id)) {
         marker.setMap(null)
         destinoMarkersRef.current.delete(id)
-        demandasDataRef.current.delete(id)
       }
     }
 
     for (const demanda of ativas) {
-      demandasDataRef.current.set(demanda.id, demanda)
-
       if (!demanda.endereco.latitude || !demanda.endereco.longitude) continue
 
       const position: google.maps.LatLngLiteral = {
@@ -221,21 +294,17 @@ export function MapaMotoristas({
       if (existente) {
         existente.setPosition(position)
       } else {
-        // Sem `icon` de propósito -- pin padrão vermelho do Google
-        // (ver comentário acima da constante ICONE_MOTORISTA).
         const marker = new window.google.maps.Marker({
           position,
           map: mapRef.current,
           title: demanda.cliente_nome,
         })
         marker.addListener("click", () => {
-          const atual = demandasDataRef.current.get(demanda.id)
-          if (!atual) return
-          const quemAceitou = atual.motorista_nome
-            ? `Motorista: ${atual.motorista_nome}`
+          const quemAceitou = demanda.motorista_nome
+            ? `Motorista: ${demanda.motorista_nome}`
             : "Aberto -- qualquer motorista"
           infoWindowRef.current?.setContent(
-            `<div style="${INFOWINDOW_TEXT_STYLE}"><strong>${atual.cliente_nome}</strong><br/>${atual.endereco.rua_nome}, ${atual.endereco.numero}<br/>${quemAceitou}</div>`,
+            `<div style="color:#0f172a"><strong>${demanda.cliente_nome}</strong><br/>${demanda.endereco.rua_nome}, ${demanda.endereco.numero}<br/>${quemAceitou}</div>`,
           )
           infoWindowRef.current?.open(mapRef.current ?? undefined, marker)
         })
