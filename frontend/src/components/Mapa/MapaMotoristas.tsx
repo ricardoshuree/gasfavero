@@ -1,10 +1,15 @@
-// [mcp-local harness] feature: painel-mapa-frontend | plano: 660739b7 | 2026-08-07 09:40:31
-// Icone customizado do motorista + altura flexivel do mapa
-// Componente do mapa com polling de localizacao dos motoristas
+// [mcp-local harness] feature: fix-infowindow-dado-desatualizado | plano: a6328fc6 | 2026-08-07 10:13:32
+// Listeners de clique leem sempre o dado mais recente via ref, evitando InfoWindow desatualizado
+// Componente do mapa com polling de localizacao dos motoristas +
+// pins de destino dos chamados ativos (pendente/aceita) de hoje.
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef } from "react"
 
-import { DelegacaoService } from "@/client"
+import {
+  DelegacaoService,
+  type DemandaVendaPublic,
+  type MotoristaLocalizacaoPublic,
+} from "@/client"
 import { useGoogleMapsScript } from "@/hooks/useGoogleMapsScript"
 
 // Centro padrão: Veranópolis/RS -- mesma cidade fixa usada na
@@ -30,6 +35,23 @@ const ICONE_MOTORISTA: google.maps.Icon = {
   url: "/images/caminhao-motorista.png",
   scaledSize: { width: 40, height: 40 },
 }
+
+// Ícone do pin de DESTINO (endereço do chamado ativo) -- mesma
+// imagem usada na lista "Chamadas hoje" do painel lateral, pra
+// manter a associação visual entre a lista e o mapa.
+const ICONE_DESTINO: google.maps.Icon = {
+  url: "/images/produto-gas.png",
+  scaledSize: { width: 36, height: 36 },
+}
+
+// InfoWindow do Google sempre renderiza com fundo branco -- mas o
+// app roda em tema escuro por padrão, e a cor de texto do <body>
+// (branca no dark mode) vaza pra dentro do conteúdo HTML injetado
+// no popup via cascata CSS normal (o InfoWindow não tem isolamento
+// de estilo próprio). Sem essa cor fixa, o texto ficava branco
+// sobre fundo branco -- invisível. `color: #0f172a` = slate-900,
+// sempre escuro, independente do tema ativo no resto do app.
+const INFOWINDOW_TEXT_STYLE = "color:#0f172a"
 
 function formatarAtualizadoEm(atualizadoEm: string): string {
   const segundos = Math.floor(
@@ -58,7 +80,25 @@ export function MapaMotoristas({
   const markersRef = useRef<globalThis.Map<string, google.maps.Marker>>(
     new globalThis.Map(),
   )
+  const destinoMarkersRef = useRef<globalThis.Map<string, google.maps.Marker>>(
+    new globalThis.Map(),
+  )
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null)
+
+  // Dado mais recente por id -- os listeners de clique dos
+  // marcadores leem DAQUI na hora do clique (não fecham sobre o
+  // objeto do momento da criação do marcador). Sem isso, um marcador
+  // já existente (só teve a posição atualizada via setPosition, não
+  // recriado) continuava abrindo o InfoWindow com o texto de quando
+  // foi criado pela primeira vez -- ex: clicar de novo depois do
+  // motorista aceitar um chamado aberto continuava mostrando "Aberto
+  // -- qualquer motorista" (bug real, encontrado em teste manual).
+  const motoristasDataRef = useRef<globalThis.Map<string, MotoristaLocalizacaoPublic>>(
+    new globalThis.Map(),
+  )
+  const demandasDataRef = useRef<globalThis.Map<string, DemandaVendaPublic>>(
+    new globalThis.Map(),
+  )
 
   const {
     data,
@@ -67,6 +107,17 @@ export function MapaMotoristas({
   } = useQuery({
     queryKey: ["localizacoesMotoristas"],
     queryFn: () => DelegacaoService.readLocalizacoesMotoristas(),
+    refetchInterval: POLLING_MS,
+    enabled: loaded,
+  })
+
+  // Chamados ATIVOS de hoje (pendente/aceita) -- vira os pins de
+  // destino. Some sozinho da lista quando o motorista marca
+  // "cheguei" (status vira concluida), então o pin desaparece do
+  // mapa no próximo polling sem precisar de lógica extra aqui.
+  const { data: demandasHoje } = useQuery({
+    queryKey: ["demandasHoje"],
+    queryFn: () => DelegacaoService.readDemandasHoje(),
     refetchInterval: POLLING_MS,
     enabled: loaded,
   })
@@ -86,9 +137,10 @@ export function MapaMotoristas({
     infoWindowRef.current = new window.google.maps.InfoWindow()
   }, [loaded])
 
-  // Sincroniza os marcadores com os dados mais recentes -- upsert por
-  // motorista_id (mesma lógica de upsert do backend: sobrescreve
-  // posição do marcador existente, nunca acumula duplicado)
+  // Sincroniza os marcadores de MOTORISTA com os dados mais recentes
+  // -- upsert por motorista_id (mesma lógica de upsert do backend:
+  // sobrescreve posição do marcador existente, nunca acumula
+  // duplicado)
   useEffect(() => {
     if (!mapRef.current || !data || !window.google) return
 
@@ -101,10 +153,13 @@ export function MapaMotoristas({
       if (!idsAtuais.has(id)) {
         marker.setMap(null)
         markersRef.current.delete(id)
+        motoristasDataRef.current.delete(id)
       }
     }
 
     for (const motorista of data.data) {
+      motoristasDataRef.current.set(motorista.motorista_id, motorista)
+
       const position: google.maps.LatLngLiteral = {
         lat: Number(motorista.latitude),
         lng: Number(motorista.longitude),
@@ -121,8 +176,10 @@ export function MapaMotoristas({
           icon: ICONE_MOTORISTA,
         })
         marker.addListener("click", () => {
+          const atual = motoristasDataRef.current.get(motorista.motorista_id)
+          if (!atual) return
           infoWindowRef.current?.setContent(
-            `<strong>${motorista.motorista_nome}</strong><br/>Atualizado ${formatarAtualizadoEm(motorista.atualizado_em)}`,
+            `<div style="${INFOWINDOW_TEXT_STYLE}"><strong>${atual.motorista_nome}</strong><br/>Atualizado ${formatarAtualizadoEm(atual.atualizado_em)}</div>`,
           )
           infoWindowRef.current?.open(mapRef.current ?? undefined, marker)
         })
@@ -130,6 +187,63 @@ export function MapaMotoristas({
       }
     }
   }, [data])
+
+  // Sincroniza os pins de DESTINO com os chamados ativos de hoje --
+  // upsert por demanda.id. Sem linha ligando motorista↔destino de
+  // propósito (decisão do Ricardo: evitar custo de Directions API) --
+  // o InfoWindow do pin já deixa explícito qual motorista aceitou
+  // (ou "Aberto", se ainda não tiver dono).
+  useEffect(() => {
+    if (!mapRef.current || !demandasHoje || !window.google) return
+
+    const ativas = demandasHoje.data.filter(
+      (d) => d.status === "pendente" || d.status === "aceita",
+    )
+    const idsAtivos = new Set(ativas.map((d) => d.id))
+
+    for (const [id, marker] of destinoMarkersRef.current) {
+      if (!idsAtivos.has(id)) {
+        marker.setMap(null)
+        destinoMarkersRef.current.delete(id)
+        demandasDataRef.current.delete(id)
+      }
+    }
+
+    for (const demanda of ativas) {
+      demandasDataRef.current.set(demanda.id, demanda)
+
+      if (!demanda.endereco.latitude || !demanda.endereco.longitude) continue
+
+      const position: google.maps.LatLngLiteral = {
+        lat: Number(demanda.endereco.latitude),
+        lng: Number(demanda.endereco.longitude),
+      }
+      const existente = destinoMarkersRef.current.get(demanda.id)
+
+      if (existente) {
+        existente.setPosition(position)
+      } else {
+        const marker = new window.google.maps.Marker({
+          position,
+          map: mapRef.current,
+          title: demanda.cliente_nome,
+          icon: ICONE_DESTINO,
+        })
+        marker.addListener("click", () => {
+          const atual = demandasDataRef.current.get(demanda.id)
+          if (!atual) return
+          const quemAceitou = atual.motorista_nome
+            ? `Motorista: ${atual.motorista_nome}`
+            : "Aberto -- qualquer motorista"
+          infoWindowRef.current?.setContent(
+            `<div style="${INFOWINDOW_TEXT_STYLE}"><strong>${atual.cliente_nome}</strong><br/>${atual.endereco.rua_nome}, ${atual.endereco.numero}<br/>${quemAceitou}</div>`,
+          )
+          infoWindowRef.current?.open(mapRef.current ?? undefined, marker)
+        })
+        destinoMarkersRef.current.set(demanda.id, marker)
+      }
+    }
+  }, [demandasHoje])
 
   if (scriptError) {
     return (
