@@ -19,6 +19,7 @@ import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
 import { Route as LayoutInadimplentesRouteImport } from './routes/_layout/inadimplentes'
 import { Route as LayoutLivroVendasRouteImport } from './routes/_layout/livro-vendas'
+import { Route as LayoutMapaRouteImport } from './routes/_layout/mapa'
 import { Route as LayoutPermissionsRouteImport } from './routes/_layout/permissions'
 import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
@@ -76,6 +77,11 @@ const LayoutLivroVendasRoute = LayoutLivroVendasRouteImport.update({
   path: '/livro-vendas',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutMapaRoute = LayoutMapaRouteImport.update({
+  id: '/mapa',
+  path: '/mapa',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutPermissionsRoute = LayoutPermissionsRouteImport.update({
   id: '/permissions',
   path: '/permissions',
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/clientes': typeof LayoutClientesRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
+  '/mapa': typeof LayoutMapaRoute
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof LayoutClientesRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
+  '/mapa': typeof LayoutMapaRoute
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/_layout/clientes': typeof LayoutClientesRoute
   '/_layout/inadimplentes': typeof LayoutInadimplentesRoute
   '/_layout/livro-vendas': typeof LayoutLivroVendasRoute
+  '/_layout/mapa': typeof LayoutMapaRoute
   '/_layout/permissions': typeof LayoutPermissionsRoute
   '/_layout/precos': typeof LayoutPrecosRoute
   '/_layout/produtos': typeof LayoutProdutosRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/inadimplentes'
     | '/livro-vendas'
+    | '/mapa'
     | '/permissions'
     | '/precos'
     | '/produtos'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/inadimplentes'
     | '/livro-vendas'
+    | '/mapa'
     | '/permissions'
     | '/precos'
     | '/produtos'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/_layout/clientes'
     | '/_layout/inadimplentes'
     | '/_layout/livro-vendas'
+    | '/_layout/mapa'
     | '/_layout/permissions'
     | '/_layout/precos'
     | '/_layout/produtos'
@@ -306,6 +318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLivroVendasRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/mapa': {
+      id: '/_layout/mapa'
+      path: '/mapa'
+      fullPath: '/mapa'
+      preLoaderRoute: typeof LayoutMapaRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/permissions': {
       id: '/_layout/permissions'
       path: '/permissions'
@@ -363,6 +382,7 @@ interface LayoutRouteChildren {
   LayoutClientesRoute: typeof LayoutClientesRoute
   LayoutInadimplentesRoute: typeof LayoutInadimplentesRoute
   LayoutLivroVendasRoute: typeof LayoutLivroVendasRoute
+  LayoutMapaRoute: typeof LayoutMapaRoute
   LayoutPermissionsRoute: typeof LayoutPermissionsRoute
   LayoutPrecosRoute: typeof LayoutPrecosRoute
   LayoutProdutosRoute: typeof LayoutProdutosRoute
@@ -378,6 +398,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutClientesRoute: LayoutClientesRoute,
   LayoutInadimplentesRoute: LayoutInadimplentesRoute,
   LayoutLivroVendasRoute: LayoutLivroVendasRoute,
+  LayoutMapaRoute: LayoutMapaRoute,
   LayoutPermissionsRoute: LayoutPermissionsRoute,
   LayoutPrecosRoute: LayoutPrecosRoute,
   LayoutProdutosRoute: LayoutProdutosRoute,

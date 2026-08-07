@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -157,7 +157,9 @@ export class DelegacaoService {
     /**
      * Create Demanda Venda
      * Despacha uma demanda de venda pro motorista escolhido pelo
-     * atendente. Sempre nasce com status 'pendente'.
+     * atendente. Sempre nasce com status 'pendente'. criado_por_id é
+     * sempre o usuário autenticado que fez a chamada (o atendente),
+     * NUNCA o motorista pra quem a demanda foi despachada.
      * @param data The data for the request.
      * @param data.requestBody
      * @returns DemandaVendaPublic Successful Response
@@ -315,6 +317,31 @@ export class GeografiaService {
             url: '/api/v1/bairros/{bairro_id}/ruas',
             path: {
                 bairro_id: data.bairroId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Geocodificar Endereco
+     * Retry manual de geocodificação -- pra endereços cadastrados
+     * antes da Fase 2 existir, ou que falharam na tentativa automática
+     * (sem cota, API fora do ar, etc). SEMPRE tenta de novo quando
+     * chamado (diferente da criação, que só tenta uma vez) -- é uma ação
+     * explícita do usuário, não um retry silencioso em background.
+     * @param data The data for the request.
+     * @param data.enderecoId
+     * @returns EnderecoPublic Successful Response
+     * @throws ApiError
+     */
+    public static geocodificarEndereco(data: GeografiaGeocodificarEnderecoData): CancelablePromise<GeografiaGeocodificarEnderecoResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/enderecos/{endereco_id}/geocodificar',
+            path: {
+                endereco_id: data.enderecoId
             },
             errors: {
                 422: 'Validation Error'

@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: inadimplentes-frontend | plano: 9164ae80 | 2026-08-06 12:54:06
-// Item "Inadimplentes" (modulo inadimplencia) logo abaixo de Livro de Vendas
+// [mcp-local harness] feature: delegacao-venda-fase3-mapa | plano: caf9c096 | 2026-08-07 07:05:12
+// Adiciona item Mapa no menu lateral (modulo mapa)
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -15,6 +15,11 @@
  *   - Inadimplentes      → módulo "inadimplencia" (já existia
  *                           cadastrado no banco desde a migration de
  *                           módulos de negócio, nunca usado até agora)
+ *   - Mapa               → módulo "mapa" (idem -- já existia
+ *                           cadastrado, nunca usado até a Fase 3 da
+ *                           Delegação de Venda). Fase 3 = só
+ *                           visualização (marcadores de motoristas),
+ *                           sem formulário de despacho ainda.
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -39,6 +44,7 @@ import {
   Box,
   HandCoins,
   Home,
+  MapPin,
   Package,
   Settings,
   ShieldCheck,
@@ -86,6 +92,7 @@ const MODULE_ITEMS: Array<Item & { module: string }> = [
     title: "Inadimplentes",
     path: "/inadimplentes",
   },
+  { module: "mapa", icon: MapPin, title: "Mapa", path: "/mapa" },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
   {

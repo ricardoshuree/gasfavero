@@ -155,6 +155,8 @@ export type EnderecoPublic = {
     rua_nome: string;
     bairro_nome: string;
     cidade_nome: string;
+    latitude?: (string | null);
+    longitude?: (string | null);
 };
 
 export type HTTPValidationError = {
@@ -795,6 +797,12 @@ export type GeografiaReadRuasData = {
 };
 
 export type GeografiaReadRuasResponse = (RuasPublic);
+
+export type GeografiaGeocodificarEnderecoData = {
+    enderecoId: string;
+};
+
+export type GeografiaGeocodificarEnderecoResponse = (EnderecoPublic);
 
 export type ItemsReadItemsData = {
     limit?: number;

@@ -560,6 +560,30 @@ export const EnderecoPublicSchema = {
         cidade_nome: {
             type: 'string',
             title: 'Cidade Nome'
+        },
+        latitude: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Latitude'
+        },
+        longitude: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Longitude'
         }
     },
     type: 'object',
