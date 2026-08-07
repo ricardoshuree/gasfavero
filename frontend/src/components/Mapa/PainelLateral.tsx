@@ -1,13 +1,13 @@
-// [mcp-local harness] feature: fix-build-producao-ts6133 | plano: 0d473f6a | 2026-08-07 10:42:34
-// Remove variavel 'ano' nao usada (hole no destructuring)
+// [mcp-local harness] feature: ordenacao-chamados-ativos | plano: e8e266bf | 2026-08-07 11:12:30
+// Ordena ativas: pendentes primeiro, depois aceitos, mantendo recente-primeiro dentro de cada grupo (sort estavel)
 // Painel lateral da tela Mapa (pedido do Ricardo, pensado pra rodar
 // numa TV no escritório do gerente): 3 blocos empilhados --
 //   1. Reservado (ainda sem definição do que vai aqui)
 //   2. Ranking da Semana -- top 3 motoristas por quantidade de
 //      vendas, semana corrente (domingo-sábado)
-//   3. Chamadas hoje -- chamados de HOJE, ativos (pendente/aceita)
-//      no topo com entrada dinâmica, concluídos embaixo com o
-//      horário de atendimento. Reseta sozinho à meia-noite (filtro
+//   3. Chamadas hoje -- chamados de HOJE, ordenados: pendentes
+//      (abertos) primeiro, depois aceitos, depois concluídos por
+//      último (seção separada). Reseta sozinho à meia-noite (filtro
 //      de data no backend, não apaga histórico -- ver
 //      GET /demandas-venda/hoje).
 //
@@ -21,7 +21,7 @@
 // Ricardo -- ver instrução de troca no README do painel, se precisar
 // substituir depois.
 import { useQuery } from "@tanstack/react-query"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Loader2 } from "lucide-react"
 
 import { DelegacaoService, type DemandaVendaPublic, VendasService } from "@/client"
 
@@ -30,6 +30,11 @@ const POLLING_CHAMADAS_MS = 12_000
 
 // Cor fixa dos cabeçalhos dos blocos (mesmo tom em qualquer tema)
 const HEADER_CLASS = "bg-teal-700 px-3 py-2 text-white"
+
+// Cor do indicador "aguardando aceite" -- azul (#0055A4, "Bleu
+// France") em vez de laranja/âmbar: pedido do Ricardo, que é míope e
+// tem dificuldade de contraste com laranja sobre fundo branco.
+const AGUARDANDO_COLOR_CLASS = "text-[#0055A4]"
 
 // "ano" descartado de propósito (formato curto dd/mm, sem ano) -- o
 // hole no array destructuring evita o erro TS6133 ("declared but
@@ -120,14 +125,51 @@ function RankingSemana() {
 // Bloco 3 -- Chamadas hoje
 // ---------------------------------------------------------------------------
 
+// Enquanto status="pendente" (ninguém ACEITOU ainda -- mesmo que o
+// chamado já tenha nascido direcionado a um motorista específico,
+// ver DemandaVendaCreate.motorista_id em models.py), o ícone estático
+// de motorista dava a falsa impressão de "já tem alguém confirmado
+// nessa entrega" (achado real do Ricardo testando em produção). Só
+// depois que o status vira "aceita" é que mostramos o ícone estático
+// -- até lá, um spinner CSS (azul, ver AGUARDANDO_COLOR_CLASS) deixa
+// claro que é uma incerteza, sem precisar de um GIF customizado.
+//
+// O nome do motorista (depois de aceito) fica como legenda ABAIXO do
+// próprio ícone dele -- mesmo padrão já usado no bloco Ranking da
+// Semana logo acima -- em vez de misturado na coluna de texto
+// genérica (cliente/endereço), que é onde estava antes e o Ricardo
+// achou confuso em teste real.
 function ChamadaAtivaRow({ demanda }: { demanda: DemandaVendaPublic }) {
+  const aguardandoAceite = demanda.status === "pendente"
+
+  const statusText = aguardandoAceite
+    ? demanda.motorista_nome
+      ? `Aguardando ${demanda.motorista_nome} aceitar...`
+      : "Aberto -- aguardando aceite"
+    : null
+
   return (
     <div className="flex items-center gap-2 rounded-md bg-slate-50 p-2">
-      <img
-        src="/images/motorista-pendente.png"
-        alt=""
-        className="h-8 w-8 shrink-0 object-contain"
-      />
+      <div className="flex w-14 shrink-0 flex-col items-center gap-0.5">
+        {aguardandoAceite ? (
+          <div className="flex h-8 w-8 items-center justify-center">
+            <Loader2
+              className={`h-6 w-6 animate-spin ${AGUARDANDO_COLOR_CLASS}`}
+            />
+          </div>
+        ) : (
+          <>
+            <img
+              src="/images/motorista-pendente.png"
+              alt=""
+              className="h-8 w-8 object-contain"
+            />
+            <p className="w-full truncate text-center text-[10px] leading-tight text-slate-600">
+              {demanda.motorista_nome}
+            </p>
+          </>
+        )}
+      </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
       <img
         src="/images/produto-gas.png"
@@ -141,9 +183,13 @@ function ChamadaAtivaRow({ demanda }: { demanda: DemandaVendaPublic }) {
         <p className="truncate text-xs text-slate-500">
           {formatEnderecoCurto(demanda)}
         </p>
-        <p className="truncate text-xs text-slate-500">
-          {demanda.motorista_nome ?? "Aberto -- qualquer motorista"}
-        </p>
+        {statusText && (
+          <p
+            className={`truncate text-xs font-medium ${AGUARDANDO_COLOR_CLASS}`}
+          >
+            {statusText}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -174,6 +220,17 @@ function ChamadaConcluidaRow({ demanda }: { demanda: DemandaVendaPublic }) {
   )
 }
 
+// Prioridade de ordenação dentro das ativas -- pendente (aberto,
+// ninguém aceitou ainda) sempre primeiro, depois aceita (pedido do
+// Ricardo: quem ainda não tem motorista confirmado precisa chamar
+// mais atenção, ficando no topo). Array.prototype.sort é estável
+// (garantido desde ES2019), então dentro de cada grupo a ordem
+// "mais recente primeiro" que já vem do backend (created_at desc) é
+// preservada -- não precisa de critério de desempate explícito.
+function prioridadeAtiva(demanda: DemandaVendaPublic): number {
+  return demanda.status === "pendente" ? 0 : 1
+}
+
 function ChamadasHoje() {
   const { data } = useQuery({
     queryKey: ["demandasHoje"],
@@ -182,12 +239,9 @@ function ChamadasHoje() {
   })
 
   const todas = data?.data ?? []
-  // Ativas: entrada dinâmica no topo -- já vem ordenado por
-  // created_at desc do backend, então "mais recente primeiro" já é o
-  // comportamento natural sem precisar reordenar aqui.
-  const ativas = todas.filter(
-    (d) => d.status === "pendente" || d.status === "aceita",
-  )
+  const ativas = todas
+    .filter((d) => d.status === "pendente" || d.status === "aceita")
+    .sort((a, b) => prioridadeAtiva(a) - prioridadeAtiva(b))
   const concluidas = todas
     .filter((d) => d.status === "concluida")
     .sort((a, b) =>
