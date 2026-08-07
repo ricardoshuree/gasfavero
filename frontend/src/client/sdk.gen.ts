@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoReadDemandasHojeResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoConcluirDemandaVendaData, DelegacaoConcluirDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadRankingSemanaResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -131,9 +131,12 @@ export class ClientesService {
 export class DelegacaoService {
     /**
      * Read Demandas Venda
-     * Lista demandas de venda, mais recentes primeiro. Filtros
-     * opcionais por motorista (fila "Minhas Demandas" do motorista) e/ou
-     * status.
+     * Lista chamados, mais recentes primeiro. Filtros opcionais por
+     * motorista (fila "Minhas Demandas" do motorista) e/ou status. Não
+     * filtra por padrão os chamados abertos (motorista_id NULL) -- pra
+     * ver só os abertos, o frontend usa motorista_id=null implicitamente
+     * (não manda o parâmetro) e filtra client-side, ou pode-se adicionar
+     * um filtro dedicado depois se a lista crescer demais.
      * @param data The data for the request.
      * @param data.motoristaId
      * @param data.status
@@ -156,10 +159,10 @@ export class DelegacaoService {
     
     /**
      * Create Demanda Venda
-     * Despacha uma demanda de venda pro motorista escolhido pelo
-     * atendente. Sempre nasce com status 'pendente'. criado_por_id é
-     * sempre o usuário autenticado que fez a chamada (o atendente),
-     * NUNCA o motorista pra quem a demanda foi despachada.
+     * Despacha um chamado. Sempre nasce com status 'pendente'.
+     * criado_por_id é sempre o usuário autenticado que fez a chamada (o
+     * atendente), NUNCA o motorista. motorista_id omitido = chamado
+     * ABERTO (qualquer motorista pode aceitar).
      * @param data The data for the request.
      * @param data.requestBody
      * @returns DemandaVendaPublic Successful Response
@@ -178,11 +181,36 @@ export class DelegacaoService {
     }
     
     /**
+     * Read Demandas Hoje
+     * Chamados criados HOJE (horário de Brasília) -- usado no painel
+     * lateral da tela Mapa ("Chamadas hoje"). Não filtra por status: o
+     * frontend separa em "ativas" (pendente/aceita) no topo e
+     * "concluídas" (finalizada_em preenchido) embaixo -- chamados
+     * recusados hoje simplesmente não aparecem em nenhum dos dois
+     * grupos (são um beco sem saída já resolvido em outro lugar).
+     *
+     * Isso é um filtro de DATA, não uma exclusão -- reseta sozinho à
+     * meia-noite porque o dia mudou, o histórico continua intacto no
+     * banco pra sempre, só não aparece mais aqui no dia seguinte.
+     * @returns DemandasVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static readDemandasHoje(): CancelablePromise<DelegacaoReadDemandasHojeResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/demandas-venda/hoje'
+        });
+    }
+    
+    /**
      * Aceitar Demanda Venda
-     * Motorista aceita a demanda -- só é permitido a partir de
-     * 'pendente' (não dá pra aceitar uma demanda já recusada).
+     * Motorista aceita o chamado -- só a partir de 'pendente'. Se o
+     * chamado estava ABERTO (motorista_id NULL), aceitar_in.motorista_id
+     * é obrigatório: é quem está assumindo o chamado. Se já tinha um
+     * motorista definido, motorista_id do corpo é ignorado.
      * @param data The data for the request.
      * @param data.demandaId
+     * @param data.requestBody
      * @returns DemandaVendaPublic Successful Response
      * @throws ApiError
      */
@@ -193,6 +221,8 @@ export class DelegacaoService {
             path: {
                 demanda_id: data.demandaId
             },
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }
@@ -201,10 +231,9 @@ export class DelegacaoService {
     
     /**
      * Recusar Demanda Venda
-     * Motorista recusa a demanda -- só é permitido a partir de
-     * 'pendente'. Não existe endpoint de reatribuição automática aqui
-     * (Fase 1): o atendente vê a recusa na lista e despacha uma demanda
-     * NOVA pra outro motorista, se for o caso.
+     * Recusa o chamado -- só a partir de 'pendente'. Não existe
+     * reatribuição automática: o atendente vê a recusa na lista e
+     * despacha um chamado NOVO pra outro motorista, se for o caso.
      * @param data The data for the request.
      * @param data.demandaId
      * @returns DemandaVendaPublic Successful Response
@@ -214,6 +243,30 @@ export class DelegacaoService {
         return __request(OpenAPI, {
             method: 'PATCH',
             url: '/api/v1/demandas-venda/{demanda_id}/recusar',
+            path: {
+                demanda_id: data.demandaId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Concluir Demanda Venda
+     * Motorista marca 'cheguei ao destino' -- só a partir de
+     * 'aceita'. ENCERRA o chamado (some do mapa e da lista do
+     * motorista); a venda em si acontece depois, separadamente, na
+     * tela de Vendas -- não é automática aqui.
+     * @param data The data for the request.
+     * @param data.demandaId
+     * @returns DemandaVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static concluirDemandaVenda(data: DelegacaoConcluirDemandaVendaData): CancelablePromise<DelegacaoConcluirDemandaVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/demandas-venda/{demanda_id}/concluir',
             path: {
                 demanda_id: data.demandaId
             },
@@ -255,7 +308,7 @@ export class DelegacaoService {
     /**
      * Read Localizacoes Motoristas
      * Última posição conhecida de cada motorista que já deu ao menos
-     * 1 ping -- base pros marcadores do mapa do atendente (Fase 3).
+     * 1 ping -- base pros marcadores do mapa do atendente.
      * @returns MotoristasLocalizacaoPublic Successful Response
      * @throws ApiError
      */
@@ -1450,6 +1503,22 @@ export class VendasService {
             errors: {
                 422: 'Validation Error'
             }
+        });
+    }
+    
+    /**
+     * Read Ranking Semana
+     * Top 3 motoristas por QUANTIDADE de vendas na semana corrente
+     * (domingo-sábado) -- conta todas as vendas independente de forma
+     * de pagamento ou status de pagamento (é volume de atendimento, não
+     * faturamento).
+     * @returns RankingSemanaPublic Successful Response
+     * @throws ApiError
+     */
+    public static readRankingSemana(): CancelablePromise<VendasReadRankingSemanaResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendas/ranking-semana'
         });
     }
     

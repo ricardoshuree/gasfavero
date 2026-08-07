@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: venda-valida-vale-pertence-motorista | plano: a5c5b3f6 | 2026-08-06 13:59:40
-# Adiciona validacao: vale so pode ser usado em venda atribuida ao mesmo motorista dono do bloco de onde o vale veio
+# [mcp-local harness] feature: painel-mapa-backend | plano: 326a78ae | 2026-08-07 09:38:06
+# Adiciona endpoint GET /vendas/ranking-semana
 """
 Rotas de Venda (venda de balcão da distribuidora). Controle de acesso
 via módulo RBAC "vendas".
@@ -41,6 +41,8 @@ from app.models import (
     LivroVendasResumoPublic,
     Preco,
     ProximoValeNumeroPublic,
+    RankingMotoristaPublic,
+    RankingSemanaPublic,
     ResumoRecebimentoValePublic,
     Rua,
     User,
@@ -846,6 +848,54 @@ def read_livro_vendas(
         count=count,
         soma_preco=soma_preco,
         soma_valor_pago=soma_valor_pago,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ranking da Semana -- usado no painel lateral da tela Mapa. Reaproveita
+# _semana_atual (definida acima, mesmo corte dom-sáb do Livro de
+# Vendas). Precisa vir ANTES de "/{id}" nesse arquivo, mesmo motivo dos
+# blocos anteriores.
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/ranking-semana",
+    response_model=RankingSemanaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_ranking_semana(session: SessionDep) -> Any:
+    """Top 3 motoristas por QUANTIDADE de vendas na semana corrente
+    (domingo-sábado) -- conta todas as vendas independente de forma
+    de pagamento ou status de pagamento (é volume de atendimento, não
+    faturamento)."""
+    periodo_inicio, periodo_fim = _semana_atual()
+    vendas_periodo = session.exec(
+        select(Venda)
+        .where(Venda.data_venda >= periodo_inicio)
+        .where(Venda.data_venda <= periodo_fim)
+    ).all()
+
+    contagem: dict[uuid.UUID, int] = {}
+    for v in vendas_periodo:
+        contagem[v.motorista_id] = contagem.get(v.motorista_id, 0) + 1
+
+    ranking = []
+    for motorista_id, quantidade in contagem.items():
+        motorista = session.get(User, motorista_id)
+        if motorista:
+            ranking.append(
+                RankingMotoristaPublic(
+                    motorista_id=motorista_id,
+                    motorista_nome=motorista.full_name or motorista.email,
+                    quantidade=quantidade,
+                )
+            )
+    ranking.sort(key=lambda r: r.quantidade, reverse=True)
+
+    return RankingSemanaPublic(
+        periodo_inicio=periodo_inicio,
+        periodo_fim=periodo_fim,
+        motoristas=ranking[:3],
     )
 
 

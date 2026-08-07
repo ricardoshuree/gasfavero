@@ -16,6 +16,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupB2cDisabledRouteImport } from './routes/signup-b2c-disabled'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutChamadoRouteImport } from './routes/_layout/chamado'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
 import { Route as LayoutInadimplentesRouteImport } from './routes/_layout/inadimplentes'
 import { Route as LayoutLivroVendasRouteImport } from './routes/_layout/livro-vendas'
@@ -60,6 +61,11 @@ const LayoutIndexRoute = LayoutIndexRouteImport.update({
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutChamadoRoute = LayoutChamadoRouteImport.update({
+  id: '/chamado',
+  path: '/chamado',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutClientesRoute = LayoutClientesRouteImport.update({
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
+  '/chamado': typeof LayoutChamadoRoute
   '/clientes': typeof LayoutClientesRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
+  '/chamado': typeof LayoutChamadoRoute
   '/clientes': typeof LayoutClientesRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
@@ -164,6 +172,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/_layout/admin': typeof LayoutAdminRoute
+  '/_layout/chamado': typeof LayoutChamadoRoute
   '/_layout/clientes': typeof LayoutClientesRoute
   '/_layout/inadimplentes': typeof LayoutInadimplentesRoute
   '/_layout/livro-vendas': typeof LayoutLivroVendasRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup-b2c-disabled'
     | '/admin'
+    | '/chamado'
     | '/clientes'
     | '/inadimplentes'
     | '/livro-vendas'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup-b2c-disabled'
     | '/admin'
+    | '/chamado'
     | '/clientes'
     | '/inadimplentes'
     | '/livro-vendas'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup-b2c-disabled'
     | '/_layout/admin'
+    | '/_layout/chamado'
     | '/_layout/clientes'
     | '/_layout/inadimplentes'
     | '/_layout/livro-vendas'
@@ -295,6 +307,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof LayoutAdminRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/chamado': {
+      id: '/_layout/chamado'
+      path: '/chamado'
+      fullPath: '/chamado'
+      preLoaderRoute: typeof LayoutChamadoRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/clientes': {
@@ -379,6 +398,7 @@ declare module '@tanstack/react-router' {
 
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
+  LayoutChamadoRoute: typeof LayoutChamadoRoute
   LayoutClientesRoute: typeof LayoutClientesRoute
   LayoutInadimplentesRoute: typeof LayoutInadimplentesRoute
   LayoutLivroVendasRoute: typeof LayoutLivroVendasRoute
@@ -395,6 +415,7 @@ interface LayoutRouteChildren {
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
+  LayoutChamadoRoute: LayoutChamadoRoute,
   LayoutClientesRoute: LayoutClientesRoute,
   LayoutInadimplentesRoute: LayoutInadimplentesRoute,
   LayoutLivroVendasRoute: LayoutLivroVendasRoute,

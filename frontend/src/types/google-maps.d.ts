@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: delegacao-venda-fase3-mapa | plano: caf9c096 | 2026-08-07 07:04:14
-// Tipagem ambiente minima do Google Maps JS API, evitando dependencia npm nova
+// [mcp-local harness] feature: painel-mapa-frontend | plano: 660739b7 | 2026-08-07 09:40:03
+// Adiciona Size/Icon (icone raster customizado) na tipagem ambiente do Google Maps
 // Tipagem mínima ambiente para a fatia da API do Google Maps
 // JavaScript usada pelo MapaMotoristas (Fase 3 da Delegação de
 // Venda) -- evita depender do pacote @types/google.maps só por
@@ -35,11 +35,28 @@ declare namespace google.maps {
     fontSize?: string
   }
 
+  // Tamanho em pixels de um ícone de marcador raster (não é a classe
+  // real google.maps.Size, só um literal compatível -- a API só lê
+  // .width/.height em runtime, então um objeto plano funciona igual).
+  interface Size {
+    width: number
+    height: number
+  }
+
+  // Ícone raster (imagem própria, ex: /images/caminhao-motorista.png)
+  // -- diferente de um ícone vetorial (Symbol), que este projeto não
+  // usa.
+  interface Icon {
+    url: string
+    scaledSize?: Size
+  }
+
   interface MarkerOptions {
     position: LatLngLiteral
     map?: Map
     title?: string
     label?: string | MarkerLabel
+    icon?: string | Icon
   }
 
   class Marker {

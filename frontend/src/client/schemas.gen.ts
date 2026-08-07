@@ -359,6 +359,30 @@ export const ClientesPublicSchema = {
     title: 'ClientesPublic'
 } as const;
 
+export const DemandaVendaAceitarRequestSchema = {
+    properties: {
+        motorista_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Motorista Id'
+        }
+    },
+    type: 'object',
+    title: 'DemandaVendaAceitarRequest',
+    description: `Corpo de PATCH /demandas-venda/{id}/aceitar -- só precisa de
+motorista_id quando o chamado está ABERTO (sem dono ainda); nesse
+caso é obrigatório, é quem está "assumindo" o chamado. Se o
+chamado já tinha um motorista definido na criação, motorista_id
+aqui é ignorado (o dono já é fixo).`
+} as const;
+
 export const DemandaVendaCreateSchema = {
     properties: {
         cliente_id: {
@@ -372,8 +396,15 @@ export const DemandaVendaCreateSchema = {
             title: 'Endereco Id'
         },
         motorista_id: {
-            type: 'string',
-            format: 'uuid',
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Motorista Id'
         },
         observacao: {
@@ -387,15 +418,70 @@ export const DemandaVendaCreateSchema = {
                 }
             ],
             title: 'Observacao'
+        },
+        itens: {
+            items: {
+                '$ref': '#/components/schemas/DemandaVendaItemCreate'
+            },
+            type: 'array',
+            title: 'Itens',
+            default: []
         }
     },
     type: 'object',
-    required: ['cliente_id', 'endereco_id', 'motorista_id'],
+    required: ['cliente_id', 'endereco_id'],
     title: 'DemandaVendaCreate',
-    description: `Corpo de POST /demandas-venda/ -- despacha uma demanda de venda
-pro motorista escolhido. endereco_id é obrigatório e precisa
-apontar pra um Endereco já cadastrado (do cliente ou outro) --
-nunca texto livre.`
+    description: `Corpo de POST /demandas-venda/ -- despacha um chamado.
+endereco_id é obrigatório e precisa apontar pra um Endereco já
+cadastrado (do cliente ou outro) -- nunca texto livre.
+motorista_id é opcional: se omitido, o chamado nasce ABERTO (pra
+qualquer motorista aceitar); se informado, nasce já direcionado
+pra aquele motorista específico. itens é opcional (pode ser um
+chamado só com observação, ex: "cliente quer saber se tem gás").`
+} as const;
+
+export const DemandaVendaItemCreateSchema = {
+    properties: {
+        produto_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Produto Id'
+        },
+        quantidade: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Quantidade'
+        }
+    },
+    type: 'object',
+    required: ['produto_id', 'quantidade'],
+    title: 'DemandaVendaItemCreate'
+} as const;
+
+export const DemandaVendaItemPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        produto_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Produto Id'
+        },
+        produto_title: {
+            type: 'string',
+            title: 'Produto Title'
+        },
+        quantidade: {
+            type: 'integer',
+            title: 'Quantidade'
+        }
+    },
+    type: 'object',
+    required: ['id', 'produto_id', 'produto_title', 'quantidade'],
+    title: 'DemandaVendaItemPublic'
 } as const;
 
 export const DemandaVendaPublicSchema = {
@@ -418,12 +504,26 @@ export const DemandaVendaPublicSchema = {
             '$ref': '#/components/schemas/EnderecoPublic'
         },
         motorista_id: {
-            type: 'string',
-            format: 'uuid',
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Motorista Id'
         },
         motorista_nome: {
-            type: 'string',
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Motorista Nome'
         },
         observacao: {
@@ -462,10 +562,30 @@ export const DemandaVendaPublicSchema = {
                 }
             ],
             title: 'Respondida Em'
+        },
+        finalizada_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Finalizada Em'
+        },
+        itens: {
+            items: {
+                '$ref': '#/components/schemas/DemandaVendaItemPublic'
+            },
+            type: 'array',
+            title: 'Itens',
+            default: []
         }
     },
     type: 'object',
-    required: ['id', 'cliente_id', 'cliente_nome', 'endereco', 'motorista_id', 'motorista_nome', 'status', 'criado_por_id', 'created_at'],
+    required: ['id', 'cliente_id', 'cliente_nome', 'endereco', 'status', 'criado_por_id', 'created_at'],
     title: 'DemandaVendaPublic'
 } as const;
 
@@ -675,9 +795,9 @@ export const InadimplentesResumoPublicSchema = {
     required: ['qtd', 'valor', 'periodo_inicio', 'periodo_fim', 'grafico'],
     title: 'InadimplentesResumoPublic',
     description: `Resposta de GET /vendas/inadimplentes/resumo -- o único card
-da tela ('Atraso maior que 30 dias': qtd + valor) + o período
-textual + os pontos do gráfico, filtrados pelo escopo ativo do
-menu (todos_anos/ano/mes, agrupado por data_pagamento_vale).
+da tela ('Atraso maior que 30 dias') + o período textual + os
+pontos do gráfico, filtrados pelo escopo ativo do menu
+(todos_anos/ano/mes, agrupado por data_pagamento_vale).
 
 valor soma valor_total (o que ficou em aberto na época; para
 quem já pagou depois, valor_total continua sendo o total original
@@ -1440,6 +1560,58 @@ atribuído(s) a esse motorista (null se não houver nenhum livre ou
 nenhum bloco atribuído). É só uma sugestão pro campo "número do
 vale" na tela de venda -- continua editável, não é obrigatório
 usar exatamente esse número.`
+} as const;
+
+export const RankingMotoristaPublicSchema = {
+    properties: {
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        motorista_nome: {
+            type: 'string',
+            title: 'Motorista Nome'
+        },
+        quantidade: {
+            type: 'integer',
+            title: 'Quantidade'
+        }
+    },
+    type: 'object',
+    required: ['motorista_id', 'motorista_nome', 'quantidade'],
+    title: 'RankingMotoristaPublic'
+} as const;
+
+export const RankingSemanaPublicSchema = {
+    properties: {
+        periodo_inicio: {
+            type: 'string',
+            format: 'date',
+            title: 'Periodo Inicio'
+        },
+        periodo_fim: {
+            type: 'string',
+            format: 'date',
+            title: 'Periodo Fim'
+        },
+        motoristas: {
+            items: {
+                '$ref': '#/components/schemas/RankingMotoristaPublic'
+            },
+            type: 'array',
+            title: 'Motoristas'
+        }
+    },
+    type: 'object',
+    required: ['periodo_inicio', 'periodo_fim', 'motoristas'],
+    title: 'RankingSemanaPublic',
+    description: `Resposta de GET /vendas/ranking-semana -- top 3 motoristas por
+QUANTIDADE de vendas na semana corrente (domingo-sábado, mesmo
+corte de semana usado no Livro de Vendas -- ver _semana_atual em
+vendas.py). Conta TODAS as vendas independente de forma de
+pagamento ou status de pagamento -- é volume de atendimento, não
+faturamento.`
 } as const;
 
 export const ResumoRecebimentoValePublicSchema = {

@@ -107,16 +107,43 @@ export type DemandasVendaPublic = {
 };
 
 /**
- * Corpo de POST /demandas-venda/ -- despacha uma demanda de venda
- * pro motorista escolhido. endereco_id é obrigatório e precisa
- * apontar pra um Endereco já cadastrado (do cliente ou outro) --
- * nunca texto livre.
+ * Corpo de PATCH /demandas-venda/{id}/aceitar -- só precisa de
+ * motorista_id quando o chamado está ABERTO (sem dono ainda); nesse
+ * caso é obrigatório, é quem está "assumindo" o chamado. Se o
+ * chamado já tinha um motorista definido na criação, motorista_id
+ * aqui é ignorado (o dono já é fixo).
+ */
+export type DemandaVendaAceitarRequest = {
+    motorista_id?: (string | null);
+};
+
+/**
+ * Corpo de POST /demandas-venda/ -- despacha um chamado.
+ * endereco_id é obrigatório e precisa apontar pra um Endereco já
+ * cadastrado (do cliente ou outro) -- nunca texto livre.
+ * motorista_id é opcional: se omitido, o chamado nasce ABERTO (pra
+ * qualquer motorista aceitar); se informado, nasce já direcionado
+ * pra aquele motorista específico. itens é opcional (pode ser um
+ * chamado só com observação, ex: "cliente quer saber se tem gás").
  */
 export type DemandaVendaCreate = {
     cliente_id: string;
     endereco_id: string;
-    motorista_id: string;
+    motorista_id?: (string | null);
     observacao?: (string | null);
+    itens?: Array<DemandaVendaItemCreate>;
+};
+
+export type DemandaVendaItemCreate = {
+    produto_id: string;
+    quantidade: number;
+};
+
+export type DemandaVendaItemPublic = {
+    id: string;
+    produto_id: string;
+    produto_title: string;
+    quantidade: number;
 };
 
 export type DemandaVendaPublic = {
@@ -124,13 +151,15 @@ export type DemandaVendaPublic = {
     cliente_id: string;
     cliente_nome: string;
     endereco: EnderecoPublic;
-    motorista_id: string;
-    motorista_nome: string;
+    motorista_id?: (string | null);
+    motorista_nome?: (string | null);
     observacao?: (string | null);
     status: string;
     criado_por_id: string;
     created_at: string;
     respondida_em?: (string | null);
+    finalizada_em?: (string | null);
+    itens?: Array<DemandaVendaItemPublic>;
 };
 
 /**
@@ -181,9 +210,9 @@ export type InadimplentesMotoristasPublic = {
 
 /**
  * Resposta de GET /vendas/inadimplentes/resumo -- o único card
- * da tela ('Atraso maior que 30 dias': qtd + valor) + o período
- * textual + os pontos do gráfico, filtrados pelo escopo ativo do
- * menu (todos_anos/ano/mes, agrupado por data_pagamento_vale).
+ * da tela ('Atraso maior que 30 dias') + o período textual + os
+ * pontos do gráfico, filtrados pelo escopo ativo do menu
+ * (todos_anos/ano/mes, agrupado por data_pagamento_vale).
  *
  * valor soma valor_total (o que ficou em aberto na época; para
  * quem já pagou depois, valor_total continua sendo o total original
@@ -436,6 +465,26 @@ export type ProdutosComPrecoPublic = {
  */
 export type ProximoValeNumeroPublic = {
     numero?: (number | null);
+};
+
+export type RankingMotoristaPublic = {
+    motorista_id: string;
+    motorista_nome: string;
+    quantidade: number;
+};
+
+/**
+ * Resposta de GET /vendas/ranking-semana -- top 3 motoristas por
+ * QUANTIDADE de vendas na semana corrente (domingo-sábado, mesmo
+ * corte de semana usado no Livro de Vendas -- ver _semana_atual em
+ * vendas.py). Conta TODAS as vendas independente de forma de
+ * pagamento ou status de pagamento -- é volume de atendimento, não
+ * faturamento.
+ */
+export type RankingSemanaPublic = {
+    periodo_inicio: string;
+    periodo_fim: string;
+    motoristas: Array<RankingMotoristaPublic>;
 };
 
 /**
@@ -756,7 +805,7 @@ export type ClientesTrocarEnderecoResponse = (ClientePublic);
 
 export type DelegacaoReadDemandasVendaData = {
     motoristaId?: (string | null);
-    status?: ('pendente' | 'aceita' | 'recusada' | null);
+    status?: ('pendente' | 'aceita' | 'recusada' | 'concluida' | null);
 };
 
 export type DelegacaoReadDemandasVendaResponse = (DemandasVendaPublic);
@@ -767,8 +816,11 @@ export type DelegacaoCreateDemandaVendaData = {
 
 export type DelegacaoCreateDemandaVendaResponse = (DemandaVendaPublic);
 
+export type DelegacaoReadDemandasHojeResponse = (DemandasVendaPublic);
+
 export type DelegacaoAceitarDemandaVendaData = {
     demandaId: string;
+    requestBody?: DemandaVendaAceitarRequest;
 };
 
 export type DelegacaoAceitarDemandaVendaResponse = (DemandaVendaPublic);
@@ -778,6 +830,12 @@ export type DelegacaoRecusarDemandaVendaData = {
 };
 
 export type DelegacaoRecusarDemandaVendaResponse = (DemandaVendaPublic);
+
+export type DelegacaoConcluirDemandaVendaData = {
+    demandaId: string;
+};
+
+export type DelegacaoConcluirDemandaVendaResponse = (DemandaVendaPublic);
 
 export type DelegacaoUpsertLocalizacaoMotoristaData = {
     motoristaId: string;
@@ -1084,6 +1142,8 @@ export type VendasReadLivroVendasData = {
 };
 
 export type VendasReadLivroVendasResponse = (LivroVendasListPublic);
+
+export type VendasReadRankingSemanaResponse = (RankingSemanaPublic);
 
 export type VendasReadInadimplentesAnosDisponiveisResponse = (AnosDisponiveisPublic);
 

@@ -1,7 +1,5 @@
-# [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 0144c501 | 2026-08-06 20:15:39
-# Adiciona latitude/longitude (nullable) em Endereco e EnderecoPublic -- Fase 2 da Delegacao de Venda
-# [mcp-local harness] feature: delegacao-venda-fase1 | plano: fd600824 | 2026-08-06 18:26:01
-# Adiciona DemandaVenda + MotoristaLocalizacao (tabelas) e os response/create models de Delegação, inseridos após a seção de Inadimplentes e antes de Auth/Token
+# [mcp-local harness] feature: painel-mapa-backend | plano: 326a78ae | 2026-08-07 09:35:16
+# Adiciona RankingMotoristaPublic e RankingSemanaPublic (painel do Mapa)
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -983,6 +981,27 @@ class LivroVendasListPublic(SQLModel):
     soma_valor_pago: Decimal
 
 
+# ---- Ranking da Semana (endpoints em vendas.py -- usado no painel
+# lateral da tela Mapa) ----
+
+class RankingMotoristaPublic(SQLModel):
+    motorista_id: uuid.UUID
+    motorista_nome: str
+    quantidade: int
+
+
+class RankingSemanaPublic(SQLModel):
+    """Resposta de GET /vendas/ranking-semana -- top 3 motoristas por
+    QUANTIDADE de vendas na semana corrente (domingo-sábado, mesmo
+    corte de semana usado no Livro de Vendas -- ver _semana_atual em
+    vendas.py). Conta TODAS as vendas independente de forma de
+    pagamento ou status de pagamento -- é volume de atendimento, não
+    faturamento."""
+    periodo_inicio: date
+    periodo_fim: date
+    motoristas: list[RankingMotoristaPublic]
+
+
 # ---- Inadimplentes (endpoints em vendas.py) ----
 #
 # Tela dedicada a vendas em vale que "estiveram em atraso" em algum
@@ -1004,9 +1023,9 @@ class LivroVendasListPublic(SQLModel):
 
 class InadimplentesResumoPublic(SQLModel):
     """Resposta de GET /vendas/inadimplentes/resumo -- o único card
-    da tela ('Atraso maior que 30 dias': qtd + valor) + o período
-    textual + os pontos do gráfico, filtrados pelo escopo ativo do
-    menu (todos_anos/ano/mes, agrupado por data_pagamento_vale).
+    da tela ('Atraso maior que 30 dias') + o período textual + os
+    pontos do gráfico, filtrados pelo escopo ativo do menu
+    (todos_anos/ano/mes, agrupado por data_pagamento_vale).
 
     valor soma valor_total (o que ficou em aberto na época; para
     quem já pagou depois, valor_total continua sendo o total original
@@ -1033,20 +1052,34 @@ class InadimplentesMotoristasPublic(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Delegação de Venda (Fase 1: espinha dorsal, sem push/mapa/app)
+# gasfavero — Chamado (nome de exibição; classe/tabela continuam se
+# chamando DemandaVenda/demanda_venda internamente -- mesmo padrão de
+# divergência técnico/negócio já usado em Item/Produto, ver
+# comentário na classe Item)
 #
-# DemandaVenda representa o despacho de uma demanda de venda pro
-# motorista mais próximo -- o atendente vê o cliente + endereço no
-# mapa (Fase 3) e decide qual motorista aciona. endereco_id é sempre
-# um Endereco REAL vinculado (nunca texto livre) -- sem isso não dá
-# pra geocodificar/plotar no mapa nas fases seguintes; observações
-# soltas (ex: "2 botijões P13", "portão azul") cabem em `observacao`,
-# mas NUNCA substituem o endereço estruturado.
+# Um Chamado representa um pedido telefônico de entrega -- o
+# atendente vê o cliente + endereço no mapa e decide despachar pra um
+# motorista específico OU deixar aberto pra qualquer motorista
+# disponível aceitar (motorista_id NULL = aberto). Quando um
+# motorista aceita um chamado aberto, ele "assume" o chamado
+# (motorista_id passa a ser o dele) -- ver POST .../aceitar em
+# delegacao.py.
 #
-# status fica como string livre (Literal na camada Pydantic, igual ao
-# padrão já usado em Venda.forma_pagamento) -- pendente/aceita/recusada
-# nesta fase. "Concluída" (a demanda virar de fato uma Venda) fica pra
-# quando o app do motorista existir (Fase 4) -- não é escopo daqui.
+# endereco_id é sempre um Endereco REAL vinculado (nunca texto livre)
+# -- sem isso não dá pra plotar no mapa; observações soltas (ex:
+# "portão azul", "em frente à Rádio Veranense") cabem em
+# `observacao`, mas NUNCA substituem o endereço estruturado.
+#
+# Ciclo de vida (status, string livre validada via Literal no
+# Pydantic -- mesmo padrão de Venda.forma_pagamento):
+#   pendente  -> aceita    (motorista aceita; se estava aberto, assume)
+#   pendente  -> recusada  (motorista recusa -- fim de linha, atendente
+#                           despacha um chamado NOVO se for o caso)
+#   aceita    -> concluida (motorista chegou ao destino -- ENCERRA o
+#                           chamado: some do mapa e da lista do
+#                           motorista. A venda em si acontece depois,
+#                           separadamente, na tela de Vendas -- não é
+#                           automática)
 #
 # MotoristaLocalizacao é upsert puro: 1 LINHA POR MOTORISTA (PK =
 # motorista_id), sobrescrita a cada ping. Decisão confirmada com o
@@ -1062,11 +1095,19 @@ class DemandaVenda(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
     endereco_id: uuid.UUID = Field(foreign_key="endereco.id", ondelete="RESTRICT")
-    motorista_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    # NULL = chamado ABERTO, disponível pra qualquer motorista aceitar
+    # (decisão confirmada com o Ricardo -- sem conceito de motorista
+    # "online/disponível" ainda, então "pra todos" vira literalmente
+    # "sem dono até alguém aceitar"). Preenchido desde a criação
+    # quando o atendente despacha pra um motorista específico.
+    motorista_id: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", ondelete="RESTRICT"
+    )
     observacao: str | None = Field(default=None, max_length=500)
-    # pendente | aceita | recusada -- ver Literal em DemandaVendaCreate.
-    # String livre no banco (mesmo padrão de Venda.forma_pagamento),
-    # validação mora no Pydantic da camada de API.
+    # pendente | aceita | recusada | concluida -- ver Literal em
+    # DemandaVendaCreate/DemandaVendaAceitarRequest. String livre no
+    # banco (mesmo padrão de Venda.forma_pagamento), validação mora
+    # no Pydantic da camada de API.
     status: str = Field(default="pendente", max_length=20)
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     created_at: datetime = Field(
@@ -1076,6 +1117,26 @@ class DemandaVenda(SQLModel, table=True):
     respondida_em: datetime | None = Field(
         default=None, sa_type=DateTime(timezone=True)
     )
+    # preenchido quando o motorista marca "cheguei ao destino" --
+    # esse é o momento que ENCERRA o chamado (ver ciclo de vida acima)
+    finalizada_em: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+
+
+class DemandaVendaItem(SQLModel, table=True):
+    __tablename__ = "demanda_venda_item"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    demanda_id: uuid.UUID = Field(
+        foreign_key="demanda_venda.id", ondelete="CASCADE"
+    )
+    produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="RESTRICT")
+    quantidade: int
+    # SEM preco_id de propósito -- diferente de VendaItem, o Chamado
+    # não fixa preço (a venda em si, com preço vigente no momento,
+    # acontece depois na tela de Vendas). Isso aqui é só "o que o
+    # motorista precisa levar".
 
 
 class MotoristaLocalizacao(SQLModel, table=True):
@@ -1091,17 +1152,42 @@ class MotoristaLocalizacao(SQLModel, table=True):
     )
 
 
-# ---- Response/Create models de Delegação (endpoints em delegacao.py) ----
+# ---- Response/Create models de Chamado (endpoints em delegacao.py) ----
+
+class DemandaVendaItemCreate(SQLModel):
+    produto_id: uuid.UUID
+    quantidade: int = Field(gt=0)
+
+
+class DemandaVendaItemPublic(SQLModel):
+    id: uuid.UUID
+    produto_id: uuid.UUID
+    produto_title: str
+    quantidade: int
+
 
 class DemandaVendaCreate(SQLModel):
-    """Corpo de POST /demandas-venda/ -- despacha uma demanda de venda
-    pro motorista escolhido. endereco_id é obrigatório e precisa
-    apontar pra um Endereco já cadastrado (do cliente ou outro) --
-    nunca texto livre."""
+    """Corpo de POST /demandas-venda/ -- despacha um chamado.
+    endereco_id é obrigatório e precisa apontar pra um Endereco já
+    cadastrado (do cliente ou outro) -- nunca texto livre.
+    motorista_id é opcional: se omitido, o chamado nasce ABERTO (pra
+    qualquer motorista aceitar); se informado, nasce já direcionado
+    pra aquele motorista específico. itens é opcional (pode ser um
+    chamado só com observação, ex: "cliente quer saber se tem gás")."""
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID
-    motorista_id: uuid.UUID
+    motorista_id: uuid.UUID | None = None
     observacao: str | None = Field(default=None, max_length=500)
+    itens: list[DemandaVendaItemCreate] = []
+
+
+class DemandaVendaAceitarRequest(SQLModel):
+    """Corpo de PATCH /demandas-venda/{id}/aceitar -- só precisa de
+    motorista_id quando o chamado está ABERTO (sem dono ainda); nesse
+    caso é obrigatório, é quem está "assumindo" o chamado. Se o
+    chamado já tinha um motorista definido na criação, motorista_id
+    aqui é ignorado (o dono já é fixo)."""
+    motorista_id: uuid.UUID | None = None
 
 
 class DemandaVendaPublic(SQLModel):
@@ -1109,13 +1195,16 @@ class DemandaVendaPublic(SQLModel):
     cliente_id: uuid.UUID
     cliente_nome: str
     endereco: EnderecoPublic
-    motorista_id: uuid.UUID
-    motorista_nome: str
+    # NULL = chamado ainda aberto, ninguém assumiu
+    motorista_id: uuid.UUID | None = None
+    motorista_nome: str | None = None
     observacao: str | None = None
     status: str
     criado_por_id: uuid.UUID
     created_at: datetime
     respondida_em: datetime | None = None
+    finalizada_em: datetime | None = None
+    itens: list[DemandaVendaItemPublic] = []
 
 
 class DemandasVendaPublic(SQLModel):

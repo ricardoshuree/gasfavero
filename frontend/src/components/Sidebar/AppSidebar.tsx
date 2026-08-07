@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: delegacao-venda-fase3-mapa | plano: caf9c096 | 2026-08-07 07:05:12
-// Adiciona item Mapa no menu lateral (modulo mapa)
+// [mcp-local harness] feature: chamado-tela | plano: 4507b69c | 2026-08-07 07:59:03
+// Adiciona item Chamado (modulo delegacao) no menu, logo abaixo de Mapa
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -17,9 +17,12 @@
  *                           módulos de negócio, nunca usado até agora)
  *   - Mapa               → módulo "mapa" (idem -- já existia
  *                           cadastrado, nunca usado até a Fase 3 da
- *                           Delegação de Venda). Fase 3 = só
- *                           visualização (marcadores de motoristas),
- *                           sem formulário de despacho ainda.
+ *                           Delegação de Venda). Só visualização
+ *                           (marcadores de motoristas via polling).
+ *   - Chamado            → módulo "delegacao" (mesmo módulo dos
+ *                           endpoints de demandas-venda). Tela onde o
+ *                           atendente despacha uma entrega -- fica
+ *                           logo abaixo de Mapa, pedido do Ricardo.
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -46,6 +49,7 @@ import {
   Home,
   MapPin,
   Package,
+  PhoneCall,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -93,6 +97,12 @@ const MODULE_ITEMS: Array<Item & { module: string }> = [
     path: "/inadimplentes",
   },
   { module: "mapa", icon: MapPin, title: "Mapa", path: "/mapa" },
+  {
+    module: "delegacao",
+    icon: PhoneCall,
+    title: "Chamado",
+    path: "/chamado",
+  },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
   {

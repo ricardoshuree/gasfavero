@@ -1,4 +1,5 @@
-// [mcp-local harness] feature: delegacao-venda-fase3-mapa | plano: caf9c096 | 2026-08-07 07:04:42
+// [mcp-local harness] feature: painel-mapa-frontend | plano: 660739b7 | 2026-08-07 09:40:31
+// Icone customizado do motorista + altura flexivel do mapa
 // Componente do mapa com polling de localizacao dos motoristas
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef } from "react"
@@ -22,6 +23,14 @@ const CENTRO_VERANOPOLIS: google.maps.LatLngLiteral = {
 // pra quando o app existir de verdade.
 const POLLING_MS = 12_000
 
+// Ícone customizado do marcador de motorista, fornecido pelo Ricardo
+// -- ver frontend/public/images/. 40x40 fica proporcional ao zoom 14
+// sem tampar ruas pequenas no mapa.
+const ICONE_MOTORISTA: google.maps.Icon = {
+  url: "/images/caminhao-motorista.png",
+  scaledSize: { width: 40, height: 40 },
+}
+
 function formatarAtualizadoEm(atualizadoEm: string): string {
   const segundos = Math.floor(
     (Date.now() - new Date(atualizadoEm).getTime()) / 1000,
@@ -33,7 +42,16 @@ function formatarAtualizadoEm(atualizadoEm: string): string {
   return `há ${horas}h`
 }
 
-export function MapaMotoristas() {
+interface MapaMotoristasProps {
+  /** Classe aplicada no <div> do mapa em si -- por padrão ocupa toda
+   * a altura do container pai (ver uso em mapa.tsx, que controla a
+   * altura via flexbox/fullscreen). */
+  className?: string
+}
+
+export function MapaMotoristas({
+  className = "h-full w-full",
+}: MapaMotoristasProps) {
   const { loaded, error: scriptError } = useGoogleMapsScript()
   const mapDivRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
@@ -100,6 +118,7 @@ export function MapaMotoristas() {
           position,
           map: mapRef.current,
           title: motorista.motorista_nome,
+          icon: ICONE_MOTORISTA,
         })
         marker.addListener("click", () => {
           infoWindowRef.current?.setContent(
@@ -130,14 +149,14 @@ export function MapaMotoristas() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative h-full w-full">
       <div
         ref={mapDivRef}
-        className="h-[600px] w-full rounded-md border"
+        className={`rounded-md border ${className}`}
         aria-label="Mapa com a localização dos motoristas"
       />
       {!isLoading && data?.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">
+        <p className="absolute bottom-2 left-2 rounded bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow">
           Nenhum motorista com localização registrada ainda.
         </p>
       )}
