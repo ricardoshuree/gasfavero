@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: painel-mapa-fundo-branco | plano: ecd6a9a8 | 2026-08-07 10:06:04
-// Fundo sempre branco, independente do tema do sistema
+// [mcp-local harness] feature: fix-build-producao-ts6133 | plano: 0d473f6a | 2026-08-07 10:42:34
+// Remove variavel 'ano' nao usada (hole no destructuring)
 // Painel lateral da tela Mapa (pedido do Ricardo, pensado pra rodar
 // numa TV no escritório do gerente): 3 blocos empilhados --
 //   1. Reservado (ainda sem definição do que vai aqui)
@@ -31,8 +31,13 @@ const POLLING_CHAMADAS_MS = 12_000
 // Cor fixa dos cabeçalhos dos blocos (mesmo tom em qualquer tema)
 const HEADER_CLASS = "bg-teal-700 px-3 py-2 text-white"
 
+// "ano" descartado de propósito (formato curto dd/mm, sem ano) -- o
+// hole no array destructuring evita o erro TS6133 ("declared but
+// never read") que o build estrito do `tsc` acusa (esse erro só
+// aparece no `npm run build`/CI, o `npm run dev` local não faz esse
+// check e deixou passar despercebido em todos os testes manuais).
 function formatDataBR(iso: string): string {
-  const [ano, mes, dia] = iso.split("-")
+  const [, mes, dia] = iso.split("-")
   return `${dia}/${mes}`
 }
 
