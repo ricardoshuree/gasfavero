@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fix-infowindow-dado-desatualizado | plano: a6328fc6 | 2026-08-07 10:13:32
-// Listeners de clique leem sempre o dado mais recente via ref, evitando InfoWindow desatualizado
+// [mcp-local harness] feature: pin-destino-padrao | plano: 8e2a1a1e | 2026-08-07 10:19:33
+// Remove icone customizado do pin de destino, volta ao pin padrao vermelho do Google
 // Componente do mapa com polling de localizacao dos motoristas +
 // pins de destino dos chamados ativos (pendente/aceita) de hoje.
 import { useQuery } from "@tanstack/react-query"
@@ -36,13 +36,11 @@ const ICONE_MOTORISTA: google.maps.Icon = {
   scaledSize: { width: 40, height: 40 },
 }
 
-// Ícone do pin de DESTINO (endereço do chamado ativo) -- mesma
-// imagem usada na lista "Chamadas hoje" do painel lateral, pra
-// manter a associação visual entre a lista e o mapa.
-const ICONE_DESTINO: google.maps.Icon = {
-  url: "/images/produto-gas.png",
-  scaledSize: { width: 36, height: 36 },
-}
+// Pin de DESTINO (endereço do chamado ativo): usa o marcador PADRÃO
+// vermelho do Google, sem ícone customizado (decisão do Ricardo --
+// testamos com /images/produto-gas.png e ele preferiu voltar pro
+// pin padrão pra diferenciar melhor visualmente do marcador de
+// motorista). Basta omitir a opção `icon` na criação do Marker.
 
 // InfoWindow do Google sempre renderiza com fundo branco -- mas o
 // app roda em tema escuro por padrão, e a cor de texto do <body>
@@ -223,11 +221,12 @@ export function MapaMotoristas({
       if (existente) {
         existente.setPosition(position)
       } else {
+        // Sem `icon` de propósito -- pin padrão vermelho do Google
+        // (ver comentário acima da constante ICONE_MOTORISTA).
         const marker = new window.google.maps.Marker({
           position,
           map: mapRef.current,
           title: demanda.cliente_nome,
-          icon: ICONE_DESTINO,
         })
         marker.addListener("click", () => {
           const atual = demandasDataRef.current.get(demanda.id)
