@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fase5-combo-disponibilidade | plano: 860d8118 | 2026-08-08 12:19:26
-// Combo usa DelegacaoService.readDisponibilidadeMotoristas() filtrado por disponivel=true (antes era so role, sem checar disponibilidade)
+// [mcp-local harness] feature: chamados-ativos-raias | plano: ef60c134 | 2026-08-08 15:12:11
+// Apos despachar com sucesso, navega pro /chamados-ativos em vez de resetar o formulario e ficar na mesma tela
 // Tela /chamado -- gate via módulo "delegacao" (mesmo módulo dos
 // endpoints de demandas-venda/motoristas, já em uso desde a Fase 1).
 //
@@ -14,8 +14,14 @@
 // Reaproveita ClienteSection, ProdutoGrid e Sacola da tela de Vendas
 // tal como estão -- o fluxo de buscar/cadastrar cliente e escolher
 // produtos é idêntico, não faz sentido duplicar.
+//
+// Fluxo pós-despacho -- decisão do Ricardo (sessão 08/08): em vez de
+// resetar o formulário e deixar o atendente na mesma tela, navega
+// direto pro /chamados-ativos. É o fluxo natural: depois de criar o
+// chamado, o próximo passo do atendente é conferir visualmente que
+// ele está lá, ativo, com o motorista certo.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 
 import {
@@ -68,6 +74,7 @@ export const Route = createFileRoute("/_layout/chamado")({
 
 function Chamado() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const [cliente, setCliente] = useState<ClientePublic | null>(null)
@@ -142,14 +149,6 @@ function Chamado() {
   const handleRemover = (produtoId: string) =>
     setSacola((prev) => prev.filter((i) => i.produtoId !== produtoId))
 
-  const resetForm = () => {
-    setCliente(null)
-    setEndereco(null)
-    setSacola([])
-    setMotoristaId(QUALQUER_MOTORISTA)
-    setObservacao("")
-  }
-
   const mutation = useMutation({
     mutationFn: () =>
       DelegacaoService.createDemandaVenda({
@@ -167,12 +166,10 @@ function Chamado() {
       }),
     onSuccess: () => {
       showSuccessToast("Chamado despachado com sucesso")
-      resetForm()
+      queryClient.invalidateQueries({ queryKey: ["demandasVenda"] })
+      navigate({ to: "/chamados-ativos" })
     },
     onError: (err: ApiError) => handleError.call(showErrorToast, err),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["demandasVenda"] })
-    },
   })
 
   const podeDespachar = !!cliente && !!endereco

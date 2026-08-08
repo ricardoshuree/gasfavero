@@ -1,5 +1,26 @@
-// [mcp-local harness] feature: item16-chamados-ativos | plano: a49dfdf1 | 2026-08-08 14:24:05
-// Tela /chamados-ativos: lista chamados pendente/aceita em cards (busca, FIFO por created_at), Cancelar (qualquer estado ativo) e Reatribuir (so pendente, combo com todos os motoristas + opcao "aberto")
+// [mcp-local harness] feature: chamados-ativos-raias | plano: ef60c134 | 2026-08-08 15:11:37
+// Restructure em bloco "Chamados abertos" + raias por motorista, remove busca, adiciona botao Novo Chamado
+// Tela /chamados-ativos: layout em duas regiões.
+//
+// 1. Bloco "Chamados abertos" (topo) -- chamados sem motorista_id,
+//    disponíveis pra qualquer um aceitar. Mais antigo no topo (fila
+//    de atenção -- decisão do Ricardo, sessão 08/08, pra bater com o
+//    mesmo critério usado nas raias abaixo).
+// 2. Raias horizontais por motorista (abaixo) -- uma coluna por
+//    usuário com role Motorista CADASTRADO, mesmo que não tenha
+//    chamado ativo nenhum no momento (raia vazia = motorista ocioso,
+//    informação útil por si só). Dentro de cada raia, mais antigo no
+//    topo também.
+//
+// Antes disso a tela era um grid solto misturando aberto+atribuído,
+// difícil de escanear rápido quem está com o quê. Ver mockup do
+// Ricardo (sessão 08/08) que motivou essa reestruturação.
+//
+// Busca removida -- lista raramente passa de uma dúzia de itens
+// ativos, não compensava o campo. No lugar, botão "Novo Chamado"
+// direto pro /chamado (fecha o loop: depois de despachar, o
+// atendente já cai nesta tela pra conferir o que acabou de criar).
+//
 // Tela "Chamados Ativos" -- ferramenta de gestão do atendente/gerente
 // sobre chamados já despachados (pendente ou aceita). Não é uma tela
 // de novo despacho (isso é /chamado) nem de visualização passiva
@@ -21,8 +42,8 @@
 // não sabe (ex: motorista esqueceu de ativar o toggle mas está
 // trabalhando normalmente).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute, redirect } from "@tanstack/react-router"
-import { AlertCircle, Clock, MapPin } from "lucide-react"
+import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { AlertCircle, Clock, MapPin, Plus, User } from "lucide-react"
 import { useState } from "react"
 
 import {
@@ -43,7 +64,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
   Select,
@@ -100,8 +120,13 @@ function formatarTempoDecorrido(isoDate: string): string {
   return resto === 0 ? `${horas}h` : `${horas}h${resto}min`
 }
 
+// Mais antigo primeiro -- critério único usado tanto no bloco
+// "Chamados abertos" quanto dentro de cada raia de motorista.
+function ordenarMaisAntigoPrimeiro(a: DemandaVendaPublic, b: DemandaVendaPublic) {
+  return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+}
+
 function ChamadosAtivos() {
-  const [busca, setBusca] = useState("")
   const [cancelando, setCancelando] = useState<DemandaVendaPublic | null>(null)
   const [reatribuindo, setReatribuindo] = useState<DemandaVendaPublic | null>(
     null,
@@ -113,60 +138,113 @@ function ChamadosAtivos() {
     refetchInterval: INTERVALO_POLLING_MS,
   })
 
-  const ativos = (demandas?.data ?? [])
-    .filter((d) => d.status === "pendente" || d.status === "aceita")
-    .filter((d) => {
-      if (!busca.trim()) return true
-      const alvo = busca.trim().toLowerCase()
-      return (
-        d.cliente_nome.toLowerCase().includes(alvo) ||
-        (d.motorista_nome ?? "").toLowerCase().includes(alvo)
-      )
-    })
-    // Mais antigo primeiro -- é uma fila de atenção do atendente, o
-    // chamado esperando há mais tempo é o que mais precisa de olhar.
-    .sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    )
+  // Lista completa de motoristas cadastrados (disponíveis ou não) --
+  // usada pra montar uma raia por motorista mesmo que esteja ociosa
+  // no momento. Mesma fonte já usada no combo de Reatribuir.
+  const { data: disponibilidade } = useQuery({
+    queryKey: ["motoristas", "disponibilidade"],
+    queryFn: () => DelegacaoService.readDisponibilidadeMotoristas(),
+  })
+  const motoristas: MotoristaDisponibilidadePublic[] = (
+    disponibilidade?.data ?? []
+  )
+    .slice()
+    .sort((a, b) => a.motorista_nome.localeCompare(b.motorista_nome))
+
+  const ativos = (demandas?.data ?? []).filter(
+    (d) => d.status === "pendente" || d.status === "aceita",
+  )
+
+  const abertos = ativos
+    .filter((d) => d.motorista_id === null)
+    .sort(ordenarMaisAntigoPrimeiro)
+
+  const porMotorista = (motoristaId: string) =>
+    ativos
+      .filter((d) => d.motorista_id === motoristaId)
+      .sort(ordenarMaisAntigoPrimeiro)
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Chamados Ativos</h1>
-        <p className="text-muted-foreground">
-          Chamados pendentes ou aceitos, aguardando conclusão -- cancele um
-          chamado que não vai mais acontecer, ou reatribua um chamado
-          despachado pro motorista errado.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Chamados Ativos
+          </h1>
+          <p className="text-muted-foreground">
+            Chamados pendentes ou aceitos, aguardando conclusão -- cancele um
+            chamado que não vai mais acontecer, ou reatribua um chamado
+            despachado pro motorista errado.
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/chamado">
+            <Plus className="mr-1 h-4 w-4" />
+            Novo Chamado
+          </Link>
+        </Button>
       </div>
-
-      <Input
-        placeholder="Buscar por cliente ou motorista..."
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        className="max-w-sm"
-      />
 
       {isLoading && (
         <p className="text-muted-foreground">Carregando chamados...</p>
       )}
 
-      {!isLoading && ativos.length === 0 && (
-        <p className="text-muted-foreground">
-          Nenhum chamado ativo no momento.
-        </p>
-      )}
+      {!isLoading && (
+        <>
+          {/* Bloco "Chamados abertos" -- sem dono, qualquer motorista
+              pode aceitar. Região própria pro olho ir direto aqui
+              primeiro (são os que mais precisam de atenção). */}
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <p className="mb-3 text-sm font-semibold text-muted-foreground">
+              Chamados abertos
+            </p>
+            {abertos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum chamado aberto no momento.
+              </p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {abertos.map((d) => (
+                  <CardChamadoAtivo
+                    key={d.id}
+                    demanda={d}
+                    onCancelar={() => setCancelando(d)}
+                    onReatribuir={() => setReatribuindo(d)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {ativos.map((d) => (
-          <CardChamadoAtivo
-            key={d.id}
-            demanda={d}
-            onCancelar={() => setCancelando(d)}
-            onReatribuir={() => setReatribuindo(d)}
-          />
-        ))}
-      </div>
+          {/* Raias por motorista -- uma coluna por motorista
+              cadastrado, mesmo que esteja vazia (informação útil:
+              mostra quem está ocioso). Scroll horizontal se a lista
+              de motoristas crescer. */}
+          <div>
+            <p className="mb-3 text-sm font-semibold text-muted-foreground">
+              Chamados por motorista
+            </p>
+            {motoristas.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum motorista cadastrado.
+              </p>
+            ) : (
+              <div className="flex gap-4 overflow-x-auto pb-2">
+                {motoristas.map((m) => (
+                  <RaiaMotorista
+                    key={m.motorista_id}
+                    nome={m.motorista_nome}
+                    disponivel={m.disponivel}
+                    chamados={porMotorista(m.motorista_id)}
+                    onCancelar={setCancelando}
+                    onReatribuir={setReatribuindo}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <CancelarChamadoDialog
         demanda={cancelando}
@@ -176,6 +254,53 @@ function ChamadosAtivos() {
         demanda={reatribuindo}
         onClose={() => setReatribuindo(null)}
       />
+    </div>
+  )
+}
+
+function RaiaMotorista({
+  nome,
+  disponivel,
+  chamados,
+  onCancelar,
+  onReatribuir,
+}: {
+  nome: string
+  disponivel: boolean
+  chamados: DemandaVendaPublic[]
+  onCancelar: (d: DemandaVendaPublic) => void
+  onReatribuir: (d: DemandaVendaPublic) => void
+}) {
+  return (
+    <div className="flex w-72 shrink-0 flex-col gap-3 rounded-lg border p-3">
+      <div className="flex items-center gap-2 border-b pb-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+          <User className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold leading-tight">{nome}</p>
+          {!disponivel && (
+            <p className="text-xs text-muted-foreground">Indisponível</p>
+          )}
+        </div>
+      </div>
+
+      {chamados.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          Nenhum chamado atribuído a este motorista
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {chamados.map((d) => (
+            <CardChamadoAtivo
+              key={d.id}
+              demanda={d}
+              onCancelar={() => onCancelar(d)}
+              onReatribuir={() => onReatribuir(d)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
