@@ -1,3 +1,5 @@
+# [mcp-local harness] feature: fix-n1-demandas-e-cores-card | plano: 46879d5c | 2026-08-08 15:26:46
+# Corrige N+1: nova _to_demandas_public_batch faz batch-load de todas as relacoes em vez de N round-trips por chamado; usada nas rotas de listagem
 # [mcp-local harness] feature: fase2-rotas-cancelar-reatribuir-disponibilidade | plano: c5f719de | 2026-08-08 11:06:09
 # Endpoints novos: cancelar (qualquer estado ativo), reatribuir (so pendente), disponibilidade (GET lista + PUT toggle). Recusar legado ganha protecao reforcada (action=delete)
 """
@@ -138,6 +140,12 @@ def _to_endereco_public(session: SessionDep, endereco: Endereco) -> EnderecoPubl
 
 
 def _to_demanda_public(session: SessionDep, demanda: DemandaVenda) -> DemandaVendaPublic:
+    """Versão de UM chamado só -- usada pelas rotas de AÇÃO (criar,
+    aceitar, cancelar, reatribuir, concluir), que sempre operam em
+    um único registro por requisição. Continua fazendo um round-trip
+    por relação (aceitável aqui, é 1x só). Para LISTAGENS, ver
+    _to_demandas_public_batch abaixo -- nunca chame esta função dentro
+    de um loop."""
     cliente = session.get(Cliente, demanda.cliente_id)
     endereco = session.get(Endereco, demanda.endereco_id)
     motorista = (
@@ -174,6 +182,161 @@ def _to_demanda_public(session: SessionDep, demanda: DemandaVenda) -> DemandaVen
         finalizada_em=demanda.finalizada_em,
         itens=itens,
     )
+
+
+def _to_demandas_public_batch(
+    session: SessionDep, demandas: list[DemandaVenda]
+) -> list[DemandaVendaPublic]:
+    """Versão em LOTE de _to_demanda_public -- usada pelas rotas de
+    LISTAGEM (read_demandas_venda, read_demandas_hoje).
+
+    BUG CORRIGIDO (sessão 08/08, encontrado ao testar a reestruturação
+    do /chamados-ativos): a versão anterior chamava _to_demanda_public
+    dentro de um loop `for d in demandas`, e cada chamada fazia até 7
+    round-trips sequenciais ao Postgres (cliente, endereço, rua,
+    bairro, cidade, motorista, itens) -- um N+1 clássico. Com o
+    histórico de chamados de teste acumulado ao longo de várias
+    sessões (pendente/aceita/cancelada/concluída/recusada, tudo
+    incluído numa listagem sem filtro), isso já passava de 10s pra
+    meia dúzia de registros e travava por completo (>40s) com o
+    histórico inteiro -- foi isso que quebrou a tela /chamados-ativos
+    logo depois de reestruturada.
+
+    Aqui, em vez de N×7 round-trips, são no máximo 7 queries em LOTE
+    (uma por tipo de entidade, com WHERE id IN (...)) INDEPENDENTE da
+    quantidade de chamados -- O(1) round-trips em vez de O(n)."""
+    if not demandas:
+        return []
+
+    cliente_ids = {d.cliente_id for d in demandas}
+    endereco_ids = {d.endereco_id for d in demandas}
+    motorista_ids = {d.motorista_id for d in demandas if d.motorista_id}
+    demanda_ids = [d.id for d in demandas]
+
+    clientes = {
+        c.id: c
+        for c in session.exec(
+            select(Cliente).where(col(Cliente.id).in_(cliente_ids))
+        ).all()
+    }
+    enderecos = {
+        e.id: e
+        for e in session.exec(
+            select(Endereco).where(col(Endereco.id).in_(endereco_ids))
+        ).all()
+    }
+
+    rua_ids = {e.rua_id for e in enderecos.values()}
+    ruas = (
+        {
+            r.id: r
+            for r in session.exec(select(Rua).where(col(Rua.id).in_(rua_ids))).all()
+        }
+        if rua_ids
+        else {}
+    )
+    bairro_ids = {r.bairro_id for r in ruas.values()}
+    bairros = (
+        {
+            b.id: b
+            for b in session.exec(
+                select(Bairro).where(col(Bairro.id).in_(bairro_ids))
+            ).all()
+        }
+        if bairro_ids
+        else {}
+    )
+    cidade_ids = {b.cidade_id for b in bairros.values()}
+    cidades = (
+        {
+            c.id: c
+            for c in session.exec(
+                select(Cidade).where(col(Cidade.id).in_(cidade_ids))
+            ).all()
+        }
+        if cidade_ids
+        else {}
+    )
+    motoristas = (
+        {
+            m.id: m
+            for m in session.exec(
+                select(User).where(col(User.id).in_(motorista_ids))
+            ).all()
+        }
+        if motorista_ids
+        else {}
+    )
+
+    itens_por_demanda: dict[uuid.UUID, list[DemandaVendaItem]] = {}
+    for item_row in session.exec(
+        select(DemandaVendaItem).where(
+            col(DemandaVendaItem.demanda_id).in_(demanda_ids)
+        )
+    ).all():
+        itens_por_demanda.setdefault(item_row.demanda_id, []).append(item_row)
+
+    produto_ids = {i.produto_id for lista in itens_por_demanda.values() for i in lista}
+    produtos = (
+        {
+            p.id: p
+            for p in session.exec(select(Item).where(col(Item.id).in_(produto_ids))).all()
+        }
+        if produto_ids
+        else {}
+    )
+
+    def endereco_public(endereco: Endereco) -> EnderecoPublic:
+        rua = ruas.get(endereco.rua_id)
+        bairro = bairros.get(rua.bairro_id) if rua else None
+        cidade = cidades.get(bairro.cidade_id) if bairro else None
+        return EnderecoPublic(
+            id=endereco.id,
+            numero=endereco.numero,
+            complemento=endereco.complemento,
+            rua_nome=rua.nome if rua else "",
+            bairro_nome=bairro.nome if bairro else "",
+            cidade_nome=cidade.nome if cidade else "",
+            latitude=endereco.latitude,
+            longitude=endereco.longitude,
+        )
+
+    resultado: list[DemandaVendaPublic] = []
+    for d in demandas:
+        cliente = clientes.get(d.cliente_id)
+        endereco = enderecos.get(d.endereco_id)
+        motorista = motoristas.get(d.motorista_id) if d.motorista_id else None
+        itens = [
+            DemandaVendaItemPublic(
+                id=item_row.id,
+                produto_id=item_row.produto_id,
+                produto_title=(
+                    produtos[item_row.produto_id].title
+                    if item_row.produto_id in produtos
+                    else "(produto removido)"
+                ),
+                quantidade=item_row.quantidade,
+            )
+            for item_row in itens_por_demanda.get(d.id, [])
+        ]
+        resultado.append(
+            DemandaVendaPublic(
+                id=d.id,
+                cliente_id=d.cliente_id,
+                cliente_nome=cliente.nome if cliente else "(cliente removido)",
+                endereco=endereco_public(endereco),
+                motorista_id=d.motorista_id,
+                motorista_nome=_motorista_nome(motorista),
+                observacao=d.observacao,
+                status=d.status,
+                criado_por_id=d.criado_por_id,
+                created_at=d.created_at,
+                respondida_em=d.respondida_em,
+                finalizada_em=d.finalizada_em,
+                itens=itens,
+            )
+        )
+    return resultado
 
 
 def _to_localizacao_public(
@@ -219,9 +382,7 @@ def read_demandas_venda(
     demandas = session.exec(
         statement.order_by(col(DemandaVenda.created_at).desc())
     ).all()
-    return DemandasVendaPublic(
-        data=[_to_demanda_public(session, d) for d in demandas]
-    )
+    return DemandasVendaPublic(data=_to_demandas_public_batch(session, list(demandas)))
 
 
 @router.get(
@@ -252,9 +413,7 @@ def read_demandas_hoje(session: SessionDep) -> Any:
         .where(DemandaVenda.created_at < fim_utc)
         .order_by(col(DemandaVenda.created_at).desc())
     ).all()
-    return DemandasVendaPublic(
-        data=[_to_demanda_public(session, d) for d in demandas]
-    )
+    return DemandasVendaPublic(data=_to_demandas_public_batch(session, list(demandas)))
 
 
 @router.post(

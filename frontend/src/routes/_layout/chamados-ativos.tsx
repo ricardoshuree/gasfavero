@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: chamados-ativos-raias | plano: ef60c134 | 2026-08-08 15:11:37
-// Restructure em bloco "Chamados abertos" + raias por motorista, remove busca, adiciona botao Novo Chamado
+// [mcp-local harness] feature: fix-n1-demandas-e-cores-card | plano: 46879d5c | 2026-08-08 15:27:52
+// Ajusta cores do card: fundo cinza 35% (#A6A6A6), badge Aceito com fundo azul, texto de informacoes em preto
 // Tela /chamados-ativos: layout em duas regiões.
 //
 // 1. Bloco "Chamados abertos" (topo) -- chamados sem motorista_id,
@@ -20,6 +20,16 @@
 // ativos, não compensava o campo. No lugar, botão "Novo Chamado"
 // direto pro /chamado (fecha o loop: depois de despachar, o
 // atendente já cai nesta tela pra conferir o que acabou de criar).
+//
+// CORES DO CARD (ajuste sessão 08/08) -- o card usava só `border`
+// (fundo transparente), que no tema escuro ficava preto e se
+// misturava com o fundo da página. Fundo sólido cinza 35%
+// (`#A6A6A6`) -- MESMO tom já usado no app do motorista pro card
+// "Cancelado" (ver frontend-motorista) por motivo de acessibilidade,
+// reaproveitado aqui por consistência. Texto de nome/tempo/endereço/
+// itens em preto sólido pra contraste sobre o cinza. Badge "Aceito"
+// ganhou fundo azul (pedido explícito do Ricardo) em vez da cor
+// padrão do tema.
 //
 // Tela "Chamados Ativos" -- ferramenta de gestão do atendente/gerente
 // sobre chamados já despachados (pendente ou aceita). Não é uma tela
@@ -305,6 +315,11 @@ function RaiaMotorista({
   )
 }
 
+// Fundo cinza 35% -- substitui o `border`-only (fundo transparente)
+// que ficava preto no tema escuro e se misturava com a página. Mesmo
+// tom já usado no app do motorista pro card "Cancelado".
+const COR_FUNDO_CARD = "#A6A6A6"
+
 function CardChamadoAtivo({
   demanda: d,
   onCancelar,
@@ -318,26 +333,32 @@ function CardChamadoAtivo({
   const aceito = d.status === "aceita"
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border p-3">
+    <div
+      className="flex flex-col gap-3 rounded-lg border p-3"
+      style={{ backgroundColor: COR_FUNDO_CARD }}
+    >
       <div className="flex items-center justify-between gap-2">
-        <Badge variant={aberto ? "destructive" : aceito ? "default" : "secondary"}>
+        <Badge
+          variant={aberto ? "destructive" : aceito ? "default" : "secondary"}
+          className={aceito ? "bg-blue-600 text-white hover:bg-blue-600" : undefined}
+        >
           {aberto ? "Aberto" : aceito ? `Aceito · ${d.motorista_nome}` : `Convite · ${d.motorista_nome}`}
         </Badge>
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1 text-xs text-black">
           <Clock className="h-3 w-3" />
           {formatarTempoDecorrido(d.created_at)}
         </span>
       </div>
 
       <div>
-        <p className="font-semibold">{d.cliente_nome}</p>
-        <p className="flex items-start gap-1 text-sm text-muted-foreground">
+        <p className="font-semibold text-black">{d.cliente_nome}</p>
+        <p className="flex items-start gap-1 text-sm text-black">
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {formatarEndereco(d)}
         </p>
-        <p className="text-sm text-muted-foreground">{formatarItens(d)}</p>
+        <p className="text-sm text-black">{formatarItens(d)}</p>
         {d.observacao && (
-          <p className="flex items-start gap-1 text-xs italic text-muted-foreground">
+          <p className="flex items-start gap-1 text-xs italic text-black/70">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
             {d.observacao}
           </p>
@@ -359,7 +380,7 @@ function CardChamadoAtivo({
             type="button"
             variant="outline"
             size="sm"
-            className="flex-1"
+            className="flex-1 border-black/30 text-black hover:text-black"
             onClick={onReatribuir}
           >
             Reatribuir
