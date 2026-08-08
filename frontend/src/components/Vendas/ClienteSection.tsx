@@ -1,39 +1,10 @@
-// [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: f032de2c | 2026-08-06 15:48:51
-// Substitui useQuery(ruas) por useSugestoesRua em QuickAddCliente
-// [mcp-local harness] feature: logradouros-referencia-autocomplete
-// QuickAddCliente: troca useQuery(ruas) local por useSugestoesRua
-//
-// [mcp-local harness] feature: cores-status-solido | plano: 8740e5ce | 2026-08-06 06:29:16
-// Fundo solido vermelho/verde com letra branca (em vez de fundo claro + letra colorida)
-// [mcp-local harness] feature: cores-status-solido | plano: 8740e5ce
-// Fundo solido (vermelho/verde) + letra branca, em vez de fundo claro
-// com letra colorida
-// [mcp-local harness] feature: cores-status-historico | plano: ea3ad35c
-// Cores dos badges: Em aberto/Em atraso em vermelho, Pago/Baixado em verde
-// (Aguardando baixa continua azul -- nao foi pedido pra mudar)
-// [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977 | 2026-08-06 06:05:38
-// Adiciona bloco Historico de vendas (ultimas 3) no painel de cliente, pedido do Giovani
-// [mcp-local harness] feature: historico-vendas-cliente | plano: 92fde977
-// Bloco "Histórico de vendas (últimas 3)" no painel de cliente -- pedido do
-// Giovani: data, valor pago, endereço (rua+numero), status, assim que o
-// cliente é identificado na tela de Vendas.
-// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba | 2026-08-05 22:18:01
-// Adiciona campo Complemento faltante no cadastro rapido de cliente
-// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba
-// Adiciona campo Complemento no cadastro rapido de cliente (faltava,
-// so existia no TrocarEnderecoDialog)
-// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128
-// Botao Adicionar/Trocar endereco (TrocarEnderecoDialog) na secao de cliente
-// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:33:18
-// CPF/CNPJ label, mascara de telefone (54) padrao, RuaAutocomplete
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
-// Secao de cliente: busca, selecao, quick-add com endereco opcional, sugestao de ultimo endereco transacionado
-//
-// [mcp-local harness] fix: onError tipado como ApiError (nao unknown)
-//
-// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
-// Label "CPF" -> "CPF/CNPJ", mascara de telefone com (54) padrao,
-// RuaAutocomplete no lugar do datalist nativo
+// [mcp-local harness] feature: acessibilidade-cliente-endereco | plano: c4a2bd6c | 2026-08-08 13:14:07
+// Aplica CAMPO_ACESSIVEL/LABEL_ACESSIVEL em toda a secao: busca de cliente, resultados, cadastro rapido, sub-secao de endereco. Mais espacamento entre campos (gap-3 -> gap-4)
+// [mcp-local harness] feature: acessibilidade-cliente-endereco | plano: c4a2bd6c
+// Campos maiores (fonte/altura/espacamento) -- pedido de acessibilidade,
+// motoristas/atendentes com dificuldade de visao relataram dificuldade
+// pra preencher. Aplicado aqui porque /chamado e /vendas reaproveitam
+// este mesmo componente -- um ajuste so cobre os dois.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { MapPin, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -63,6 +34,15 @@ import TrocarEnderecoDialog from "@/components/Vendas/TrocarEnderecoDialog"
 import useCustomToast from "@/hooks/useCustomToast"
 import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
+
+// Classes reaproveitadas nos campos desta seção -- campo maior (48px
+// de altura, fonte 16px) e label maior (14px -> 16px), em vez do
+// padrão compacto (36px/14px) usado no resto do sistema. Escopo
+// deliberadamente limitado a cliente/endereço por enquanto (onde o
+// pedido de acessibilidade veio) -- não mexe no componente base
+// Input/Label (isso afetaria toda a aplicação de uma vez).
+const CAMPO_ACESSIVEL = "h-12 px-4 text-base"
+const LABEL_ACESSIVEL = "text-base"
 
 interface ClienteSectionProps {
   cliente: ClientePublic | null
@@ -224,13 +204,13 @@ export function ClienteSection({
 
   if (cliente) {
     return (
-      <div className="flex flex-col gap-3 rounded-lg border p-3">
+      <div className="flex flex-col gap-4 rounded-lg border p-4">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <User className="h-5 w-5 text-muted-foreground" />
+          <div className="flex items-center gap-3">
+            <User className="h-6 w-6 text-muted-foreground" />
             <div>
-              <p className="font-semibold">{cliente.nome}</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-lg font-semibold">{cliente.nome}</p>
+              <p className="text-base text-muted-foreground">
                 {cliente.cpf}
                 {cliente.telefone ? ` · ${cliente.telefone}` : ""}
               </p>
@@ -239,15 +219,15 @@ export function ClienteSection({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-lg"
             onClick={() => onClienteChange(null)}
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 text-sm">
-          <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="flex items-center gap-2 text-base">
+          <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" />
           {enderecoSelecionado ? (
             <>
               <span className="flex-1">
@@ -263,7 +243,8 @@ export function ClienteSection({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="default"
+                className="text-base"
                 onClick={() => onEnderecoChange(null)}
               >
                 Remover
@@ -291,13 +272,13 @@ export function ClienteSection({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {!showQuickAdd ? (
         <>
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-8"
+              className={`pl-11 ${CAMPO_ACESSIVEL}`}
               placeholder="Buscar cliente por nome ou CPF/CNPJ..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -310,7 +291,7 @@ export function ClienteSection({
                 <button
                   key={c.id}
                   type="button"
-                  className="rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  className="rounded-md px-3 py-2.5 text-left text-base hover:bg-muted"
                   onClick={() => {
                     onClienteChange(c)
                     setQuery("")
@@ -326,9 +307,11 @@ export function ClienteSection({
           <Button
             type="button"
             variant="outline"
+            size="lg"
+            className="h-12 text-base"
             onClick={() => setShowQuickAdd(true)}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-5 w-5" />
             Novo Cliente
           </Button>
         </>
@@ -411,33 +394,38 @@ function QuickAddCliente({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border p-3">
-      <div className="grid gap-1.5">
-        <Label htmlFor="qc-nome">
+    <div className="flex flex-col gap-4 rounded-lg border p-4">
+      <div className="grid gap-2">
+        <Label htmlFor="qc-nome" className={LABEL_ACESSIVEL}>
           Nome <span className="text-destructive">*</span>
         </Label>
         <Input
           id="qc-nome"
+          className={CAMPO_ACESSIVEL}
           value={nome}
           onChange={(e) => setNome(e.target.value)}
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor="qc-cpf">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="qc-cpf" className={LABEL_ACESSIVEL}>
             CPF/CNPJ <span className="text-destructive">*</span>
           </Label>
           <Input
             id="qc-cpf"
+            className={CAMPO_ACESSIVEL}
             placeholder="000.000.000-00"
             value={cpf}
             onChange={(e) => setCpf(e.target.value)}
           />
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="qc-telefone">Telefone</Label>
+        <div className="grid gap-2">
+          <Label htmlFor="qc-telefone" className={LABEL_ACESSIVEL}>
+            Telefone
+          </Label>
           <Input
             id="qc-telefone"
+            className={CAMPO_ACESSIVEL}
             placeholder="(54) 99999-9999"
             value={telefone}
             onChange={(e) => setTelefone(formatTelefone(e.target.value))}
@@ -449,17 +437,17 @@ function QuickAddCliente({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="w-fit"
+          size="default"
+          className="w-fit text-base"
           onClick={() => setIncluirEndereco(true)}
         >
-          <Plus className="mr-1 h-3 w-3" />
+          <Plus className="mr-1 h-4 w-4" />
           Adicionar endereço (opcional)
         </Button>
       ) : (
-        <div className="grid gap-3 rounded-md bg-muted/40 p-2">
-          <div className="grid gap-1.5">
-            <Label>Bairro</Label>
+        <div className="grid gap-4 rounded-md bg-muted/40 p-3">
+          <div className="grid gap-2">
+            <Label className={LABEL_ACESSIVEL}>Bairro</Label>
             <Select
               value={bairroId}
               onValueChange={(v) => {
@@ -467,42 +455,55 @@ function QuickAddCliente({
                 setRuaNome("")
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className={`w-full ${CAMPO_ACESSIVEL}`}>
                 <SelectValue placeholder="Selecione o bairro" />
               </SelectTrigger>
               <SelectContent>
                 {bairros?.data.map((b) => (
-                  <SelectItem key={b.id} value={b.id}>
+                  <SelectItem
+                    key={b.id}
+                    value={b.id}
+                    className="py-2.5 text-base"
+                  >
                     {b.nome}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="qc-rua">Rua</Label>
+          <div className="grid gap-2">
+            <Label htmlFor="qc-rua" className={LABEL_ACESSIVEL}>
+              Rua
+            </Label>
             <RuaAutocomplete
               id="qc-rua"
               value={ruaNome}
               onChange={setRuaNome}
               opcoes={ruasSugeridas}
               disabled={!bairroId}
+              className={CAMPO_ACESSIVEL}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="qc-numero">Número</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="qc-numero" className={LABEL_ACESSIVEL}>
+                Número
+              </Label>
               <Input
                 id="qc-numero"
+                className={CAMPO_ACESSIVEL}
                 placeholder="123 ou s/n"
                 value={numero}
                 onChange={(e) => setNumero(e.target.value)}
               />
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="qc-complemento">Complemento</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="qc-complemento" className={LABEL_ACESSIVEL}>
+                Complemento
+              </Label>
               <Input
                 id="qc-complemento"
+                className={CAMPO_ACESSIVEL}
                 placeholder="Apto, bloco... (opcional)"
                 value={complemento}
                 onChange={(e) => setComplemento(e.target.value)}
@@ -512,12 +513,20 @@ function QuickAddCliente({
         </div>
       )}
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
+      <div className="flex justify-end gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-12 text-base"
+          onClick={onCancel}
+        >
           Cancelar
         </Button>
         <Button
           type="button"
+          size="lg"
+          className="h-12 text-base"
           disabled={!podeSalvar || mutation.isPending}
           onClick={onSubmit}
         >

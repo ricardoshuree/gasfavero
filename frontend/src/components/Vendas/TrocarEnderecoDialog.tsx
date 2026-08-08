@@ -1,10 +1,9 @@
-// [mcp-local harness] feature: logradouros-referencia-autocomplete | plano: f032de2c | 2026-08-06 15:47:51
-// Substitui useQuery(ruas) por useSugestoesRua(bairroId)
-// [mcp-local harness] feature: logradouros-referencia-autocomplete
-// Troca useQuery(ruas) local por useSugestoesRua
+// [mcp-local harness] feature: acessibilidade-cliente-endereco | plano: c4a2bd6c | 2026-08-08 13:14:39
+// Campos do formulario (Bairro/Rua/Numero/Complemento) e botoes maiores, mesmo padrao de ClienteSection.tsx. Dialog um pouco mais largo (max-w-md -> max-w-lg) pra acomodar
+// [mcp-local harness] feature: acessibilidade-cliente-endereco | plano: c4a2bd6c
+// Campos do formulario maiores (fonte/altura/espacamento) -- mesmo pedido
+// de acessibilidade aplicado em ClienteSection.tsx
 //
-// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:54:14
-// Dialog de adicionar/trocar endereco reutilizavel na tela de Vendas
 // Dialog de adicionar/trocar endereço, usado na tela de Vendas.
 // Mesma logica/endpoint do TrocarEndereco.tsx da tela /clientes
 // (POST /clientes/{id}/endereco, que fecha o historico e abre um
@@ -52,6 +51,11 @@ import {
 import useCustomToast from "@/hooks/useCustomToast"
 import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
+
+// Mesmas classes de ClienteSection.tsx -- campo maior (48px/16px) e
+// label maior, pedido de acessibilidade.
+const CAMPO_ACESSIVEL = "h-12 px-4 text-base"
+const LABEL_ACESSIVEL = "text-base"
 
 const formSchema = z.object({
   bairro_id: z.string().min(1, { message: "Selecione um bairro" }),
@@ -130,7 +134,7 @@ export function TrocarEnderecoDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {cliente.endereco ? "Trocar Endereço" : "Adicionar Endereço"}
@@ -149,13 +153,13 @@ export function TrocarEnderecoDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-5 py-4">
               <FormField
                 control={form.control}
                 name="bairro_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
+                    <FormLabel className={LABEL_ACESSIVEL}>
                       Bairro <span className="text-destructive">*</span>
                     </FormLabel>
                     <Select
@@ -166,13 +170,17 @@ export function TrocarEnderecoDialog({
                       }}
                     >
                       <FormControl>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className={`w-full ${CAMPO_ACESSIVEL}`}>
                           <SelectValue placeholder="Selecione o bairro" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {bairros?.data.map((bairro) => (
-                          <SelectItem key={bairro.id} value={bairro.id}>
+                          <SelectItem
+                            key={bairro.id}
+                            value={bairro.id}
+                            className="py-2.5 text-base"
+                          >
                             {bairro.nome}
                           </SelectItem>
                         ))}
@@ -188,7 +196,7 @@ export function TrocarEnderecoDialog({
                 name="rua_nome"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
+                    <FormLabel className={LABEL_ACESSIVEL}>
                       Rua <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
@@ -197,6 +205,7 @@ export function TrocarEnderecoDialog({
                         onChange={field.onChange}
                         opcoes={ruasSugeridas}
                         disabled={!bairroId}
+                        className={CAMPO_ACESSIVEL}
                       />
                     </FormControl>
                     <FormMessage />
@@ -210,11 +219,12 @@ export function TrocarEnderecoDialog({
                   name="numero"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
+                      <FormLabel className={LABEL_ACESSIVEL}>
                         Número <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input
+                          className={CAMPO_ACESSIVEL}
                           placeholder="123 ou s/n"
                           type="text"
                           {...field}
@@ -230,9 +240,11 @@ export function TrocarEnderecoDialog({
                   name="complemento"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Complemento</FormLabel>
+                      <FormLabel className={LABEL_ACESSIVEL}>
+                        Complemento
+                      </FormLabel>
                       <FormControl>
-                        <Input type="text" {...field} />
+                        <Input className={CAMPO_ACESSIVEL} type="text" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -243,11 +255,21 @@ export function TrocarEnderecoDialog({
 
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline" disabled={mutation.isPending}>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-12 text-base"
+                  disabled={mutation.isPending}
+                >
                   Cancelar
                 </Button>
               </DialogClose>
-              <LoadingButton type="submit" loading={mutation.isPending}>
+              <LoadingButton
+                type="submit"
+                size="lg"
+                className="h-12 text-base"
+                loading={mutation.isPending}
+              >
                 Salvar
               </LoadingButton>
             </DialogFooter>

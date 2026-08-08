@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:44:19
-// DemandaStatus inclui cancelada. Aba Atendidas agora inclui cancelados tambem (alem de concluidos)
+// [mcp-local harness] feature: fifo-em-atendimento | plano: 24929ea8 | 2026-08-08 13:55:37
+// Grupo "Em atendimento" agora ordena FIFO por respondida_em (mais antigo primeiro); grupos aberto/convite continuam mais novo primeiro
 import { request } from "./api"
 
 // Espelha o schema de DemandaVendaPublic do backend
@@ -81,18 +81,33 @@ function ehHoje(isoDate: string): boolean {
   )
 }
 
+// Grupos de prioridade dentro da aba "Agora" -- 0/1 (aguardando
+// ação) sobem pro topo antes de 2 (já em atendimento).
+const PRIORIDADE_ABERTO = 0
+const PRIORIDADE_CONVITE = 1
+const PRIORIDADE_EM_ATENDIMENTO = 2
+
 // Separa os chamados nas duas sub-abas da tela "Chamadas":
 //
 // "agora" -- precisa de ação ou está em andamento: chamados ABERTOS
 // (motorista_id null, pendentes -- qualquer um pode aceitar),
 // CONVITES diretos pra mim (motorista_id === meuId, pendente), e os
 // que já ACEITEI e ainda não cheguei (motorista_id === meuId,
-// aceita). Ordenados com aberto primeiro (pedido do Ricardo), depois
-// convite, depois aceito -- dentro de cada grupo, o MAIS ANTIGO
-// primeiro (FIFO -- fila de atendimento por ordem de chegada, evita
-// "esquecer" um chamado antigo. Otimização por melhor trajeto fica
-// fora de escopo por enquanto -- exigiria integrar rota real, ex:
-// Google Directions API).
+// aceita). Grupos em ordem fixa: aberto > convite > em atendimento.
+//
+// DENTRO de cada grupo, a ordem de desempate é DIFERENTE por
+// natureza do grupo (pedido do Ricardo, sessão de testes reais):
+//   - aberto / convite (aguardando ação): MAIS NOVO primeiro -- é um
+//     alerta, precisa ficar em destaque assim que chega, não
+//     enterrado embaixo de chamado antigo esquecido.
+//   - em atendimento (já aceito): MAIS ANTIGO primeiro (FIFO) --
+//     aqui não é mais "alerta", é fila de atendimento de verdade
+//     (analogia do Ricardo: "fila de balcão" -- cliente já está
+//     esperando desde que o motorista aceitou, quem aceitou primeiro
+//     deveria ser atendido primeiro). Usa respondida_em (quando
+//     aceitou) como critério, não created_at (quando o chamado foi
+//     despachado) -- é o mesmo timestamp já exibido no chip de tempo
+//     do card ("Em atendimento", ver MinhasDemandas.tsx).
 //
 // Chamados CANCELADOS não entram aqui -- ver tratamento especial em
 // MinhasDemandas.tsx (o card "lingera" por até 15s com aviso, fora
@@ -111,9 +126,9 @@ function separarChamadas(
   meuId: string,
 ): { agora: DemandaVendaPublic[]; atendidas: DemandaVendaPublic[] } {
   const prioridade = (d: DemandaVendaPublic): number => {
-    if (d.motorista_id === null) return 0 // aberto
-    if (d.status === "pendente") return 1 // convite direto
-    return 2 // aceito, aguardando chegada
+    if (d.motorista_id === null) return PRIORIDADE_ABERTO
+    if (d.status === "pendente") return PRIORIDADE_CONVITE
+    return PRIORIDADE_EM_ATENDIMENTO
   }
 
   const agora = demandas
@@ -123,10 +138,18 @@ function separarChamadas(
       return false
     })
     .sort((a, b) => {
-      const p = prioridade(a) - prioridade(b)
-      if (p !== 0) return p
-      // Mais antigo primeiro (FIFO) dentro do mesmo grupo
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      const pA = prioridade(a)
+      const pB = prioridade(b)
+      if (pA !== pB) return pA - pB
+
+      if (pA === PRIORIDADE_EM_ATENDIMENTO) {
+        // FIFO -- mais antigo aceito primeiro (fila de balcão)
+        const aTs = new Date(a.respondida_em ?? a.created_at).getTime()
+        const bTs = new Date(b.respondida_em ?? b.created_at).getTime()
+        return aTs - bTs
+      }
+      // Aberto/convite -- mais novo primeiro (alerta em destaque)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
   const atendidas = demandas
