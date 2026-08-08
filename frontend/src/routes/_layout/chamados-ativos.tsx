@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: ajuste-cores-card-3 | plano: ddf76acb | 2026-08-08 15:46:04
-// Corrige aberto badge (vermelho de verdade via style, dark:bg-destructive/60 do tema estava vencendo className) e botao Cancelar (cinza escuro via style)
+// [mcp-local harness] feature: item15-toggle-disponibilidade | plano: cf24471a | 2026-08-08 16:50:25
+// Adiciona toggle de disponibilidade por motorista com dialog de confirmacao (Item 15)
 // [mcp-local harness] feature: ajuste-cores-card-2 | plano: 8d780d64 | 2026-08-08 15:39:24
 // Badge Aberto vermelho solido, botao Reatribuir amarelo #ffcc00 com texto preto, bloco central de dados com fundo branco proprio
 // [mcp-local harness] feature: fix-n1-demandas-e-cores-card | plano: 46879d5c | 2026-08-08 15:27:52
@@ -48,6 +48,17 @@
 // que QUALQUER classe, inclusive dark:) em vez de className pra essas
 // duas cores específicas.
 //
+// ITEM 15 (sessão 08/08) -- toggle de disponibilidade direto no
+// cabeçalho de cada raia de motorista, em vez de tela gerencial
+// separada (decisão do Ricardo: menor esforço, reaproveita a tela e a
+// query de disponibilidade que já existiam aqui pro combo de
+// Reatribuir). Clicar no toggle NÃO chama a API na hora -- abre um
+// dialog de confirmação primeiro (AlternarDisponibilidadeDialog),
+// mesmo padrão de Cancelar/Reatribuir, pra evitar toque acidental
+// tirando um motorista do ar sem querer. Switch construído em CSS puro
+// (sem @radix-ui/react-switch) pra não precisar de `npm install` nem
+// round-trip de terminal -- é só um pill com bolinha deslizante.
+//
 // Tela "Chamados Ativos" -- ferramenta de gestão do atendente/gerente
 // sobre chamados já despachados (pendente ou aceita). Não é uma tela
 // de novo despacho (isso é /chamado) nem de visualização passiva
@@ -62,7 +73,11 @@
 // Operador) -- mesmo gate que já protege os endpoints
 // /cancelar e /reatribuir no backend (ver delegacao.py). Reforçado
 // aqui na tela: mesmo que alguém digite a URL direto, o beforeLoad
-// barra quem não tem a permissão.
+// barra quem não tem a permissão. O endpoint de disponibilidade exige
+// só "update" (menos restritivo que "delete"), então quem acessa esta
+// tela sempre tem permissão suficiente pro toggle também -- ver
+// comentário em delegacao.py (Gerente/Admin/Operador têm CRUD
+// completo no módulo).
 //
 // Reatribuir mostra TODOS os motoristas (disponíveis ou não) --
 // decisão do Ricardo: o atendente pode saber de algo que o sistema
@@ -153,11 +168,22 @@ function ordenarMaisAntigoPrimeiro(a: DemandaVendaPublic, b: DemandaVendaPublic)
   return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
 }
 
+// Estado do motorista cuja disponibilidade está sendo alternada --
+// carrega o valor NOVO (pra depois do confirm) e o nome (pro texto do
+// dialog). null = dialog fechado.
+type AlternandoDisponibilidade = {
+  motoristaId: string
+  nome: string
+  novoValor: boolean
+}
+
 function ChamadosAtivos() {
   const [cancelando, setCancelando] = useState<DemandaVendaPublic | null>(null)
   const [reatribuindo, setReatribuindo] = useState<DemandaVendaPublic | null>(
     null,
   )
+  const [alternandoDisponibilidade, setAlternandoDisponibilidade] =
+    useState<AlternandoDisponibilidade | null>(null)
 
   const { data: demandas, isLoading } = useQuery({
     queryKey: ["demandasVenda"],
@@ -167,7 +193,8 @@ function ChamadosAtivos() {
 
   // Lista completa de motoristas cadastrados (disponíveis ou não) --
   // usada pra montar uma raia por motorista mesmo que esteja ociosa
-  // no momento. Mesma fonte já usada no combo de Reatribuir.
+  // no momento. Mesma fonte já usada no combo de Reatribuir e agora
+  // também no toggle de disponibilidade (Item 15).
   const { data: disponibilidade } = useQuery({
     queryKey: ["motoristas", "disponibilidade"],
     queryFn: () => DelegacaoService.readDisponibilidadeMotoristas(),
@@ -246,7 +273,8 @@ function ChamadosAtivos() {
           {/* Raias por motorista -- uma coluna por motorista
               cadastrado, mesmo que esteja vazia (informação útil:
               mostra quem está ocioso). Scroll horizontal se a lista
-              de motoristas crescer. */}
+              de motoristas crescer. Cabeçalho de cada raia tem o
+              toggle de disponibilidade (Item 15). */}
           <div>
             <p className="mb-3 text-sm font-semibold text-muted-foreground">
               Chamados por motorista
@@ -260,11 +288,19 @@ function ChamadosAtivos() {
                 {motoristas.map((m) => (
                   <RaiaMotorista
                     key={m.motorista_id}
+                    motoristaId={m.motorista_id}
                     nome={m.motorista_nome}
                     disponivel={m.disponivel}
                     chamados={porMotorista(m.motorista_id)}
                     onCancelar={setCancelando}
                     onReatribuir={setReatribuindo}
+                    onToggleDisponibilidade={() =>
+                      setAlternandoDisponibilidade({
+                        motoristaId: m.motorista_id,
+                        nome: m.motorista_nome,
+                        novoValor: !m.disponivel,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -281,22 +317,59 @@ function ChamadosAtivos() {
         demanda={reatribuindo}
         onClose={() => setReatribuindo(null)}
       />
+      <AlternarDisponibilidadeDialog
+        alvo={alternandoDisponibilidade}
+        onClose={() => setAlternandoDisponibilidade(null)}
+      />
     </div>
   )
 }
 
+// Switch em CSS puro (pill + bolinha deslizante) -- sem dependência
+// nova. Só dispara o callback ao clicar; não muda o próprio estado
+// visual sozinho (o valor exibido vem sempre do `disponivel` recebido
+// via prop, que só muda de verdade depois da confirmação no dialog e
+// da resposta da API).
+function ToggleDisponibilidade({
+  disponivel,
+  onClick,
+}: {
+  disponivel: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={disponivel ? "Marcar como indisponível" : "Marcar como disponível"}
+      aria-pressed={disponivel}
+      className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+      style={{ backgroundColor: disponivel ? "#16a34a" : "#71717a" }}
+    >
+      <span
+        className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+        style={{ transform: disponivel ? "translateX(18px)" : "translateX(2px)" }}
+      />
+    </button>
+  )
+}
+
 function RaiaMotorista({
+  motoristaId,
   nome,
   disponivel,
   chamados,
   onCancelar,
   onReatribuir,
+  onToggleDisponibilidade,
 }: {
+  motoristaId: string
   nome: string
   disponivel: boolean
   chamados: DemandaVendaPublic[]
   onCancelar: (d: DemandaVendaPublic) => void
   onReatribuir: (d: DemandaVendaPublic) => void
+  onToggleDisponibilidade: () => void
 }) {
   return (
     <div className="flex w-72 shrink-0 flex-col gap-3 rounded-lg border p-3">
@@ -306,10 +379,14 @@ function RaiaMotorista({
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold leading-tight">{nome}</p>
-          {!disponivel && (
-            <p className="text-xs text-muted-foreground">Indisponível</p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {disponivel ? "Disponível" : "Indisponível"}
+          </p>
         </div>
+        <ToggleDisponibilidade
+          disponivel={disponivel}
+          onClick={onToggleDisponibilidade}
+        />
       </div>
 
       {chamados.length === 0 ? (
@@ -581,6 +658,87 @@ function ReatribuirChamadoDialog({
             onClick={() => demanda && mutation.mutate(demanda.id)}
           >
             Reatribuir
+          </LoadingButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Item 15 -- confirma antes de ligar/desligar disponibilidade de um
+// motorista pela tela gerencial (mesmo endpoint que o próprio
+// motorista usa no toggle do app dele -- PUT
+// /motoristas/{id}/disponibilidade, action "update" no módulo
+// delegacao).
+function AlternarDisponibilidadeDialog({
+  alvo,
+  onClose,
+}: {
+  alvo: AlternandoDisponibilidade | null
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
+
+  const mutation = useMutation({
+    mutationFn: (params: AlternandoDisponibilidade) =>
+      DelegacaoService.atualizarDisponibilidadeMotorista({
+        motoristaId: params.motoristaId,
+        requestBody: { disponivel: params.novoValor },
+      }),
+    onSuccess: (_, params) => {
+      showSuccessToast(
+        params.novoValor
+          ? `${params.nome} marcado como disponível`
+          : `${params.nome} marcado como indisponível`,
+      )
+      onClose()
+    },
+    onError: (err: ApiError) => handleError.call(showErrorToast, err),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["motoristas", "disponibilidade"] })
+    },
+  })
+
+  return (
+    <Dialog open={alvo !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {alvo?.novoValor ? "Marcar como disponível" : "Marcar como indisponível"}
+          </DialogTitle>
+          <DialogDescription>
+            {alvo && (
+              <>
+                {alvo.novoValor ? (
+                  <>
+                    Marcar <strong>{alvo.nome}</strong> como disponível? Ele volta
+                    a aparecer no combo de despacho do Chamado e pode receber
+                    chamados abertos.
+                  </>
+                ) : (
+                  <>
+                    Marcar <strong>{alvo.nome}</strong> como indisponível? Ele para
+                    de aparecer no combo de despacho do Chamado e não recebe mais
+                    chamados abertos automaticamente -- chamados já em andamento
+                    não são afetados.
+                  </>
+                )}
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" disabled={mutation.isPending}>
+              Voltar
+            </Button>
+          </DialogClose>
+          <LoadingButton
+            loading={mutation.isPending}
+            onClick={() => alvo && mutation.mutate(alvo)}
+          >
+            Confirmar
           </LoadingButton>
         </DialogFooter>
       </DialogContent>
