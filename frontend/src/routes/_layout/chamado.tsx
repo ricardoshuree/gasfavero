@@ -1,8 +1,6 @@
-// [mcp-local harness] feature: chamado-filtro-motoristas | plano: 79e7af14 | 2026-08-07 20:00:30
-// Filtra o combo Motorista para so role "Motorista" (mantendo "Qualquer motorista disponivel")
-// [mcp-local harness] feature: chamado-tela | plano: 4507b69c | 2026-08-07 07:58:43
-// Tela /chamado -- despacho de entrega pelo atendente
-// Página /chamado -- gate via módulo "delegacao" (mesmo módulo dos
+// [mcp-local harness] feature: fase5-combo-disponibilidade | plano: 860d8118 | 2026-08-08 12:19:26
+// Combo usa DelegacaoService.readDisponibilidadeMotoristas() filtrado por disponivel=true (antes era so role, sem checar disponibilidade)
+// Tela /chamado -- gate via módulo "delegacao" (mesmo módulo dos
 // endpoints de demandas-venda/motoristas, já em uso desde a Fase 1).
 //
 // Tela onde o atendente (na distribuidora) despacha um chamado assim
@@ -47,13 +45,6 @@ import { handleError } from "@/utils"
 
 const MODULE = "delegacao"
 
-// Nome exato da role RBAC "Motorista" (ver tela /permissions --
-// "Gerenciar Roles"). Usado só pra filtrar o combo abaixo; se a role
-// for renomeada um dia, este filtro para de bater e o combo volta a
-// aparecer vazio -- não há acoplamento por id porque roles não têm
-// id fixo conhecido em tempo de build.
-const ROLE_MOTORISTA = "Motorista"
-
 // Sentinela pro <Select> -- Radix não aceita value="" em SelectItem,
 // então usamos essa string pra representar "sem motorista específico"
 // e traduzimos pra undefined na hora de montar o corpo da requisição.
@@ -91,16 +82,19 @@ function Chamado() {
   })
   const produtos: ProdutoComPrecoPublic[] = produtosComPreco?.data ?? []
 
-  const { data: users } = useQuery({
-    queryKey: ["users", "chamado"],
-    queryFn: () => UsersService.readUsers({ limit: 100 }),
+  // Já filtrado pelo backend: só usuários com role "Motorista" +
+  // disponivel=true (ver GET /motoristas/disponibilidade em
+  // delegacao.py). Motorista que desligou o toggle "Disponível" no
+  // próprio app -- ou que um gerente desligou numa tela gerencial
+  // futura -- simplesmente não aparece mais aqui. Antes disso, o
+  // combo listava TODO MUNDO (admin, gerente, viewer...) sem filtro
+  // nenhum, e depois só por role, sem considerar disponibilidade.
+  const { data: disponibilidade } = useQuery({
+    queryKey: ["motoristas", "disponibilidade"],
+    queryFn: () => DelegacaoService.readDisponibilidadeMotoristas(),
   })
-
-  // Só motoristas de verdade no combo -- antes listava todo mundo
-  // (admin, gerente, viewer...), o que não fazia sentido pra
-  // despachar uma entrega.
-  const motoristas = (users?.data ?? []).filter((u) =>
-    u.roles?.includes(ROLE_MOTORISTA),
+  const motoristasDisponiveis = (disponibilidade?.data ?? []).filter(
+    (m) => m.disponivel,
   )
 
   const quantidadesNaSacola = Object.fromEntries(
@@ -246,9 +240,9 @@ function Chamado() {
               <SelectItem value={QUALQUER_MOTORISTA}>
                 Qualquer motorista disponível
               </SelectItem>
-              {motoristas.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.full_name || u.email}
+              {motoristasDisponiveis.map((m) => (
+                <SelectItem key={m.motorista_id} value={m.motorista_id}>
+                  {m.motorista_nome}
                 </SelectItem>
               ))}
             </SelectContent>

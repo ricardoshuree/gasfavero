@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoReadDemandasHojeResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoConcluirDemandaVendaData, DelegacaoConcluirDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadRankingSemanaResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoReadDemandasHojeResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoCancelarDemandaVendaData, DelegacaoCancelarDemandaVendaResponse, DelegacaoReatribuirDemandaVendaData, DelegacaoReatribuirDemandaVendaResponse, DelegacaoConcluirDemandaVendaData, DelegacaoConcluirDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, DelegacaoAtualizarDisponibilidadeMotoristaData, DelegacaoAtualizarDisponibilidadeMotoristaResponse, DelegacaoReadDisponibilidadeMotoristasResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadRankingSemanaResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
 
 export class ClientesService {
     /**
@@ -186,8 +186,13 @@ export class DelegacaoService {
      * lateral da tela Mapa ("Chamadas hoje"). Não filtra por status: o
      * frontend separa em "ativas" (pendente/aceita) no topo e
      * "concluídas" (finalizada_em preenchido) embaixo -- chamados
-     * recusados hoje simplesmente não aparecem em nenhum dos dois
-     * grupos (são um beco sem saída já resolvido em outro lugar).
+     * cancelados/recusados hoje simplesmente não aparecem em nenhum dos
+     * dois grupos, exceto que agora "cancelada" TAMBÉM preenche
+     * finalizada_em (ver comentário em models.py), então cai junto dos
+     * concluídos nesse filtro simples -- se precisar diferenciar
+     * visualmente cancelado de concluído de verdade aqui, o frontend
+     * precisa olhar o campo `status`, não só a presença de
+     * finalizada_em.
      *
      * Isso é um filtro de DATA, não uma exclusão -- reseta sozinho à
      * meia-noite porque o dia mudou, o histórico continua intacto no
@@ -208,6 +213,11 @@ export class DelegacaoService {
      * chamado estava ABERTO (motorista_id NULL), aceitar_in.motorista_id
      * é obrigatório: é quem está assumindo o chamado. Se já tinha um
      * motorista definido, motorista_id do corpo é ignorado.
+     *
+     * 400 aqui geralmente significa que outro motorista já assumiu esse
+     * mesmo chamado aberto entre a última leitura da lista e este toque
+     * -- corrida normal em chamado aberto, não é bug (o frontend deve
+     * mostrar mensagem específica, não erro genérico).
      * @param data The data for the request.
      * @param data.demandaId
      * @param data.requestBody
@@ -231,9 +241,14 @@ export class DelegacaoService {
     
     /**
      * Recusar Demanda Venda
-     * Recusa o chamado -- só a partir de 'pendente'. Não existe
-     * reatribuição automática: o atendente vê a recusa na lista e
-     * despacha um chamado NOVO pra outro motorista, se for o caso.
+     * LEGADO -- o app do motorista não chama mais este endpoint (ver
+     * comentário de ciclo de vida em models.py: recusar deixou de ser
+     * uma ação do motorista, pra não gerar chamado "em limbo"). Gate de
+     * permissão reforçado pra ação "Apagar" (só atendente/gerente),
+     * justamente pra impedir um motorista de matar um chamado sozinho
+     * via chamada direta à API, contornando a regra de negócio. Mantido
+     * só por retrocompatibilidade -- considerar remover de vez depois
+     * que não houver mais nenhum cliente antigo do app em uso.
      * @param data The data for the request.
      * @param data.demandaId
      * @returns DemandaVendaPublic Successful Response
@@ -246,6 +261,73 @@ export class DelegacaoService {
             path: {
                 demanda_id: data.demandaId
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Cancelar Demanda Venda
+     * SÓ o atendente/gerente cancela (ação "Apagar" do módulo
+     * delegacao -- Motorista não tem). Funciona de QUALQUER estado
+     * ativo (pendente ou aceita), não só de um estado específico --
+     * decisão do Ricardo: o atendente não precisa saber em que estado
+     * o chamado está, só tem a intenção de interromper um trabalho que
+     * seria em vão se continuado (ex: cliente ligou de novo desistindo).
+     *
+     * Preenche finalizada_em (mesmo campo usado por "concluir" -- ver
+     * comentário em models.py) -- é o `status` que diferencia os dois
+     * motivos de encerramento pro frontend.
+     *
+     * Bloqueia 400 se o chamado já estiver 'concluida' ou 'cancelada'
+     * (terminal) -- recancelar sobrescreveria o timestamp de um
+     * encerramento que já aconteceu de verdade.
+     * @param data The data for the request.
+     * @param data.demandaId
+     * @returns DemandaVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static cancelarDemandaVenda(data: DelegacaoCancelarDemandaVendaData): CancelablePromise<DelegacaoCancelarDemandaVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/demandas-venda/{demanda_id}/cancelar',
+            path: {
+                demanda_id: data.demandaId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Reatribuir Demanda Venda
+     * SÓ o atendente/gerente reatribui (ação "Apagar" do módulo
+     * delegacao). Troca motorista_id (ou volta pra None = reabre como
+     * chamado ABERTO) e volta o status pra 'pendente' -- o novo
+     * motorista precisa aceitar de novo, reaproveitando o fluxo de
+     * convite direto que já existe. MESMO REGISTRO, não cria um chamado
+     * novo (decisão do Ricardo).
+     *
+     * Só funciona a partir de 'pendente' por enquanto -- reatribuir um
+     * chamado já 'aceita' tiraria de um motorista que talvez já esteja a
+     * caminho, fora de escopo por agora.
+     * @param data The data for the request.
+     * @param data.demandaId
+     * @param data.requestBody
+     * @returns DemandaVendaPublic Successful Response
+     * @throws ApiError
+     */
+    public static reatribuirDemandaVenda(data: DelegacaoReatribuirDemandaVendaData): CancelablePromise<DelegacaoReatribuirDemandaVendaResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/demandas-venda/{demanda_id}/reatribuir',
+            path: {
+                demanda_id: data.demandaId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }
@@ -316,6 +398,49 @@ export class DelegacaoService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/motoristas/localizacao'
+        });
+    }
+    
+    /**
+     * Atualizar Disponibilidade Motorista
+     * Liga/desliga a disponibilidade de um motorista pra receber
+     * chamado. Chamado tanto pelo próprio motorista (toggle no app,
+     * mesma permissão que ele já usa pra localização) quanto por uma
+     * futura tela gerencial (gerente/operador, que também têm Editar
+     * no módulo delegacao).
+     * @param data The data for the request.
+     * @param data.motoristaId
+     * @param data.requestBody
+     * @returns MotoristaDisponibilidadePublic Successful Response
+     * @throws ApiError
+     */
+    public static atualizarDisponibilidadeMotorista(data: DelegacaoAtualizarDisponibilidadeMotoristaData): CancelablePromise<DelegacaoAtualizarDisponibilidadeMotoristaResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/motoristas/{motorista_id}/disponibilidade',
+            path: {
+                motorista_id: data.motoristaId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Disponibilidade Motoristas
+     * Todos os usuários com role Motorista + status de
+     * disponibilidade atual -- usado pra filtrar o combo de despacho em
+     * /chamado (só disponíveis) e por uma futura tela gerencial.
+     * @returns MotoristasDisponibilidadePublic Successful Response
+     * @throws ApiError
+     */
+    public static readDisponibilidadeMotoristas(): CancelablePromise<DelegacaoReadDisponibilidadeMotoristasResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/motoristas/disponibilidade'
         });
     }
 }
@@ -1512,6 +1637,17 @@ export class VendasService {
      * (domingo-sábado) -- conta todas as vendas independente de forma
      * de pagamento ou status de pagamento (é volume de atendimento, não
      * faturamento).
+     *
+     * Só considera usuários com a role RBAC "Motorista" (decisão
+     * confirmada com o Ricardo) -- isso exclui automaticamente o
+     * usuário-sistema "Distribuidora Gás Favero" (vendas de balcão),
+     * que não tem essa role, mesmo que ele acumule vendas na semana.
+     *
+     * Sempre retorna até 3 motoristas, mesmo que algum deles não tenha
+     * NENHUMA venda na semana (quantidade=0) -- não é "top 3 de quem
+     * vendeu", é "top 3 dos motoristas cadastrados, ordenados por
+     * quantidade". Só retorna menos de 3 se houver menos de 3
+     * motoristas com essa role cadastrados.
      * @returns RankingSemanaPublic Successful Response
      * @throws ApiError
      */

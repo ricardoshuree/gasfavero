@@ -163,6 +163,19 @@ export type DemandaVendaPublic = {
 };
 
 /**
+ * Corpo de PATCH /demandas-venda/{id}/reatribuir -- SÓ o
+ * atendente pode chamar (ação "Apagar" do módulo delegacao, ver
+ * comentário de ciclo de vida acima da classe DemandaVenda).
+ * motorista_id novo dono do chamado; None reabre como chamado
+ * ABERTO (equivalente a "não era pra fulano, era pra qualquer um").
+ * Só funciona a partir de status 'pendente' -- ver comentário
+ * completo acima.
+ */
+export type DemandaVendaReatribuirRequest = {
+    motorista_id?: (string | null);
+};
+
+/**
  * Corpo usado para criar (ou trocar) o endereço de um cliente.
  *
  * rua_nome é sempre texto livre, nunca um rua_id -- o endpoint
@@ -392,6 +405,21 @@ export type ModuleUpdate = {
     description?: (string | null);
 };
 
+export type MotoristaDisponibilidadePublic = {
+    motorista_id: string;
+    motorista_nome: string;
+    disponivel: boolean;
+};
+
+/**
+ * Corpo de PUT /motoristas/{motorista_id}/disponibilidade --
+ * chamado tanto pelo próprio motorista (toggle no app) quanto por
+ * um gerente/atendente numa tela gerencial futura.
+ */
+export type MotoristaDisponibilidadeUpdate = {
+    disponivel: boolean;
+};
+
 export type MotoristaLocalizacaoPublic = {
     motorista_id: string;
     motorista_nome: string;
@@ -407,6 +435,16 @@ export type MotoristaLocalizacaoPublic = {
 export type MotoristaLocalizacaoUpdate = {
     latitude: (number | string);
     longitude: (number | string);
+};
+
+/**
+ * Resposta de GET /motoristas/disponibilidade -- todos os
+ * usuários com role Motorista + seu status atual. Usado pra filtrar
+ * o combo de despacho em /chamado (só disponíveis) e por uma futura
+ * tela gerencial de disponibilidade.
+ */
+export type MotoristasDisponibilidadePublic = {
+    data: Array<MotoristaDisponibilidadePublic>;
 };
 
 export type MotoristasLocalizacaoPublic = {
@@ -805,7 +843,7 @@ export type ClientesTrocarEnderecoResponse = (ClientePublic);
 
 export type DelegacaoReadDemandasVendaData = {
     motoristaId?: (string | null);
-    status?: ('pendente' | 'aceita' | 'recusada' | 'concluida' | null);
+    status?: ('pendente' | 'aceita' | 'recusada' | 'cancelada' | 'concluida' | null);
 };
 
 export type DelegacaoReadDemandasVendaResponse = (DemandasVendaPublic);
@@ -831,6 +869,19 @@ export type DelegacaoRecusarDemandaVendaData = {
 
 export type DelegacaoRecusarDemandaVendaResponse = (DemandaVendaPublic);
 
+export type DelegacaoCancelarDemandaVendaData = {
+    demandaId: string;
+};
+
+export type DelegacaoCancelarDemandaVendaResponse = (DemandaVendaPublic);
+
+export type DelegacaoReatribuirDemandaVendaData = {
+    demandaId: string;
+    requestBody: DemandaVendaReatribuirRequest;
+};
+
+export type DelegacaoReatribuirDemandaVendaResponse = (DemandaVendaPublic);
+
 export type DelegacaoConcluirDemandaVendaData = {
     demandaId: string;
 };
@@ -845,6 +896,15 @@ export type DelegacaoUpsertLocalizacaoMotoristaData = {
 export type DelegacaoUpsertLocalizacaoMotoristaResponse = (MotoristaLocalizacaoPublic);
 
 export type DelegacaoReadLocalizacoesMotoristasResponse = (MotoristasLocalizacaoPublic);
+
+export type DelegacaoAtualizarDisponibilidadeMotoristaData = {
+    motoristaId: string;
+    requestBody: MotoristaDisponibilidadeUpdate;
+};
+
+export type DelegacaoAtualizarDisponibilidadeMotoristaResponse = (MotoristaDisponibilidadePublic);
+
+export type DelegacaoReadDisponibilidadeMotoristasResponse = (MotoristasDisponibilidadePublic);
 
 export type GeografiaReadBairrosResponse = (BairrosPublic);
 

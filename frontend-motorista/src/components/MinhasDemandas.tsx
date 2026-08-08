@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:48:09
-// Remove import nao usado (desbloquearAudio)
+// [mcp-local harness] feature: ajuste-cinza-cancelado-35 | plano: 12363cb8 | 2026-08-08 12:23:39
+// Cinza do card Cancelado ajustado de #5C5C5C (60%) para #A6A6A6 (35%)
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
 import { iniciarAlarme, pararAlarme, tocarSomCancelamento } from "../lib/alarme"
 import { ApiError } from "../lib/api"
@@ -435,19 +435,25 @@ function CardAtendida({ demanda: d }: { demanda: DemandaVendaPublic }) {
   return (
     <div style={cancelado ? estilos.cardAtendidaCancelada : estilos.cardAtendida}>
       <div style={estilos.cardTopo}>
-        <span style={estilos.cardTopoLabelMuted}>{cancelado ? "Cancelado" : "Atendido"}</span>
+        <span style={cancelado ? estilos.labelCanceladoTopo : estilos.cardTopoLabelMuted}>
+          {cancelado ? "Cancelado" : "Atendido"}
+        </span>
         {d.finalizada_em && (
-          <span style={estilos.chipTempoMuted}>
+          <span style={cancelado ? estilos.chipTempoCancelado : estilos.chipTempoMuted}>
             {formatarTempoDecorrido(d.finalizada_em)} atrás
           </span>
         )}
       </div>
-      <div style={estilos.cardInternoMuted}>
+      <div style={cancelado ? estilos.cardInternoCancelado : estilos.cardInternoMuted}>
         <span style={cancelado ? estilos.clienteCancelado : estilos.clienteMuted}>
           {d.cliente_nome}
         </span>
-        <span style={estilos.enderecoMuted}>{formatarEndereco(d)}</span>
-        <span style={estilos.itensMuted}>{formatarItens(d)}</span>
+        <span style={cancelado ? estilos.textoCancelado : estilos.enderecoMuted}>
+          {formatarEndereco(d)}
+        </span>
+        <span style={cancelado ? estilos.textoCancelado : estilos.itensMuted}>
+          {formatarItens(d)}
+        </span>
       </div>
     </div>
   )
@@ -469,6 +475,16 @@ function estiloSubAba(ativa: boolean): CSSProperties {
 // Sem minHeight/100vh nem padding de safe-area aqui -- este
 // componente é renderizado DENTRO da casca de navegação (TopBar +
 // BottomNav) em App.tsx, que já cuida do espaçamento geral da página.
+//
+// Card "Cancelado" (aba Atendidas) usa CORES SÓLIDAS de propósito
+// (não opacity) -- opacity esmaece fundo E texto na mesma proporção,
+// o que deixava o card praticamente ilegível (feedback do Ricardo:
+// motoristas com dificuldade de visão não conseguiam ler). Fundo
+// cinza sólido (35% preto -- 60% ficou pesado demais no teste real
+// com o Ricardo) + texto preto/quase-preto por cima dá contraste de
+// verdade, sem depender de transparência.
+const CINZA_CANCELADO = "#A6A6A6"
+
 const estilos: Record<string, CSSProperties> = {
   pagina: {
     color: CORES.texto,
@@ -562,17 +578,12 @@ const estilos: Record<string, CSSProperties> = {
     fontSize: "0.9rem",
   },
 
+  // "Atendido" (concluído de verdade) -- card claro normal, sem
+  // opacity (não precisava, contraste já era bom).
   cardAtendida: {
     background: CORES.fundoCard,
     borderRadius: "0.85rem",
     padding: "0.75rem",
-    opacity: 0.85,
-  },
-  cardAtendidaCancelada: {
-    background: CORES.fundoCard,
-    borderRadius: "0.85rem",
-    padding: "0.75rem",
-    opacity: 0.55,
   },
   cardTopoLabelMuted: { fontSize: "0.75rem", fontWeight: 700, color: CORES.textoSecundario },
   chipTempoMuted: { fontSize: "0.7rem", color: CORES.textoSecundario },
@@ -585,14 +596,33 @@ const estilos: Record<string, CSSProperties> = {
     gap: "0.15rem",
   },
   clienteMuted: { fontWeight: 700, fontSize: "0.95rem", color: CORES.texto },
+  enderecoMuted: { fontSize: "0.82rem", color: CORES.textoSecundario },
+  itensMuted: { fontSize: "0.78rem", color: CORES.textoSecundario },
+
+  // "Cancelado" -- cinza SÓLIDO + texto preto, contraste real (ver
+  // comentário grande acima da const CINZA_CANCELADO).
+  cardAtendidaCancelada: {
+    background: CINZA_CANCELADO,
+    borderRadius: "0.85rem",
+    padding: "0.75rem",
+  },
+  labelCanceladoTopo: { fontSize: "0.75rem", fontWeight: 700, color: "#000000" },
+  chipTempoCancelado: { fontSize: "0.7rem", fontWeight: 700, color: "#000000" },
+  cardInternoCancelado: {
+    background: "rgba(255,255,255,0.25)",
+    borderRadius: "0.6rem",
+    padding: "0.75rem",
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.15rem",
+  },
   clienteCancelado: {
     fontWeight: 700,
     fontSize: "0.95rem",
-    color: CORES.textoSecundario,
+    color: "#000000",
     textDecoration: "line-through",
   },
-  enderecoMuted: { fontSize: "0.82rem", color: CORES.textoSecundario },
-  itensMuted: { fontSize: "0.78rem", color: CORES.textoSecundario },
+  textoCancelado: { fontSize: "0.82rem", color: "#1A1A1A", fontWeight: 500 },
 }
 
 export default MinhasDemandas

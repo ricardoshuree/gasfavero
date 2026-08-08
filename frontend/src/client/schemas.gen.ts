@@ -589,6 +589,32 @@ export const DemandaVendaPublicSchema = {
     title: 'DemandaVendaPublic'
 } as const;
 
+export const DemandaVendaReatribuirRequestSchema = {
+    properties: {
+        motorista_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Motorista Id'
+        }
+    },
+    type: 'object',
+    title: 'DemandaVendaReatribuirRequest',
+    description: `Corpo de PATCH /demandas-venda/{id}/reatribuir -- SÓ o
+atendente pode chamar (ação "Apagar" do módulo delegacao, ver
+comentário de ciclo de vida acima da classe DemandaVenda).
+motorista_id novo dono do chamado; None reabre como chamado
+ABERTO (equivalente a "não era pra fulano, era pra qualquer um").
+Só funciona a partir de status 'pendente' -- ver comentário
+completo acima.`
+} as const;
+
 export const DemandasVendaPublicSchema = {
     properties: {
         data: {
@@ -1295,6 +1321,42 @@ export const ModulesPublicSchema = {
     title: 'ModulesPublic'
 } as const;
 
+export const MotoristaDisponibilidadePublicSchema = {
+    properties: {
+        motorista_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Motorista Id'
+        },
+        motorista_nome: {
+            type: 'string',
+            title: 'Motorista Nome'
+        },
+        disponivel: {
+            type: 'boolean',
+            title: 'Disponivel'
+        }
+    },
+    type: 'object',
+    required: ['motorista_id', 'motorista_nome', 'disponivel'],
+    title: 'MotoristaDisponibilidadePublic'
+} as const;
+
+export const MotoristaDisponibilidadeUpdateSchema = {
+    properties: {
+        disponivel: {
+            type: 'boolean',
+            title: 'Disponivel'
+        }
+    },
+    type: 'object',
+    required: ['disponivel'],
+    title: 'MotoristaDisponibilidadeUpdate',
+    description: `Corpo de PUT /motoristas/{motorista_id}/disponibilidade --
+chamado tanto pelo próprio motorista (toggle no app) quanto por
+um gerente/atendente numa tela gerencial futura.`
+} as const;
+
 export const MotoristaLocalizacaoPublicSchema = {
     properties: {
         motorista_id: {
@@ -1363,6 +1425,25 @@ export const MotoristaLocalizacaoUpdateSchema = {
     title: 'MotoristaLocalizacaoUpdate',
     description: `Corpo de PUT /motoristas/{motorista_id}/localizacao -- upsert
 de ping de localização (sobrescreve sempre, sem histórico).`
+} as const;
+
+export const MotoristasDisponibilidadePublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/MotoristaDisponibilidadePublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'MotoristasDisponibilidadePublic',
+    description: `Resposta de GET /motoristas/disponibilidade -- todos os
+usuários com role Motorista + seu status atual. Usado pra filtrar
+o combo de despacho em /chamado (só disponíveis) e por uma futura
+tela gerencial de disponibilidade.`
 } as const;
 
 export const MotoristasLocalizacaoPublicSchema = {
