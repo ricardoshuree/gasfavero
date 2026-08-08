@@ -17,6 +17,7 @@ import { Route as SignupB2cDisabledRouteImport } from './routes/signup-b2c-disab
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutChamadoRouteImport } from './routes/_layout/chamado'
+import { Route as LayoutChamadosAtivosRouteImport } from './routes/_layout/chamados-ativos'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
 import { Route as LayoutInadimplentesRouteImport } from './routes/_layout/inadimplentes'
 import { Route as LayoutLivroVendasRouteImport } from './routes/_layout/livro-vendas'
@@ -66,6 +67,11 @@ const LayoutAdminRoute = LayoutAdminRouteImport.update({
 const LayoutChamadoRoute = LayoutChamadoRouteImport.update({
   id: '/chamado',
   path: '/chamado',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutChamadosAtivosRoute = LayoutChamadosAtivosRouteImport.update({
+  id: '/chamados-ativos',
+  path: '/chamados-ativos',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutClientesRoute = LayoutClientesRouteImport.update({
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
   '/chamado': typeof LayoutChamadoRoute
+  '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/admin': typeof LayoutAdminRoute
   '/chamado': typeof LayoutChamadoRoute
+  '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/chamado': typeof LayoutChamadoRoute
+  '/_layout/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/_layout/clientes': typeof LayoutClientesRoute
   '/_layout/inadimplentes': typeof LayoutInadimplentesRoute
   '/_layout/livro-vendas': typeof LayoutLivroVendasRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/admin'
     | '/chamado'
+    | '/chamados-ativos'
     | '/clientes'
     | '/inadimplentes'
     | '/livro-vendas'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/admin'
     | '/chamado'
+    | '/chamados-ativos'
     | '/clientes'
     | '/inadimplentes'
     | '/livro-vendas'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/_layout/admin'
     | '/_layout/chamado'
+    | '/_layout/chamados-ativos'
     | '/_layout/clientes'
     | '/_layout/inadimplentes'
     | '/_layout/livro-vendas'
@@ -314,6 +326,13 @@ declare module '@tanstack/react-router' {
       path: '/chamado'
       fullPath: '/chamado'
       preLoaderRoute: typeof LayoutChamadoRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/chamados-ativos': {
+      id: '/_layout/chamados-ativos'
+      path: '/chamados-ativos'
+      fullPath: '/chamados-ativos'
+      preLoaderRoute: typeof LayoutChamadosAtivosRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/clientes': {
@@ -399,6 +418,7 @@ declare module '@tanstack/react-router' {
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
   LayoutChamadoRoute: typeof LayoutChamadoRoute
+  LayoutChamadosAtivosRoute: typeof LayoutChamadosAtivosRoute
   LayoutClientesRoute: typeof LayoutClientesRoute
   LayoutInadimplentesRoute: typeof LayoutInadimplentesRoute
   LayoutLivroVendasRoute: typeof LayoutLivroVendasRoute
@@ -416,6 +436,7 @@ interface LayoutRouteChildren {
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
   LayoutChamadoRoute: LayoutChamadoRoute,
+  LayoutChamadosAtivosRoute: LayoutChamadosAtivosRoute,
   LayoutClientesRoute: LayoutClientesRoute,
   LayoutInadimplentesRoute: LayoutInadimplentesRoute,
   LayoutLivroVendasRoute: LayoutLivroVendasRoute,

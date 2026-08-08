@@ -1,12 +1,13 @@
-// [mcp-local harness] feature: chamado-tela | plano: 4507b69c | 2026-08-07 07:59:03
-// Adiciona item Chamado (modulo delegacao) no menu, logo abaixo de Mapa
+// [mcp-local harness] feature: item16-chamados-ativos | plano: a49dfdf1 | 2026-08-08 14:23:10
+// Suporte a gate por acao especifica (action opcional em MODULE_ITEMS, default can_read) + item "Chamados Ativos" gateado por can_delete
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
  * Itens fixos (sempre visíveis para usuários autenticados):
  *   - Dashboard
  *
- * Itens controlados por módulo (visíveis se can_read):
+ * Itens controlados por módulo (visíveis se can_read, salvo os que
+ * declaram "action" diferente -- ver campo `action` em MODULE_ITEMS):
  *   - Vendas             → módulo "vendas"
  *   - Recebimento de Vale → módulo "vendas" (mesma permissão de Vendas)
  *   - Livro de Vendas    → módulo "livro_vendas" (módulo próprio, não
@@ -23,6 +24,14 @@
  *                           endpoints de demandas-venda). Tela onde o
  *                           atendente despacha uma entrega -- fica
  *                           logo abaixo de Mapa, pedido do Ricardo.
+ *   - Chamados Ativos    → módulo "delegacao", action "can_delete"
+ *                           (NÃO "can_read"!). Motorista tem Ver+
+ *                           Editar em delegacao mas não Apagar --
+ *                           gatear por delete aqui é o que garante
+ *                           que só quem pode cancelar/reatribuir
+ *                           (Admin/Gerente/Operador) enxerga essa
+ *                           tela de gestão. Ver comentário completo
+ *                           em routes/_layout/chamados-ativos.tsx.
  *   - Produtos            → módulo "produtos" (gasfavero-específico)
  *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
  *   - Clientes           → módulo "clientes"
@@ -38,6 +47,7 @@
  *   1. Cadastre o módulo no banco (migration ou seed)
  *   2. Adicione uma entrada em MODULE_ITEMS abaixo com o mesmo nome de módulo
  *   3. O menu aparece automaticamente para quem tiver permissão
+ *      (por padrão can_read -- declare `action` se precisar de outra)
  */
 
 import {
@@ -47,6 +57,7 @@ import {
   Box,
   HandCoins,
   Home,
+  ListChecks,
   MapPin,
   Package,
   PhoneCall,
@@ -74,9 +85,13 @@ import { User } from "./User"
 // Itens sempre visíveis para qualquer usuário autenticado
 const FIXED_ITEMS: Item[] = [{ icon: Home, title: "Dashboard", path: "/" }]
 
-// Mapeamento de módulo → item de menu
-// O campo "module" deve coincidir exatamente com o nome do módulo no banco
-const MODULE_ITEMS: Array<Item & { module: string }> = [
+type PermissionAction = "can_create" | "can_read" | "can_update" | "can_delete"
+
+// Mapeamento de módulo → item de menu. `action` é opcional --
+// omitido, o padrão é "can_read" (como sempre foi); declare
+// explicitamente quando o item precisa de um nível de permissão
+// diferente (ex: Chamados Ativos exige can_delete, não só can_read).
+const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> = [
   { module: "vendas", icon: ShoppingCart, title: "Vendas", path: "/vendas" },
   {
     module: "vendas",
@@ -102,6 +117,13 @@ const MODULE_ITEMS: Array<Item & { module: string }> = [
     icon: PhoneCall,
     title: "Chamado",
     path: "/chamado",
+  },
+  {
+    module: "delegacao",
+    action: "can_delete",
+    icon: ListChecks,
+    title: "Chamados Ativos",
+    path: "/chamados-ativos",
   },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
@@ -131,12 +153,22 @@ const PERMISSIONS_ITEM: Item = {
 
 export function AppSidebar() {
   const { user: currentUser } = useAuth()
-  const { canRead, isLoading } = usePermissions()
+  const { canCreate, canRead, canUpdate, canDelete, isLoading } =
+    usePermissions()
+
+  const checkPermission = (module: string, action: PermissionAction) => {
+    if (action === "can_create") return canCreate(module)
+    if (action === "can_update") return canUpdate(module)
+    if (action === "can_delete") return canDelete(module)
+    return canRead(module)
+  }
 
   // Monta os itens de menu de acordo com as permissões
   const moduleItems: Item[] = isLoading
     ? [] // não mostra nada enquanto carrega — evita flash de itens
-    : MODULE_ITEMS.filter((item) => canRead(item.module))
+    : MODULE_ITEMS.filter((item) =>
+        checkPermission(item.module, item.action ?? "can_read"),
+      )
 
   const items: Item[] = [
     ...FIXED_ITEMS,
