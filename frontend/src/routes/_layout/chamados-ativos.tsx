@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: ajuste-cores-card-3 | plano: ddf76acb | 2026-08-08 15:46:04
+// Corrige aberto badge (vermelho de verdade via style, dark:bg-destructive/60 do tema estava vencendo className) e botao Cancelar (cinza escuro via style)
 // [mcp-local harness] feature: ajuste-cores-card-2 | plano: 8d780d64 | 2026-08-08 15:39:24
 // Badge Aberto vermelho solido, botao Reatribuir amarelo #ffcc00 com texto preto, bloco central de dados com fundo branco proprio
 // [mcp-local harness] feature: fix-n1-demandas-e-cores-card | plano: 46879d5c | 2026-08-08 15:27:52
@@ -23,22 +25,28 @@
 // direto pro /chamado (fecha o loop: depois de despachar, o
 // atendente já cai nesta tela pra conferir o que acabou de criar).
 //
-// CORES DO CARD (ajustes sessão 08/08, em duas rodadas) -- o card
-// usava só `border` (fundo transparente), que no tema escuro ficava
-// preto e se misturava com o fundo da página. Fundo sólido cinza 35%
+// CORES DO CARD (ajustes sessão 08/08, três rodadas) -- o card usava
+// só `border` (fundo transparente), que no tema escuro ficava preto e
+// se misturava com o fundo da página. Fundo sólido cinza 35%
 // (`#A6A6A6`) -- MESMO tom já usado no app do motorista pro card
 // "Cancelado" (ver frontend-motorista) por motivo de acessibilidade,
 // reaproveitado aqui por consistência.
 //
-// Segunda rodada de ajuste: badge "Aberto" trocado de rosa/salmão
-// (`destructive` padrão do tema) pra vermelho sólido; badge "Aceito"
-// com fundo azul (pedido explícito); botão "Reatribuir" com fundo
-// `#ffcc00` (amarelo) e fonte preta; e o bloco central de dados
-// (nome/endereço/itens) ganhou fundo BRANCO próprio dentro do card
-// cinza, pra destacar a informação principal do restante do card --
-// mesmo padrão nos cards de "Chamados abertos" e nas raias por
-// motorista (mesmo componente CardChamadoAtivo reaproveitado nos
-// dois lugares).
+// Bloco central de dados (nome/endereço/itens) ganhou fundo BRANCO
+// próprio dentro do card cinza, pra destacar a informação principal
+// do resto do card -- mesmo padrão nos cards de "Chamados abertos" e
+// nas raias por motorista (mesmo componente CardChamadoAtivo
+// reaproveitado nos dois lugares).
+//
+// ARMADILHA ENCONTRADA (3ª rodada) -- o badge "Aberto" e o botão
+// "Cancelar" usam variant="destructive" do tema, que tem uma regra
+// `dark:bg-destructive/60` (ver badge.tsx/button.tsx). Como o app roda
+// em tema escuro, essa regra dark: vence um className comum
+// (bg-red-600 etc) por ordem de precedência no CSS gerado -- mesmo
+// com a classe "certa" no HTML, a cor rosa/salmão do tema continuava
+// aparecendo. Corrigido usando `style` inline (maior especificidade
+// que QUALQUER classe, inclusive dark:) em vez de className pra essas
+// duas cores específicas.
 //
 // Tela "Chamados Ativos" -- ferramenta de gestão do atendente/gerente
 // sobre chamados já despachados (pendente ou aceita). Não é uma tela
@@ -332,6 +340,14 @@ const COR_FUNDO_CARD = "#A6A6A6"
 // Amarelo do botão "Reatribuir" -- pedido explícito do Ricardo.
 const COR_BOTAO_REATRIBUIR = "#ffcc00"
 
+// Vermelho do badge "Aberto" e cinza escuro do botão "Cancelar" --
+// aplicados via `style` (não `className`) porque o variant
+// "destructive" do tema tem uma regra `dark:bg-destructive/60` que
+// vence qualquer className comum no tema escuro (ver comentário no
+// topo do arquivo).
+const COR_BADGE_ABERTO = "#dc2626"
+const COR_BOTAO_CANCELAR = "#3f3f46"
+
 function CardChamadoAtivo({
   demanda: d,
   onCancelar,
@@ -352,13 +368,8 @@ function CardChamadoAtivo({
       <div className="flex items-center justify-between gap-2">
         <Badge
           variant={aberto ? "destructive" : aceito ? "default" : "secondary"}
-          className={
-            aberto
-              ? "bg-red-600 text-white hover:bg-red-600"
-              : aceito
-                ? "bg-blue-600 text-white hover:bg-blue-600"
-                : undefined
-          }
+          className={aceito ? "bg-blue-600 text-white hover:bg-blue-600" : undefined}
+          style={aberto ? { backgroundColor: COR_BADGE_ABERTO, color: "#fff" } : undefined}
         >
           {aberto ? "Aberto" : aceito ? `Aceito · ${d.motorista_nome}` : `Convite · ${d.motorista_nome}`}
         </Badge>
@@ -394,6 +405,7 @@ function CardChamadoAtivo({
           variant="destructive"
           size="sm"
           className="flex-1"
+          style={{ backgroundColor: COR_BOTAO_CANCELAR }}
           onClick={onCancelar}
         >
           Cancelar
