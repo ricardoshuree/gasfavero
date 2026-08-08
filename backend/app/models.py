@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: painel-mapa-backend | plano: 326a78ae | 2026-08-07 09:35:16
-# Adiciona RankingMotoristaPublic e RankingSemanaPublic (painel do Mapa)
+# [mcp-local harness] feature: fase1-modelos-disponibilidade-cancelamento | plano: fb2e15ac | 2026-08-08 11:04:25
+# User.disponivel + novos modelos MotoristaDisponibilidade* e DemandaVendaReatribuirRequest + docstrings atualizadas (ciclo de vida com cancelada, finalizada_em generico, sem mais recusar mudando banco)
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -270,6 +270,15 @@ class User(UserBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
+    # Disponibilidade (Fase 4, app do motorista) -- "esse usuário está
+    # disponível pra receber chamado AGORA". Só tem sentido de verdade
+    # pra quem tem role Motorista, mas fica em User (não numa tabela
+    # motorista-specific) porque precisa ter um valor desde sempre,
+    # inclusive pra quem nunca abriu o app -- ver comentário completo
+    # na migration k6l7m8n9o0p1. DEFAULT TRUE de propósito: filtrar o
+    # combo de despacho por "só disponíveis" não pode começar
+    # excluindo todo mundo no dia em que essa feature for pro ar.
+    disponivel: bool = Field(default=True)
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
     roles: list["UserRole"] = Relationship(back_populates="user", cascade_delete=True)
 
@@ -1072,14 +1081,50 @@ class InadimplentesMotoristasPublic(SQLModel):
 #
 # Ciclo de vida (status, string livre validada via Literal no
 # Pydantic -- mesmo padrão de Venda.forma_pagamento):
-#   pendente  -> aceita    (motorista aceita; se estava aberto, assume)
-#   pendente  -> recusada  (motorista recusa -- fim de linha, atendente
-#                           despacha um chamado NOVO se for o caso)
-#   aceita    -> concluida (motorista chegou ao destino -- ENCERRA o
-#                           chamado: some do mapa e da lista do
-#                           motorista. A venda em si acontece depois,
-#                           separadamente, na tela de Vendas -- não é
-#                           automática)
+#   pendente  -> aceita     (motorista aceita; se estava aberto, assume)
+#   pendente  -> cancelada  (SÓ o atendente cancela -- ver
+#                           /demandas-venda/{id}/cancelar em
+#                           delegacao.py, gateado pela ação "Apagar"
+#                           do módulo delegacao, que o Motorista não
+#                           tem. Funciona de qualquer estado ATIVO
+#                           (pendente ou aceita), não só pendente --
+#                           decisão do Ricardo: o atendente não
+#                           precisa saber em que estado o chamado
+#                           está, só tem a intenção de interromper um
+#                           trabalho que seria em vão)
+#   aceita    -> cancelada  (idem acima)
+#   aceita    -> concluida  (motorista marca "cheguei ao destino" --
+#                           ENCERRA o chamado: some do mapa e da lista
+#                           do motorista. A venda em si acontece
+#                           depois, separadamente, na tela de Vendas)
+#
+# NÃO EXISTE MAIS "recusar" pelo motorista como ação que muda o banco
+# (decisão tomada numa sessão de mapeamento de cenários com o
+# Ricardo): pra chamado ABERTO, "recusar" no app do motorista é 100%
+# local -- só fecha o alerta pra aquele aparelho, sem chamar API
+# nenhuma (o chamado continua pendente/aberto pra qualquer outro). Pra
+# CONVITE DIRETO, não existe opção de recusar em lugar nenhum -- o
+# motorista só aceita ou ignora; quem decide reatribuir ou cancelar é
+# sempre o atendente (ver /reatribuir e /cancelar). Isso existe pra
+# eliminar o cenário de "chamado em limbo" -- se um chamado morresse
+# (`recusada`) sem ninguém saber, ninguém tomaria a próxima ação.
+#
+# /demandas-venda/{id}/reatribuir -- troca motorista_id (pra outro
+# motorista específico, ou de volta pra None = reabre como chamado
+# aberto), MANTÉM O MESMO REGISTRO (não cria um novo -- decisão do
+# Ricardo). Só funciona a partir de status 'pendente' por enquanto
+# (reatribuir um chamado já 'aceita' significaria tirar de um
+# motorista que talvez já esteja a caminho -- fora de escopo por
+# agora, avaliar depois se vira necessidade real). Volta status pra
+# 'pendente' (o novo motorista precisa aceitar de novo, reaproveita o
+# fluxo de convite direto que já existe). Mesma proteção de permissão
+# de /cancelar (ação "Apagar" do módulo delegacao).
+#
+# finalizada_em: o nome do campo ficou (evita migration só por
+# cosmética), mas o SIGNIFICADO agora é mais genérico: "data/hora em
+# que o chamado foi ENCERRADO" -- por conclusão de verdade (status
+# concluida) OU por cancelamento do atendente (status cancelada). O
+# `status` é quem diz qual dos dois motivos foi.
 #
 # MotoristaLocalizacao é upsert puro: 1 LINHA POR MOTORISTA (PK =
 # motorista_id), sobrescrita a cada ping. Decisão confirmada com o
@@ -1104,21 +1149,25 @@ class DemandaVenda(SQLModel, table=True):
         default=None, foreign_key="user.id", ondelete="RESTRICT"
     )
     observacao: str | None = Field(default=None, max_length=500)
-    # pendente | aceita | recusada | concluida -- ver Literal em
-    # DemandaVendaCreate/DemandaVendaAceitarRequest. String livre no
-    # banco (mesmo padrão de Venda.forma_pagamento), validação mora
-    # no Pydantic da camada de API.
+    # pendente | aceita | cancelada | concluida -- "recusada" não é
+    # mais produzida por nenhum fluxo novo (ver bloco de comentário
+    # acima da classe), mas o valor pode existir em registros
+    # antigos do banco -- ver Literal em delegacao.py. String livre
+    # no banco (mesmo padrão de Venda.forma_pagamento), validação
+    # mora no Pydantic da camada de API.
     status: str = Field(default="pendente", max_length=20)
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     created_at: datetime = Field(
         default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
     )
-    # preenchido quando o motorista aceita ou recusa (NULL = pendente)
+    # preenchido quando o motorista aceita (NULL = pendente). Não é
+    # mais preenchido por recusa (não existe mais recusa que muda o
+    # banco, ver comentário acima).
     respondida_em: datetime | None = Field(
         default=None, sa_type=DateTime(timezone=True)
     )
-    # preenchido quando o motorista marca "cheguei ao destino" --
-    # esse é o momento que ENCERRA o chamado (ver ciclo de vida acima)
+    # data/hora de ENCERRAMENTO -- ver comentário completo acima da
+    # classe (cobre tanto "concluida" quanto "cancelada" agora).
     finalizada_em: datetime | None = Field(
         default=None, sa_type=DateTime(timezone=True)
     )
@@ -1190,6 +1239,17 @@ class DemandaVendaAceitarRequest(SQLModel):
     motorista_id: uuid.UUID | None = None
 
 
+class DemandaVendaReatribuirRequest(SQLModel):
+    """Corpo de PATCH /demandas-venda/{id}/reatribuir -- SÓ o
+    atendente pode chamar (ação "Apagar" do módulo delegacao, ver
+    comentário de ciclo de vida acima da classe DemandaVenda).
+    motorista_id novo dono do chamado; None reabre como chamado
+    ABERTO (equivalente a "não era pra fulano, era pra qualquer um").
+    Só funciona a partir de status 'pendente' -- ver comentário
+    completo acima."""
+    motorista_id: uuid.UUID | None = None
+
+
 class DemandaVendaPublic(SQLModel):
     id: uuid.UUID
     cliente_id: uuid.UUID
@@ -1228,6 +1288,35 @@ class MotoristaLocalizacaoPublic(SQLModel):
 
 class MotoristasLocalizacaoPublic(SQLModel):
     data: list[MotoristaLocalizacaoPublic]
+
+
+# ---- Disponibilidade do motorista (endpoints em delegacao.py) ----
+#
+# "Disponível" = pode receber chamado agora. Persistido em
+# User.disponivel (ver comentário na classe User e na migration
+# k6l7m8n9o0p1) -- diferente de MotoristaLocalizacao, que só existe
+# depois do primeiro ping de GPS, disponibilidade tem valor desde
+# sempre pra qualquer usuário.
+
+class MotoristaDisponibilidadeUpdate(SQLModel):
+    """Corpo de PUT /motoristas/{motorista_id}/disponibilidade --
+    chamado tanto pelo próprio motorista (toggle no app) quanto por
+    um gerente/atendente numa tela gerencial futura."""
+    disponivel: bool
+
+
+class MotoristaDisponibilidadePublic(SQLModel):
+    motorista_id: uuid.UUID
+    motorista_nome: str
+    disponivel: bool
+
+
+class MotoristasDisponibilidadePublic(SQLModel):
+    """Resposta de GET /motoristas/disponibilidade -- todos os
+    usuários com role Motorista + seu status atual. Usado pra filtrar
+    o combo de despacho em /chamado (só disponíveis) e por uma futura
+    tela gerencial de disponibilidade."""
+    data: list[MotoristaDisponibilidadePublic]
 
 
 # ---------------------------------------------------------------------------

@@ -1,17 +1,20 @@
-# [mcp-local harness] feature: painel-mapa-backend | plano: 326a78ae | 2026-08-07 09:39:06
-# Adiciona endpoint GET /demandas-venda/hoje (fuso America/Sao_Paulo)
+# [mcp-local harness] feature: fase2-rotas-cancelar-reatribuir-disponibilidade | plano: c5f719de | 2026-08-08 11:06:09
+# Endpoints novos: cancelar (qualquer estado ativo), reatribuir (so pendente), disponibilidade (GET lista + PUT toggle). Recusar legado ganha protecao reforcada (action=delete)
 """
 Rotas de Chamado (nome de exibição; endpoints/paths continuam
 "demandas-venda" internamente -- mesmo padrão de divergência
 técnico/negócio de Item/Produto). Controle de acesso via módulo RBAC
 "delegacao" (já existente desde a migration b7c8d9e0f1a2).
 
-Ciclo de vida de um Chamado:
+Ciclo de vida de um Chamado -- ver comentário completo em
+models.py (classe DemandaVenda) pra contexto da decisão de negócio.
+Resumo:
   pendente  -> aceita     (motorista aceita; se estava aberto -- sem
                            motorista_id -- quem aceita assume o
                            chamado, ver aceitar_demanda_venda)
-  pendente  -> recusada   (fim de linha; atendente despacha um
-                           chamado NOVO se for o caso)
+  pendente  -> cancelada  (SÓ o atendente, ver cancelar_demanda_venda
+                           -- funciona de pendente OU aceita)
+  aceita    -> cancelada  (idem)
   aceita    -> concluida  (motorista marca "cheguei ao destino" --
                            ENCERRA o chamado: some do mapa e da lista
                            do motorista. A venda em si acontece
@@ -23,6 +26,13 @@ estruturado não dá pra plotar no mapa. Normalmente é o endereço
 vigente do próprio cliente (ver clientes.py / ClienteEndereco), mas o
 endpoint aceita qualquer endereco_id válido para não travar o caso de
 entrega num endereço diferente do cadastrado.
+
+PROTEÇÃO DE PERMISSÃO -- ação "Apagar" reaproveitada como "gestão do
+atendente": cancelar, reatribuir e recusar (legado) exigem a ação
+"delete" do módulo "delegacao". O Motorista tem hoje só Ver+Editar
+nesse módulo (sem Apagar) -- então essas 3 rotas ficam automaticamente
+fechadas pra ele, sem precisar de um módulo RBAC novo. Gerente/Admin/
+Operador têm CRUD completo em delegacao, então continuam liberados.
 """
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -43,16 +53,22 @@ from app.models import (
     DemandaVendaItem,
     DemandaVendaItemPublic,
     DemandaVendaPublic,
+    DemandaVendaReatribuirRequest,
     DemandasVendaPublic,
     Endereco,
     EnderecoPublic,
     Item,
+    MotoristaDisponibilidadePublic,
+    MotoristaDisponibilidadeUpdate,
     MotoristaLocalizacao,
     MotoristaLocalizacaoPublic,
     MotoristaLocalizacaoUpdate,
+    MotoristasDisponibilidadePublic,
     MotoristasLocalizacaoPublic,
+    Role,
     Rua,
     User,
+    UserRole,
     get_datetime_utc,
 )
 
@@ -60,13 +76,29 @@ router = APIRouter(tags=["delegacao"])
 
 MODULE = "delegacao"
 
-STATUS_VALIDOS = ("pendente", "aceita", "recusada", "concluida")
+# "recusada" continua um valor válido de LEITURA (registros antigos
+# no banco podem tê-lo), mas nenhum fluxo novo o produz -- ver
+# comentário de ciclo de vida em models.py.
+STATUS_VALIDOS = ("pendente", "aceita", "recusada", "cancelada", "concluida")
+
+# Nome exato da role RBAC "Motorista" -- usado só pra listar quem
+# aparece em GET /motoristas/disponibilidade. Mesmo cuidado do
+# frontend (chamado.tsx): se a role for renomeada, este filtro para
+# de bater (sem acoplamento por id fixo).
+ROLE_MOTORISTA = "Motorista"
 
 # Fuso de Veranópolis/RS -- usado só pra decidir os limites de "hoje"
 # no painel de Chamadas hoje (ver read_demandas_hoje). created_at
 # continua gravado em UTC no banco como sempre; aqui só convertemos
 # os LIMITES do dia local pra UTC na hora de montar a query.
 FUSO_BRASIL = ZoneInfo("America/Sao_Paulo")
+
+# Estados a partir dos quais um chamado pode ser cancelado -- "de
+# qualquer estado ativo" (decisão do Ricardo), ou seja, tudo que
+# ainda não é terminal. "concluida" e "cancelada" já são terminais,
+# recancelar não faz sentido (sobrescreveria finalizada_em de um
+# chamado que já tinha sido encerrado de verdade).
+ESTADOS_CANCELAVEIS = ("pendente", "aceita")
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +201,8 @@ def _to_localizacao_public(
 def read_demandas_venda(
     session: SessionDep,
     motorista_id: uuid.UUID | None = None,
-    status: Literal["pendente", "aceita", "recusada", "concluida"] | None = None,
+    status: Literal["pendente", "aceita", "recusada", "cancelada", "concluida"]
+    | None = None,
 ) -> Any:
     """Lista chamados, mais recentes primeiro. Filtros opcionais por
     motorista (fila "Minhas Demandas" do motorista) e/ou status. Não
@@ -201,8 +234,13 @@ def read_demandas_hoje(session: SessionDep) -> Any:
     lateral da tela Mapa ("Chamadas hoje"). Não filtra por status: o
     frontend separa em "ativas" (pendente/aceita) no topo e
     "concluídas" (finalizada_em preenchido) embaixo -- chamados
-    recusados hoje simplesmente não aparecem em nenhum dos dois
-    grupos (são um beco sem saída já resolvido em outro lugar).
+    cancelados/recusados hoje simplesmente não aparecem em nenhum dos
+    dois grupos, exceto que agora "cancelada" TAMBÉM preenche
+    finalizada_em (ver comentário em models.py), então cai junto dos
+    concluídos nesse filtro simples -- se precisar diferenciar
+    visualmente cancelado de concluído de verdade aqui, o frontend
+    precisa olhar o campo `status`, não só a presença de
+    finalizada_em.
 
     Isso é um filtro de DATA, não uma exclusão -- reseta sozinho à
     meia-noite porque o dia mudou, o histórico continua intacto no
@@ -290,7 +328,12 @@ def aceitar_demanda_venda(
     """Motorista aceita o chamado -- só a partir de 'pendente'. Se o
     chamado estava ABERTO (motorista_id NULL), aceitar_in.motorista_id
     é obrigatório: é quem está assumindo o chamado. Se já tinha um
-    motorista definido, motorista_id do corpo é ignorado."""
+    motorista definido, motorista_id do corpo é ignorado.
+
+    400 aqui geralmente significa que outro motorista já assumiu esse
+    mesmo chamado aberto entre a última leitura da lista e este toque
+    -- corrida normal em chamado aberto, não é bug (o frontend deve
+    mostrar mensagem específica, não erro genérico)."""
     demanda = session.get(DemandaVenda, demanda_id)
     if not demanda:
         raise HTTPException(status_code=404, detail="Chamado não encontrado")
@@ -322,12 +365,17 @@ def aceitar_demanda_venda(
 @router.patch(
     "/demandas-venda/{demanda_id}/recusar",
     response_model=DemandaVendaPublic,
-    dependencies=[Depends(require_module_permission(MODULE, action="update"))],
+    dependencies=[Depends(require_module_permission(MODULE, action="delete"))],
 )
 def recusar_demanda_venda(*, session: SessionDep, demanda_id: uuid.UUID) -> Any:
-    """Recusa o chamado -- só a partir de 'pendente'. Não existe
-    reatribuição automática: o atendente vê a recusa na lista e
-    despacha um chamado NOVO pra outro motorista, se for o caso."""
+    """LEGADO -- o app do motorista não chama mais este endpoint (ver
+    comentário de ciclo de vida em models.py: recusar deixou de ser
+    uma ação do motorista, pra não gerar chamado "em limbo"). Gate de
+    permissão reforçado pra ação "Apagar" (só atendente/gerente),
+    justamente pra impedir um motorista de matar um chamado sozinho
+    via chamada direta à API, contornando a regra de negócio. Mantido
+    só por retrocompatibilidade -- considerar remover de vez depois
+    que não houver mais nenhum cliente antigo do app em uso."""
     demanda = session.get(DemandaVenda, demanda_id)
     if not demanda:
         raise HTTPException(status_code=404, detail="Chamado não encontrado")
@@ -339,6 +387,86 @@ def recusar_demanda_venda(*, session: SessionDep, demanda_id: uuid.UUID) -> Any:
 
     demanda.status = "recusada"
     demanda.respondida_em = get_datetime_utc()
+    session.add(demanda)
+    session.commit()
+    session.refresh(demanda)
+    return _to_demanda_public(session, demanda)
+
+
+@router.patch(
+    "/demandas-venda/{demanda_id}/cancelar",
+    response_model=DemandaVendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="delete"))],
+)
+def cancelar_demanda_venda(*, session: SessionDep, demanda_id: uuid.UUID) -> Any:
+    """SÓ o atendente/gerente cancela (ação "Apagar" do módulo
+    delegacao -- Motorista não tem). Funciona de QUALQUER estado
+    ativo (pendente ou aceita), não só de um estado específico --
+    decisão do Ricardo: o atendente não precisa saber em que estado
+    o chamado está, só tem a intenção de interromper um trabalho que
+    seria em vão se continuado (ex: cliente ligou de novo desistindo).
+
+    Preenche finalizada_em (mesmo campo usado por "concluir" -- ver
+    comentário em models.py) -- é o `status` que diferencia os dois
+    motivos de encerramento pro frontend.
+
+    Bloqueia 400 se o chamado já estiver 'concluida' ou 'cancelada'
+    (terminal) -- recancelar sobrescreveria o timestamp de um
+    encerramento que já aconteceu de verdade."""
+    demanda = session.get(DemandaVenda, demanda_id)
+    if not demanda:
+        raise HTTPException(status_code=404, detail="Chamado não encontrado")
+    if demanda.status not in ESTADOS_CANCELAVEIS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chamado já está encerrado (status atual: '{demanda.status}'), nada a cancelar",
+        )
+
+    demanda.status = "cancelada"
+    demanda.finalizada_em = get_datetime_utc()
+    session.add(demanda)
+    session.commit()
+    session.refresh(demanda)
+    return _to_demanda_public(session, demanda)
+
+
+@router.patch(
+    "/demandas-venda/{demanda_id}/reatribuir",
+    response_model=DemandaVendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="delete"))],
+)
+def reatribuir_demanda_venda(
+    *,
+    session: SessionDep,
+    demanda_id: uuid.UUID,
+    reatribuir_in: DemandaVendaReatribuirRequest,
+) -> Any:
+    """SÓ o atendente/gerente reatribui (ação "Apagar" do módulo
+    delegacao). Troca motorista_id (ou volta pra None = reabre como
+    chamado ABERTO) e volta o status pra 'pendente' -- o novo
+    motorista precisa aceitar de novo, reaproveitando o fluxo de
+    convite direto que já existe. MESMO REGISTRO, não cria um chamado
+    novo (decisão do Ricardo).
+
+    Só funciona a partir de 'pendente' por enquanto -- reatribuir um
+    chamado já 'aceita' tiraria de um motorista que talvez já esteja a
+    caminho, fora de escopo por agora."""
+    demanda = session.get(DemandaVenda, demanda_id)
+    if not demanda:
+        raise HTTPException(status_code=404, detail="Chamado não encontrado")
+    if demanda.status != "pendente":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Só é possível reatribuir um chamado pendente (status atual: '{demanda.status}')",
+        )
+
+    if reatribuir_in.motorista_id is not None:
+        motorista = session.get(User, reatribuir_in.motorista_id)
+        if not motorista:
+            raise HTTPException(status_code=404, detail="Motorista não encontrado")
+
+    demanda.motorista_id = reatribuir_in.motorista_id
+    demanda.respondida_em = None
     session.add(demanda)
     session.commit()
     session.refresh(demanda)
@@ -425,4 +553,70 @@ def read_localizacoes_motoristas(session: SessionDep) -> Any:
     locs = session.exec(select(MotoristaLocalizacao)).all()
     return MotoristasLocalizacaoPublic(
         data=[_to_localizacao_public(session, loc) for loc in locs]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rotas — Disponibilidade de Motorista
+# ---------------------------------------------------------------------------
+
+@router.put(
+    "/motoristas/{motorista_id}/disponibilidade",
+    response_model=MotoristaDisponibilidadePublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))],
+)
+def atualizar_disponibilidade_motorista(
+    *,
+    session: SessionDep,
+    motorista_id: uuid.UUID,
+    disponibilidade_in: MotoristaDisponibilidadeUpdate,
+) -> Any:
+    """Liga/desliga a disponibilidade de um motorista pra receber
+    chamado. Chamado tanto pelo próprio motorista (toggle no app,
+    mesma permissão que ele já usa pra localização) quanto por uma
+    futura tela gerencial (gerente/operador, que também têm Editar
+    no módulo delegacao)."""
+    motorista = session.get(User, motorista_id)
+    if not motorista:
+        raise HTTPException(status_code=404, detail="Motorista não encontrado")
+
+    motorista.disponivel = disponibilidade_in.disponivel
+    session.add(motorista)
+    session.commit()
+    session.refresh(motorista)
+    return MotoristaDisponibilidadePublic(
+        motorista_id=motorista.id,
+        motorista_nome=_motorista_nome(motorista) or motorista.email,
+        disponivel=motorista.disponivel,
+    )
+
+
+@router.get(
+    "/motoristas/disponibilidade",
+    response_model=MotoristasDisponibilidadePublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_disponibilidade_motoristas(session: SessionDep) -> Any:
+    """Todos os usuários com role Motorista + status de
+    disponibilidade atual -- usado pra filtrar o combo de despacho em
+    /chamado (só disponíveis) e por uma futura tela gerencial."""
+    role = session.exec(select(Role).where(Role.name == ROLE_MOTORISTA)).first()
+    if not role:
+        return MotoristasDisponibilidadePublic(data=[])
+
+    motoristas = session.exec(
+        select(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .where(UserRole.role_id == role.id)
+    ).all()
+
+    return MotoristasDisponibilidadePublic(
+        data=[
+            MotoristaDisponibilidadePublic(
+                motorista_id=m.id,
+                motorista_nome=_motorista_nome(m) or m.email,
+                disponivel=m.disponivel,
+            )
+            for m in motoristas
+        ]
     )

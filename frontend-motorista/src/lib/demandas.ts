@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: frontend-motorista-ajustes-usabilidade | plano: 00bcba9d | 2026-08-07 20:01:24
-// Ordem FIFO (mais antigo primeiro) dentro de cada grupo de prioridade na aba Agora
+// [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:44:19
+// DemandaStatus inclui cancelada. Aba Atendidas agora inclui cancelados tambem (alem de concluidos)
 import { request } from "./api"
 
 // Espelha o schema de DemandaVendaPublic do backend
@@ -22,7 +22,11 @@ type DemandaVendaItemPublic = {
   quantidade: number
 }
 
-type DemandaStatus = "pendente" | "aceita" | "recusada" | "concluida"
+// "recusada" pode existir em registros antigos (fluxo legado, não
+// produzido mais por nenhuma ação do app do motorista -- ver
+// comentário em models.py), mas o app não trata ativamente esse
+// status em lugar nenhum.
+type DemandaStatus = "pendente" | "aceita" | "recusada" | "cancelada" | "concluida"
 
 type DemandaVendaPublic = {
   id: string
@@ -60,13 +64,6 @@ async function aceitarDemanda(
   })
 }
 
-async function recusarDemanda(token: string, demandaId: string): Promise<DemandaVendaPublic> {
-  return request<DemandaVendaPublic>(`/api/v1/demandas-venda/${demandaId}/recusar`, {
-    method: "PATCH",
-    token,
-  })
-}
-
 async function concluirDemanda(token: string, demandaId: string): Promise<DemandaVendaPublic> {
   return request<DemandaVendaPublic>(`/api/v1/demandas-venda/${demandaId}/concluir`, {
     method: "PATCH",
@@ -97,11 +94,18 @@ function ehHoje(isoDate: string): boolean {
 // fora de escopo por enquanto -- exigiria integrar rota real, ex:
 // Google Directions API).
 //
-// "atendidas" -- só os que EU concluí hoje (finalizada_em dentro do
-// dia corrente, mesmo espírito do filtro "Chamadas hoje" do painel
-// do Mapa no frontend principal -- aqui simplificado pra data local
-// do aparelho em vez de fuso Brasília explícito, adequado o
-// suficiente pro uso em campo).
+// Chamados CANCELADOS não entram aqui -- ver tratamento especial em
+// MinhasDemandas.tsx (o card "lingera" por até 15s com aviso, fora
+// deste filtro puro).
+//
+// "atendidas" -- só os que EU encerrei hoje, seja por CONCLUIR
+// (chegou de verdade) ou por CANCELAMENTO do atendente
+// (finalizada_em dentro do dia corrente, mesmo espírito do filtro
+// "Chamadas hoje" do painel do Mapa no frontend principal -- aqui
+// simplificado pra data local do aparelho em vez de fuso Brasília
+// explícito, adequado o suficiente pro uso em campo). O frontend
+// precisa olhar `status` pra diferenciar visualmente os dois casos
+// (ver CardAtendida em MinhasDemandas.tsx).
 function separarChamadas(
   demandas: DemandaVendaPublic[],
   meuId: string,
@@ -129,7 +133,7 @@ function separarChamadas(
     .filter(
       (d) =>
         d.motorista_id === meuId &&
-        d.status === "concluida" &&
+        (d.status === "concluida" || d.status === "cancelada") &&
         d.finalizada_em !== null &&
         ehHoje(d.finalizada_em),
     )
@@ -142,11 +146,5 @@ function separarChamadas(
   return { agora, atendidas }
 }
 
-export {
-  listarDemandas,
-  aceitarDemanda,
-  recusarDemanda,
-  concluirDemanda,
-  separarChamadas,
-}
+export { listarDemandas, aceitarDemanda, concluirDemanda, separarChamadas }
 export type { DemandaVendaPublic, DemandaVendaItemPublic, EnderecoPublic, DemandaStatus }

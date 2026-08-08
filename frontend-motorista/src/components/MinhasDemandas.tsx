@@ -1,13 +1,13 @@
-// [mcp-local harness] feature: frontend-motorista-som-arquivo-real | plano: ee27d3a1 | 2026-08-07 20:53:19
-// Ajusta chamadas a iniciarAlarme()/pararAlarme() pra nova assinatura sem interval id (usa ref booleano em vez de numero)
+// [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:48:09
+// Remove import nao usado (desbloquearAudio)
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
-import { iniciarAlarme, pararAlarme } from "../lib/alarme"
+import { iniciarAlarme, pararAlarme, tocarSomCancelamento } from "../lib/alarme"
+import { ApiError } from "../lib/api"
 import {
   aceitarDemanda,
   concluirDemanda,
   type DemandaVendaPublic,
   listarDemandas,
-  recusarDemanda,
   separarChamadas,
 } from "../lib/demandas"
 import { CORES_APP as CORES } from "../theme"
@@ -19,6 +19,11 @@ import ConfirmDialog from "./ConfirmDialog"
 // principal), aqui um pouco mais espaçado (15s) porque não há
 // elemento visual (mapa) exigindo atualização fluida, só a lista.
 const INTERVALO_POLLING_MS = 15_000
+
+// Quanto tempo o card "Chamada cancelada" (botão preto) fica visível
+// na aba Agora antes de sumir sozinho -- pedido do Ricardo. Some
+// antes disso se o motorista tocar nele manualmente.
+const LINGER_CANCELADO_MS = 15_000
 
 type SubAba = "agora" | "atendidas"
 
@@ -48,12 +53,29 @@ function formatarTempoDecorrido(isoDate: string): string {
 
 /** Chamados que "precisam de ação" -- abertos (qualquer um aceita)
  * ou convites diretos pendentes pra mim. É essa lista que alimenta a
- * detecção de "chamado novo" pro alarme (ver useEffect abaixo). */
+ * detecção de "chamado novo" pro alarme. */
 function idsPrecisandoAcao(agora: DemandaVendaPublic[], meuId: string): Set<string> {
   return new Set(
     agora
       .filter((d) => d.motorista_id === null || (d.motorista_id === meuId && d.status === "pendente"))
       .map((d) => d.id),
+  )
+}
+
+/** Chamados que são "meus e ativos" AGORA (pendente ou aceita, e
+ * motorista_id sou eu) -- usado pra detectar cancelamento (estava
+ * aqui, não está mais / virou 'cancelada') e reatribuição (estava
+ * aqui, motorista_id mudou pra outra pessoa). */
+function mapaMeusAtivos(
+  todas: DemandaVendaPublic[],
+  meuId: string,
+): Map<string, DemandaVendaPublic> {
+  return new Map(
+    todas
+      .filter(
+        (d) => d.motorista_id === meuId && (d.status === "pendente" || d.status === "aceita"),
+      )
+      .map((d) => [d.id, d]),
   )
 }
 
@@ -83,8 +105,13 @@ function MinhasDemandas({
   const [confirmandoChegadaId, setConfirmandoChegadaId] = useState<string | null>(null)
   const [confirmadoId, setConfirmadoId] = useState<string | null>(null)
   const [alertaChamado, setAlertaChamado] = useState<DemandaVendaPublic | null>(null)
+  const [canceladosRecentes, setCanceladosRecentes] = useState<
+    Map<string, DemandaVendaPublic>
+  >(new Map())
 
   const idsVistosRef = useRef<Set<string> | null>(null)
+  const meusAtivosAnterioresRef = useRef<Map<string, DemandaVendaPublic> | null>(null)
+  const canceladosRecentesIdsRef = useRef<Set<string>>(new Set())
   const alarmeTocandoRef = useRef(false)
 
   const pararAlarmeSonoro = useCallback(() => {
@@ -94,6 +121,31 @@ function MinhasDemandas({
     }
   }, [])
 
+  const removerCanceladoRecente = useCallback((id: string) => {
+    canceladosRecentesIdsRef.current.delete(id)
+    setCanceladosRecentes((prev) => {
+      if (!prev.has(id)) return prev
+      const novo = new Map(prev)
+      novo.delete(id)
+      return novo
+    })
+  }, [])
+
+  const adicionarCanceladoRecente = useCallback(
+    (demanda: DemandaVendaPublic) => {
+      if (canceladosRecentesIdsRef.current.has(demanda.id)) return
+      canceladosRecentesIdsRef.current.add(demanda.id)
+      setCanceladosRecentes((prev) => {
+        const novo = new Map(prev)
+        novo.set(demanda.id, demanda)
+        return novo
+      })
+      tocarSomCancelamento()
+      window.setTimeout(() => removerCanceladoRecente(demanda.id), LINGER_CANCELADO_MS)
+    },
+    [removerCanceladoRecente],
+  )
+
   const carregar = useCallback(async () => {
     try {
       const todas = await listarDemandas(token)
@@ -101,6 +153,23 @@ function MinhasDemandas({
       setAgora(separadas.agora)
       setAtendidas(separadas.atendidas)
       setErro(null)
+
+      // Detecção de CANCELAMENTO -- compara "meus ativos" desta
+      // leitura com a anterior. Se um chamado que era meu (pendente
+      // ou aceita) agora está 'cancelada', é o atendente que
+      // cancelou -- avisa com som distinto + card preto lingering.
+      // Se sumiu de "meus ativos" por outro motivo (motorista_id
+      // mudou pra outra pessoa = reatribuído), fica em silêncio de
+      // propósito -- nunca foi meu de verdade.
+      if (meusAtivosAnterioresRef.current !== null) {
+        for (const [id] of meusAtivosAnterioresRef.current) {
+          const atual = todas.find((d) => d.id === id)
+          if (atual && atual.status === "cancelada" && atual.motorista_id === meuId) {
+            adicionarCanceladoRecente(atual)
+          }
+        }
+      }
+      meusAtivosAnterioresRef.current = mapaMeusAtivos(todas, meuId)
 
       // Detecção de "chamado novo" -- compara com a leitura
       // anterior. Na primeira carga só registra o estado atual (sem
@@ -123,7 +192,7 @@ function MinhasDemandas({
     } finally {
       setCarregando(false)
     }
-  }, [token, meuId])
+  }, [token, meuId, adicionarCanceladoRecente])
 
   useEffect(() => {
     carregar()
@@ -139,20 +208,17 @@ function MinhasDemandas({
     try {
       await aceitarDemanda(token, id, meuId)
       await carregar()
-    } catch {
-      setErro("Não foi possível aceitar o chamado. Tente de novo.")
-    } finally {
-      setProcessando(null)
-    }
-  }
-
-  async function handleRecusar(id: string) {
-    setProcessando(id)
-    try {
-      await recusarDemanda(token, id)
+    } catch (e) {
+      // 400 aqui quase sempre significa "outro motorista já aceitou
+      // esse mesmo chamado aberto entre o carregamento da tela e o
+      // seu toque" -- corrida normal em chamado aberto, não é bug.
+      // Mensagem específica em vez do genérico "tente de novo".
+      if (e instanceof ApiError && e.status === 400) {
+        setErro("Esse chamado já foi assumido por outro motorista.")
+      } else {
+        setErro("Não foi possível aceitar o chamado. Tente de novo.")
+      }
       await carregar()
-    } catch {
-      setErro("Não foi possível recusar o chamado. Tente de novo.")
     } finally {
       setProcessando(null)
     }
@@ -186,15 +252,17 @@ function MinhasDemandas({
     await handleAceitar(id)
   }
 
-  async function handleRecusarDoAlerta() {
-    if (!alertaChamado) return
-    const id = alertaChamado.id
+  /** "Recusar" do alerta pra chamados ABERTOS -- 100% local, não
+   * chama a API. Só fecha a tela e para o alarme pra este aparelho;
+   * o chamado continua pendente/aberto pra qualquer motorista (ver
+   * comentário de regra de negócio em AlertaChamado.tsx). */
+  function handleDispensarAlerta() {
     pararAlarmeSonoro()
     setAlertaChamado(null)
-    await handleRecusar(id)
   }
 
-  const listaAtiva = subAba === "agora" ? agora : atendidas
+  const listaAgoraComCancelados = [...agora, ...canceladosRecentes.values()]
+  const listaAtiva = subAba === "agora" ? listaAgoraComCancelados : atendidas
   const chamadoConfirmando = agora.find((d) => d.id === confirmandoChegadaId) ?? null
 
   return (
@@ -203,7 +271,7 @@ function MinhasDemandas({
 
       <div style={estilos.subAbas}>
         <button style={estiloSubAba(subAba === "agora")} onClick={() => setSubAba("agora")}>
-          Agora{agora.length > 0 ? ` (${agora.length})` : ""}
+          Agora{listaAgoraComCancelados.length > 0 ? ` (${listaAgoraComCancelados.length})` : ""}
         </button>
         <button
           style={estiloSubAba(subAba === "atendidas")}
@@ -225,18 +293,25 @@ function MinhasDemandas({
 
       <div style={estilos.lista}>
         {subAba === "agora"
-          ? agora.map((d) => (
-              <CardAgora
-                key={d.id}
-                demanda={d}
-                meuId={meuId}
-                processando={processando === d.id}
-                confirmado={confirmadoId === d.id}
-                onAceitar={() => handleAceitar(d.id)}
-                onRecusar={() => handleRecusar(d.id)}
-                onPedirConfirmacaoChegada={() => setConfirmandoChegadaId(d.id)}
-              />
-            ))
+          ? listaAgoraComCancelados.map((d) =>
+              d.status === "cancelada" ? (
+                <CardCancelado
+                  key={d.id}
+                  demanda={d}
+                  onDispensar={() => removerCanceladoRecente(d.id)}
+                />
+              ) : (
+                <CardAgora
+                  key={d.id}
+                  demanda={d}
+                  meuId={meuId}
+                  processando={processando === d.id}
+                  confirmado={confirmadoId === d.id}
+                  onAceitar={() => handleAceitar(d.id)}
+                  onPedirConfirmacaoChegada={() => setConfirmandoChegadaId(d.id)}
+                />
+              ),
+            )
           : atendidas.map((d) => <CardAtendida key={d.id} demanda={d} />)}
       </div>
 
@@ -262,7 +337,7 @@ function MinhasDemandas({
           demanda={alertaChamado}
           processando={processando === alertaChamado.id}
           onAceitar={handleAceitarDoAlerta}
-          onRecusar={handleRecusarDoAlerta}
+          onDispensar={handleDispensarAlerta}
         />
       )}
     </div>
@@ -275,7 +350,6 @@ function CardAgora({
   processando,
   confirmado,
   onAceitar,
-  onRecusar,
   onPedirConfirmacaoChegada,
 }: {
   demanda: DemandaVendaPublic
@@ -283,11 +357,9 @@ function CardAgora({
   processando: boolean
   confirmado: boolean
   onAceitar: () => void
-  onRecusar: () => void
   onPedirConfirmacaoChegada: () => void
 }) {
   const aberto = d.motorista_id === null
-  const meuPendente = d.motorista_id === meuId && d.status === "pendente"
   const meuAceito = d.motorista_id === meuId && d.status === "aceita"
 
   const tempo = meuAceito
@@ -319,26 +391,51 @@ function CardAgora({
           {confirmado ? "Confirmado ✓" : processando ? "..." : "Cheguei"}
         </button>
       ) : (
-        <>
-          <button style={estilos.botaoAceitar} disabled={processando} onClick={onAceitar}>
-            {processando ? "..." : "Aceitar chamado"}
-          </button>
-          {meuPendente && (
-            <button style={estilos.botaoRecusar} disabled={processando} onClick={onRecusar}>
-              Recusar
-            </button>
-          )}
-        </>
+        // Sem opção de recusar aqui -- nem aberto nem convite direto
+        // (ver regra de negócio documentada em AlertaChamado.tsx).
+        <button style={estilos.botaoAceitar} disabled={processando} onClick={onAceitar}>
+          {processando ? "..." : "Aceitar chamado"}
+        </button>
       )}
     </div>
   )
 }
 
-function CardAtendida({ demanda: d }: { demanda: DemandaVendaPublic }) {
+/** Card "lingering" pra chamado CANCELADO pelo atendente -- fica na
+ * aba Agora por até 15s (ou até o motorista tocar) antes de sumir
+ * de vez (a partir daí só existe mais na aba Atendidas, já
+ * reclassificado por separarChamadas). Botão PRETO de propósito --
+ * visualmente bem diferente de aceitar/cheguei, deixa claro que não
+ * precisa fazer mais nada com esse chamado. */
+function CardCancelado({
+  demanda: d,
+  onDispensar,
+}: {
+  demanda: DemandaVendaPublic
+  onDispensar: () => void
+}) {
   return (
-    <div style={estilos.cardAtendida}>
+    <div style={estilos.card}>
       <div style={estilos.cardTopo}>
-        <span style={estilos.cardTopoLabelMuted}>Atendido</span>
+        <span style={estilos.cardTopoLabel}>Chamado cancelado</span>
+      </div>
+      <div style={estilos.cardInterno}>
+        <span style={estilos.cliente}>{d.cliente_nome}</span>
+        <span style={estilos.endereco}>{formatarEndereco(d)}</span>
+      </div>
+      <button style={estilos.botaoCancelado} onClick={onDispensar}>
+        Chamada cancelada
+      </button>
+    </div>
+  )
+}
+
+function CardAtendida({ demanda: d }: { demanda: DemandaVendaPublic }) {
+  const cancelado = d.status === "cancelada"
+  return (
+    <div style={cancelado ? estilos.cardAtendidaCancelada : estilos.cardAtendida}>
+      <div style={estilos.cardTopo}>
+        <span style={estilos.cardTopoLabelMuted}>{cancelado ? "Cancelado" : "Atendido"}</span>
         {d.finalizada_em && (
           <span style={estilos.chipTempoMuted}>
             {formatarTempoDecorrido(d.finalizada_em)} atrás
@@ -346,7 +443,9 @@ function CardAtendida({ demanda: d }: { demanda: DemandaVendaPublic }) {
         )}
       </div>
       <div style={estilos.cardInternoMuted}>
-        <span style={estilos.clienteMuted}>{d.cliente_nome}</span>
+        <span style={cancelado ? estilos.clienteCancelado : estilos.clienteMuted}>
+          {d.cliente_nome}
+        </span>
         <span style={estilos.enderecoMuted}>{formatarEndereco(d)}</span>
         <span style={estilos.itensMuted}>{formatarItens(d)}</span>
       </div>
@@ -387,9 +486,6 @@ const estilos: Record<string, CSSProperties> = {
   erro: { color: CORES.erro, fontSize: "0.875rem", marginBottom: "0.75rem" },
   lista: { display: "flex", flexDirection: "column", gap: "0.75rem", paddingBottom: "1rem" },
 
-  // Card "Agora" (precisa ação ou em andamento) -- cinza claro por
-  // fora, área branca por dentro, botão vermelho/azul conforme
-  // estado. Visual de referência: cards de "Aceitar pedido" do iFood.
   card: {
     background: CORES.fundoCard,
     borderRadius: "0.85rem",
@@ -433,16 +529,6 @@ const estilos: Record<string, CSSProperties> = {
     fontWeight: 700,
     fontSize: "0.9rem",
   },
-  botaoRecusar: {
-    width: "100%",
-    padding: "0.5rem",
-    marginTop: "0.4rem",
-    borderRadius: "0.5rem",
-    border: "none",
-    background: "transparent",
-    color: CORES.textoSecundario,
-    fontSize: "0.8rem",
-  },
   botaoCheguei: {
     width: "100%",
     padding: "0.75rem",
@@ -454,8 +540,6 @@ const estilos: Record<string, CSSProperties> = {
     fontSize: "0.9rem",
     transition: "background 0.2s ease",
   },
-  // Flash verde de sucesso -- feedback visual rápido antes de
-  // navegar pra Vendas (pedido do Ricardo).
   botaoCheguelConfirmado: {
     width: "100%",
     padding: "0.75rem",
@@ -467,14 +551,28 @@ const estilos: Record<string, CSSProperties> = {
     fontSize: "0.9rem",
     transition: "background 0.2s ease",
   },
+  botaoCancelado: {
+    width: "100%",
+    padding: "0.75rem",
+    borderRadius: "0.5rem",
+    border: "none",
+    background: "#000000",
+    color: "#FFFFFF",
+    fontWeight: 700,
+    fontSize: "0.9rem",
+  },
 
-  // Card "Atendida" -- sem botão, visual mais apagado (referência:
-  // seção "Em entrega"/histórico do iFood, sem call-to-action).
   cardAtendida: {
     background: CORES.fundoCard,
     borderRadius: "0.85rem",
     padding: "0.75rem",
     opacity: 0.85,
+  },
+  cardAtendidaCancelada: {
+    background: CORES.fundoCard,
+    borderRadius: "0.85rem",
+    padding: "0.75rem",
+    opacity: 0.55,
   },
   cardTopoLabelMuted: { fontSize: "0.75rem", fontWeight: 700, color: CORES.textoSecundario },
   chipTempoMuted: { fontSize: "0.7rem", color: CORES.textoSecundario },
@@ -487,6 +585,12 @@ const estilos: Record<string, CSSProperties> = {
     gap: "0.15rem",
   },
   clienteMuted: { fontWeight: 700, fontSize: "0.95rem", color: CORES.texto },
+  clienteCancelado: {
+    fontWeight: 700,
+    fontSize: "0.95rem",
+    color: CORES.textoSecundario,
+    textDecoration: "line-through",
+  },
   enderecoMuted: { fontSize: "0.82rem", color: CORES.textoSecundario },
   itensMuted: { fontSize: "0.78rem", color: CORES.textoSecundario },
 }

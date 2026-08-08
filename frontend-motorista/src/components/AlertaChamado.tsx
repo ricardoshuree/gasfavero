@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: frontend-motorista-cor-verde-final | plano: 048885e2 | 2026-08-07 21:38:21
-// Verde ajustado pro hex exato pedido (#00A63E)
+// [mcp-local harness] feature: fase3-ajustes-motorista | plano: 396646b8 | 2026-08-08 10:57:29
+// Convite direto: so Aceitar (sem Recusar). Chamado aberto: Recusar vira "Dispensar" -- 100% local, sem API
 import type { CSSProperties } from "react"
 import type { DemandaVendaPublic } from "../lib/demandas"
 import { CORES_APP as CORES } from "../theme"
@@ -16,6 +16,18 @@ import { CORES_APP as CORES } from "../theme"
 // até atender"), é necessário Firebase Cloud Messaging (push
 // notification nativa) + tela de alarme sobre a lock screen --
 // escopo maior, decisão de fazer depois (ver conversa com Ricardo).
+//
+// REGRA DE NEGÓCIO (decidida com o Ricardo, sessão de mapeamento de
+// cenários): convite DIRETO (motorista_id já é este motorista) nunca
+// tem opção de recusar -- só "Aceitar". Quem gerencia reatribuição ou
+// cancelamento de um convite direto é o ATENDENTE, não o motorista
+// recusando por conta própria (isso evita o chamado ficar "preso"
+// invisível pra todo mundo). Só chamado ABERTO (motorista_id null)
+// tem "Recusar" aqui, e esse botão é 100% LOCAL -- só fecha a tela e
+// para o alarme pra ESTE aparelho; não chama a API, não muda nada no
+// banco. O chamado continua pendente/aberto normalmente pra qualquer
+// outro motorista (e reaparece na aba "Agora" deste motorista sem o
+// alarme, já que ele já "viu" essa notificação).
 
 // Verde de sucesso -- contraste forte com o fundo vermelho do
 // alerta (hex exato pedido pelo Ricardo).
@@ -36,13 +48,18 @@ function AlertaChamado({
   demanda,
   processando,
   onAceitar,
-  onRecusar,
+  onDispensar,
 }: {
   demanda: DemandaVendaPublic
   processando: boolean
   onAceitar: () => void
-  onRecusar: () => void
+  /** Fecha o alerta SEM mexer no chamado -- só pra chamados abertos
+   * (ver comentário acima). Convite direto não recebe essa prop
+   * disponível na prática (botão nem aparece). */
+  onDispensar: () => void
 }) {
+  const aberto = demanda.motorista_id === null
+
   return (
     <div style={estilos.overlay}>
       <div style={estilos.conteudo}>
@@ -62,13 +79,16 @@ function AlertaChamado({
           {processando ? "..." : "Aceitar chamado"}
         </button>
 
-        {/* Espaço generoso antes do Recusar -- pedido do Ricardo,
-            evita toque acidental logo depois de "Aceitar chamado" */}
-        <div style={estilos.espacador} />
-
-        <button style={estilos.botaoRecusar} disabled={processando} onClick={onRecusar}>
-          Recusar
-        </button>
+        {aberto && (
+          <>
+            {/* Espaço generoso antes do Dispensar -- evita toque
+                acidental logo depois de "Aceitar chamado" */}
+            <div style={estilos.espacador} />
+            <button style={estilos.botaoRecusar} disabled={processando} onClick={onDispensar}>
+              Recusar
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -133,9 +153,6 @@ const estilos: Record<string, CSSProperties> = {
     fontWeight: 700,
     fontSize: "1rem",
   },
-  // Espaço extra proposital entre Aceitar e Recusar -- não é só
-  // margem cosmética, é distância física pra reduzir toque acidental
-  // logo depois de tocar em "Aceitar chamado".
   espacador: { height: "1.5rem" },
   botaoRecusar: {
     width: "100%",

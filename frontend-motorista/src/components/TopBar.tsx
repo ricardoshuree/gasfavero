@@ -1,6 +1,7 @@
-// [mcp-local harness] feature: frontend-motorista-redesign-ifood | plano: 46dc14df | 2026-08-07 19:18:57
-// TopBar estilo iFood: fundo branco, texto preto. Bolinha do toggle continua verde/cinza (sinalizacao universal, independente da paleta de marca)
+// [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:45:04
+// Corrige import errado (era iniciarAlarme/pararAlarme, devia ser iniciarPing/pararPing de lib/localizacao)
 import { type CSSProperties, useEffect, useRef, useState } from "react"
+import { atualizarDisponibilidade, buscarMinhaDisponibilidade } from "../lib/disponibilidade"
 import { iniciarPing, pararPing } from "../lib/localizacao"
 import { CORES_APP as CORES } from "../theme"
 
@@ -10,8 +11,39 @@ const ALTURA_TOPBAR_PX = 52
 
 function TopBar({ token, motoristaId }: { token: string; motoristaId: string }) {
   const [disponivel, setDisponivel] = useState(false)
+  const [carregandoInicial, setCarregandoInicial] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const pingIdRef = useRef<number | null>(null)
+
+  // Busca o estado real (persistido no backend) ao abrir o app --
+  // antes disso o toggle sempre começava "Indisponível" mesmo que o
+  // motorista tivesse deixado "Disponível" numa sessão anterior (ou
+  // um gerente tivesse ativado numa tela gerencial futura).
+  useEffect(() => {
+    let cancelado = false
+    buscarMinhaDisponibilidade(token, motoristaId)
+      .then((valor) => {
+        if (!cancelado && valor !== null) {
+          setDisponivel(valor)
+          if (valor) {
+            pingIdRef.current = iniciarPing(token, motoristaId, () =>
+              setErro("Falha ao enviar localização"),
+            )
+          }
+        }
+      })
+      .catch(() => {
+        // Sem sinal/erro de rede ao abrir -- fica no padrão
+        // "Indisponível" local, motorista pode tentar o toggle manual
+      })
+      .finally(() => {
+        if (!cancelado) setCarregandoInicial(false)
+      })
+    return () => {
+      cancelado = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -19,19 +51,25 @@ function TopBar({ token, motoristaId }: { token: string; motoristaId: string }) 
     }
   }, [])
 
-  function alternar() {
-    if (disponivel) {
-      if (pingIdRef.current !== null) pararPing(pingIdRef.current)
-      pingIdRef.current = null
-      setDisponivel(false)
+  async function alternar() {
+    const novoValor = !disponivel
+    setErro(null)
+    try {
+      await atualizarDisponibilidade(token, motoristaId, novoValor)
+    } catch {
+      setErro("Falha ao atualizar disponibilidade")
       return
     }
-    setErro(null)
-    const id = iniciarPing(token, motoristaId, () =>
-      setErro("Falha ao enviar localização"),
-    )
-    pingIdRef.current = id
-    setDisponivel(true)
+
+    if (novoValor) {
+      pingIdRef.current = iniciarPing(token, motoristaId, () =>
+        setErro("Falha ao enviar localização"),
+      )
+    } else if (pingIdRef.current !== null) {
+      pararPing(pingIdRef.current)
+      pingIdRef.current = null
+    }
+    setDisponivel(novoValor)
   }
 
   return (
@@ -39,7 +77,11 @@ function TopBar({ token, motoristaId }: { token: string; motoristaId: string }) 
       <span style={estilos.nome}>Gás Favero</span>
       <div style={estilos.direita}>
         {erro && <span style={estilos.erro}>{erro}</span>}
-        <button style={estiloToggle(disponivel)} onClick={alternar}>
+        <button
+          style={estiloToggle(disponivel)}
+          disabled={carregandoInicial}
+          onClick={alternar}
+        >
           <span style={estiloPontinho(disponivel)} />
           {disponivel ? "Disponível" : "Indisponível"}
         </button>
