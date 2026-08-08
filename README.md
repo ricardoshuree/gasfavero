@@ -1,4 +1,12 @@
 <!--
+[mcp-local harness] feature: readme-fase4-e-plano-fcm | plano: ee8a55b9 | 2026-08-08 17:33:44
+Adiciona secao App do Motorista (Fase 4) com status atual e plano detalhado de FCM
+-->
+<!--
+[mcp-local harness] feature: readme-fase4-e-plano-fcm | plano: ee8a55b9 | 2026-08-08
+Adiciona secao "App do Motorista - Delegacao de Venda (Fase 4)": status atual + plano detalhado de FCM
+-->
+<!--
 [mcp-local harness] feature: docs-readme-closed-signup | plano: 847c0771 | 2026-08-04 12:05:59
 Atualiza README: sistema fechado documentado em todas as secoes relevantes, novo item na tabela de portabilidade (users.py), secao de Debitos tecnicos, checklist atualizado
 -->
@@ -245,6 +253,92 @@ regressão pros usuários já cadastrados.
 | 2 | Percent-encoding na senha do Postgres — `config.py` monta a URI sem escapar caracteres especiais (`@`, `#`, `!`, `&` quebram) | 🔧 Aberto | Contorno atual: senha do banco só alfanumérica. Fix real: `urllib.parse.quote_plus` em `SQLALCHEMY_DATABASE_URI`. Candidato a portar pro template quando corrigido. |
 | 3 | `mypy --strict` com 4 avisos pré-existentes em `deps.py`/`users.py` (`.in_()` em coluna UUID, `dict` sem type args) | 🔧 Aberto, baixa prioridade | Falso-positivo conhecido do SQLModel com mypy strict. Não bloqueia CI (só `pytest` roda). Cosmético. |
 | 4 | CI gate não ativado (`test-rbac.yml` roda mas não é obrigatório pra merge) | 🔧 Aberto, baixa prioridade | GitHub → Settings → Branches → Require status checks. |
+
+---
+
+## App do Motorista — Delegação de Venda (Fase 4)
+
+Sistema de despacho de entregas: o atendente cria um "Chamado" (nome de
+exibição; endpoints continuam `demandas-venda` internamente — mesmo
+padrão de divergência técnico/negócio de `Item`/Produto), o motorista
+recebe o alerta e aceita/conclui pelo app próprio. Três sub-projetos
+envolvidos:
+
+```
+backend/app/api/routes/delegacao.py   ← endpoints de Chamado, disponibilidade, localização
+frontend/src/routes/_layout/
+  ├── chamado.tsx                     ← atendente despacha um novo chamado
+  └── chamados-ativos.tsx             ← atendente gerencia chamados em andamento
+frontend-motorista/                   ← app Capacitor/Android do motorista (projeto próprio)
+```
+
+### Status atual
+
+| Camada | O que já funciona |
+|---|---|
+| Backend | CRUD completo de Chamado (criar/aceitar/cancelar/reatribuir/concluir), disponibilidade por motorista (`GET`/`PUT /motoristas/disponibilidade`), localização (upsert-only). Listagens usam **batch-load** (`_to_demandas_public_batch`) — nunca N+1, ver Débitos técnicos/histórico abaixo. |
+| `/chamados-ativos` (atendente) | Bloco "Chamados abertos" (sem dono) separado de raias horizontais por motorista cadastrado, ordenação consistente (mais antigo no topo), toggle de disponibilidade por motorista com dialog de confirmação (**Item 15** — gerencial, sem tela própria, direto no cabeçalho da raia) |
+| `/chamado` (atendente) | Despacho com combo filtrado por disponibilidade real; ao despachar, navega direto pro `/chamados-ativos` |
+| App do motorista | Login, fila "Chamadas" (aceitar/cheguei), alerta sonoro em tela cheia (só com app aberto — ver seção FCM abaixo), toggle de disponibilidade **sincronizado por polling de 15s** (corrigido nesta sessão — antes só lia 1x ao abrir, não pegava mudanças feitas por fora) |
+
+### Backlog restante (ordem sugerida)
+
+1. **Push notification real via FCM** — alertar com app fechado/minimizado. Ver plano detalhado abaixo. Maior item do backlog.
+2. **Deep-link Google Maps** — botão "Abrir no Google Maps" no chamado aceito, sem custo de API adicional (usa o app nativo do Google Maps via `google.navigation:q=lat,lng`).
+3. **Vendas/Financeiro/Perfil no app do motorista** — hoje placeholder "em construção"; vira mini-ERP do motorista completo (só as próprias vendas/recebimentos/inadimplentes).
+4. Testar o app em celular físico (só emulador Android testado até agora — importante justamente para validar FCM, ver abaixo).
+5. Tela de configuração de som no app do motorista.
+6. Reenvio automático de chamado sem resposta em X minutos — sem prioridade definida.
+7. Limpeza dos chamados de teste acumulados no banco ("Gracinha Teste", "João da Motoca") — mantidos de propósito por enquanto, úteis pra testar as raias com volume.
+
+### Plano — Push Notification real (FCM)
+
+**Por que depende do Firebase**: notificação push em Android só existe
+através do FCM (Firebase Cloud Messaging) — não é uma escolha de
+arquitetura deste projeto, é como o Android acorda um app
+fechado/minimizado. Não tem alternativa por fora desse canal, mesmo o
+resto do stack sendo 100% FastAPI/Postgres sem nenhum outro produto
+Firebase.
+
+**Decisão de infraestrutura**: reaproveitar o projeto Google Cloud já
+existente (usado hoje pra API do Google Maps/Geocoding), em vez de
+criar um projeto novo — Firebase é uma camada de produtos sobre um
+projeto GCP, não uma conta separada. Billing account já configurado:
+`erp-gasfavero_2` (nome exato do projeto GCP a confirmar na próxima
+sessão — provavelmente `erp-gasfavero`, não verificado ainda). **Custo:
+zero** — FCM é gratuito e ilimitado no plano Spark (gratuito),
+independente de volume de mensagens; não exige upgrade pro plano pago
+Blaze. Não precisa cartão novo, mesma conta de faturamento de sempre.
+
+**Pré-requisito antes de começar**: criar um **budget alert** na
+billing account `erp-gasfavero_2` (Google Cloud Console → Billing →
+Budgets & alerts) — decisão explícita do Ricardo pra não ter surpresa
+de custo, mesmo o FCM em si sendo gratuito (outros serviços na mesma
+conta, como o Maps, não são).
+
+**O que precisa em cada camada:**
+
+1. **Firebase Console** (só o Ricardo consegue fazer essa parte)
+   - Adicionar Firebase ao projeto GCP existente
+   - Registrar o app Android com o package `com.gasfavero.motorista` (tem que bater exatamente com o `appId` já configurado no Capacitor)
+   - Baixar `google-services.json` → colocar em `frontend-motorista/android/app/`
+   - Gerar uma **service account key** (JSON separado) — é o que o *backend* usa pra enviar notificação (diferente do arquivo do app, que só recebe)
+
+2. **Backend**
+   - Nova dependência: `firebase-admin`
+   - Novo campo em `User` pra guardar o token FCM do motorista (mesmo padrão do campo `disponivel` já existente — atualizado toda vez que o token do celular renova)
+   - Novo endpoint `PUT /motoristas/{id}/fcm-token`
+   - Lógica de disparo ao criar/reatribuir chamado: decidir se manda só pro motorista específico (convite direto) ou pra todos os disponíveis de uma vez (chamado aberto)
+   - Tratar token inválido/expirado (limpar quando o Firebase reportar falha permanente)
+
+3. **App do motorista** (Capacitor + código nativo Android)
+   - Plugin `@capacitor/push-notifications`
+   - Pedir permissão de notificação em runtime (obrigatório desde Android 13)
+   - Registrar/atualizar o token no backend ao logar e quando o token renovar
+   - **Ponto crítico**: o alarme já validado (tela cheia vermelha, som, por cima do bloqueio) só funciona hoje com o app *aberto* (JS na WebView). Pra funcionar com o app *fechado*, não dá só com o plugin padrão — precisa de código nativo Android: canal de notificação de importância alta + `USE_FULL_SCREEN_INTENT` (no Android 14+ o próprio usuário precisa autorizar manualmente nas configurações do aparelho, não é uma permissão automática)
+
+4. **Teste**
+   - Emulador Android não reproduz esse cenário de forma confiável (Google Play Services instável pra push no emulador) — **testar em celular físico é pré-requisito real**, não só item de backlog separado; os dois itens viram um só.
 
 ---
 

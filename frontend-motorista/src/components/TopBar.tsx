@@ -1,3 +1,7 @@
+// [mcp-local harness] feature: fix-toggle-disponibilidade-sem-polling | plano: c1328e05 | 2026-08-08 17:08:07
+// Adiciona polling de 15s pra manter o toggle de disponibilidade sincronizado com mudancas externas
+// [mcp-local harness] feature: fix-toggle-disponibilidade-sem-polling | plano: c1328e05 | 2026-08-08
+// Adiciona polling de 15s -- antes so buscava disponibilidade 1x ao abrir, mudanca externa (tela /chamados-ativos, outro dispositivo) nunca refletia no toggle
 // [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:45:04
 // Corrige import errado (era iniciarAlarme/pararAlarme, devia ser iniciarPing/pararPing de lib/localizacao)
 import { type CSSProperties, useEffect, useRef, useState } from "react"
@@ -8,6 +12,17 @@ import { CORES_APP as CORES } from "../theme"
 // Altura fixa exportada -- App.tsx usa isso pra dar padding-top no
 // conteúdo e não deixar nada escondido atrás da barra.
 const ALTURA_TOPBAR_PX = 52
+
+// Mesmo intervalo já usado em MinhasDemandas.tsx pro polling da
+// fila de chamados -- reaproveitado aqui pra manter o toggle
+// sincronizado com mudanças feitas por FORA deste app (tela
+// gerencial /chamados-ativos do atendente/gerente, ou o próprio
+// motorista logado em outro aparelho). Sem isso, o toggle só refletia
+// o backend na hora de abrir o app -- depois disso ficava "preso" no
+// último valor local, mesmo que a disponibilidade real tivesse
+// mudado por fora (bug real encontrado pelo Ricardo testando no
+// emulador Android + browser em paralelo).
+const INTERVALO_POLLING_MS = 15_000
 
 function TopBar({ token, motoristaId }: { token: string; motoristaId: string }) {
   const [disponivel, setDisponivel] = useState(false)
@@ -44,6 +59,47 @@ function TopBar({ token, motoristaId }: { token: string; motoristaId: string }) 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Polling -- reconsulta o backend a cada 15s e, se o valor mudou
+  // por fora (alguém ligou/desligou pela tela gerencial, ou o próprio
+  // motorista alternou em outro aparelho), atualiza o toggle local e
+  // ajusta o ping de localização de acordo (inicia se ficou
+  // disponível, para se ficou indisponível). Ignorado enquanto a
+  // carga inicial ainda não terminou (evita corrida com o efeito
+  // acima). Não sobrescreve nada durante um toque manual do próprio
+  // motorista -- `alternar()` já escreve no backend antes de mexer no
+  // estado local, então o próximo poll só reconfirma o mesmo valor.
+  useEffect(() => {
+    if (carregandoInicial) return
+    let cancelado = false
+    const intervalo = setInterval(() => {
+      buscarMinhaDisponibilidade(token, motoristaId)
+        .then((valor) => {
+          if (cancelado || valor === null) return
+          setDisponivel((atual) => {
+            if (valor === atual) return atual
+            if (valor && pingIdRef.current === null) {
+              pingIdRef.current = iniciarPing(token, motoristaId, () =>
+                setErro("Falha ao enviar localização"),
+              )
+            } else if (!valor && pingIdRef.current !== null) {
+              pararPing(pingIdRef.current)
+              pingIdRef.current = null
+            }
+            return valor
+          })
+        })
+        .catch(() => {
+          // Falha pontual de rede no polling -- ignora e tenta de
+          // novo no próximo ciclo, sem incomodar o motorista com erro.
+        })
+    }, INTERVALO_POLLING_MS)
+    return () => {
+      cancelado = true
+      clearInterval(intervalo)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregandoInicial, token, motoristaId])
 
   useEffect(() => {
     return () => {
