@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: ajuste-cores-card-2 | plano: 8d780d64 | 2026-08-08 15:39:24
+// Badge Aberto vermelho solido, botao Reatribuir amarelo #ffcc00 com texto preto, bloco central de dados com fundo branco proprio
 // [mcp-local harness] feature: fix-n1-demandas-e-cores-card | plano: 46879d5c | 2026-08-08 15:27:52
 // Ajusta cores do card: fundo cinza 35% (#A6A6A6), badge Aceito com fundo azul, texto de informacoes em preto
 // Tela /chamados-ativos: layout em duas regiões.
@@ -21,15 +23,22 @@
 // direto pro /chamado (fecha o loop: depois de despachar, o
 // atendente já cai nesta tela pra conferir o que acabou de criar).
 //
-// CORES DO CARD (ajuste sessão 08/08) -- o card usava só `border`
-// (fundo transparente), que no tema escuro ficava preto e se
-// misturava com o fundo da página. Fundo sólido cinza 35%
+// CORES DO CARD (ajustes sessão 08/08, em duas rodadas) -- o card
+// usava só `border` (fundo transparente), que no tema escuro ficava
+// preto e se misturava com o fundo da página. Fundo sólido cinza 35%
 // (`#A6A6A6`) -- MESMO tom já usado no app do motorista pro card
 // "Cancelado" (ver frontend-motorista) por motivo de acessibilidade,
-// reaproveitado aqui por consistência. Texto de nome/tempo/endereço/
-// itens em preto sólido pra contraste sobre o cinza. Badge "Aceito"
-// ganhou fundo azul (pedido explícito do Ricardo) em vez da cor
-// padrão do tema.
+// reaproveitado aqui por consistência.
+//
+// Segunda rodada de ajuste: badge "Aberto" trocado de rosa/salmão
+// (`destructive` padrão do tema) pra vermelho sólido; badge "Aceito"
+// com fundo azul (pedido explícito); botão "Reatribuir" com fundo
+// `#ffcc00` (amarelo) e fonte preta; e o bloco central de dados
+// (nome/endereço/itens) ganhou fundo BRANCO próprio dentro do card
+// cinza, pra destacar a informação principal do restante do card --
+// mesmo padrão nos cards de "Chamados abertos" e nas raias por
+// motorista (mesmo componente CardChamadoAtivo reaproveitado nos
+// dois lugares).
 //
 // Tela "Chamados Ativos" -- ferramenta de gestão do atendente/gerente
 // sobre chamados já despachados (pendente ou aceita). Não é uma tela
@@ -320,6 +329,9 @@ function RaiaMotorista({
 // tom já usado no app do motorista pro card "Cancelado".
 const COR_FUNDO_CARD = "#A6A6A6"
 
+// Amarelo do botão "Reatribuir" -- pedido explícito do Ricardo.
+const COR_BOTAO_REATRIBUIR = "#ffcc00"
+
 function CardChamadoAtivo({
   demanda: d,
   onCancelar,
@@ -340,7 +352,13 @@ function CardChamadoAtivo({
       <div className="flex items-center justify-between gap-2">
         <Badge
           variant={aberto ? "destructive" : aceito ? "default" : "secondary"}
-          className={aceito ? "bg-blue-600 text-white hover:bg-blue-600" : undefined}
+          className={
+            aberto
+              ? "bg-red-600 text-white hover:bg-red-600"
+              : aceito
+                ? "bg-blue-600 text-white hover:bg-blue-600"
+                : undefined
+          }
         >
           {aberto ? "Aberto" : aceito ? `Aceito · ${d.motorista_nome}` : `Convite · ${d.motorista_nome}`}
         </Badge>
@@ -350,7 +368,12 @@ function CardChamadoAtivo({
         </span>
       </div>
 
-      <div>
+      {/* Bloco central de dados com fundo BRANCO próprio -- destaca a
+          informação principal (nome/endereço/itens) do resto do card
+          cinza. Mesmo padrão nos cards de "Chamados abertos" e nas
+          raias por motorista (este componente é reaproveitado nos
+          dois lugares). */}
+      <div className="rounded-md border bg-white p-2">
         <p className="font-semibold text-black">{d.cliente_nome}</p>
         <p className="flex items-start gap-1 text-sm text-black">
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -380,7 +403,8 @@ function CardChamadoAtivo({
             type="button"
             variant="outline"
             size="sm"
-            className="flex-1 border-black/30 text-black hover:text-black"
+            className="flex-1 border-transparent text-black hover:text-black"
+            style={{ backgroundColor: COR_BOTAO_REATRIBUIR }}
             onClick={onReatribuir}
           >
             Reatribuir
