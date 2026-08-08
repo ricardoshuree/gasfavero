@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: fix-build-motoristaId-unused | plano: 17b1a8a6 | 2026-08-08 16:53:25
+// Remove prop motoristaId nao utilizada em RaiaMotorista que quebrou o build TS6133
 // [mcp-local harness] feature: item15-toggle-disponibilidade | plano: cf24471a | 2026-08-08 16:50:25
 // Adiciona toggle de disponibilidade por motorista com dialog de confirmacao (Item 15)
 // [mcp-local harness] feature: ajuste-cores-card-2 | plano: 8d780d64 | 2026-08-08 15:39:24
@@ -58,6 +60,14 @@
 // tirando um motorista do ar sem querer. Switch construído em CSS puro
 // (sem @radix-ui/react-switch) pra não precisar de `npm install` nem
 // round-trip de terminal -- é só um pill com bolinha deslizante.
+//
+// BUG CORRIGIDO (build quebrou em produção) -- RaiaMotorista
+// recebia uma prop `motoristaId` que nunca era lida dentro do
+// componente (o id já é resolvido via closure no callback
+// onToggleDisponibilidade, montado no componente pai). TS6133 (noUnusedParameters)
+// quebrou `tsc` e o deploy anterior nunca chegou a rodar em produção
+// de fato. Removida a prop; nada mudou de comportamento, só a
+// assinatura ficou mais enxuta.
 //
 // Tela "Chamados Ativos" -- ferramenta de gestão do atendente/gerente
 // sobre chamados já despachados (pendente ou aceita). Não é uma tela
@@ -288,7 +298,6 @@ function ChamadosAtivos() {
                 {motoristas.map((m) => (
                   <RaiaMotorista
                     key={m.motorista_id}
-                    motoristaId={m.motorista_id}
                     nome={m.motorista_nome}
                     disponivel={m.disponivel}
                     chamados={porMotorista(m.motorista_id)}
@@ -355,7 +364,6 @@ function ToggleDisponibilidade({
 }
 
 function RaiaMotorista({
-  motoristaId,
   nome,
   disponivel,
   chamados,
@@ -363,7 +371,6 @@ function RaiaMotorista({
   onReatribuir,
   onToggleDisponibilidade,
 }: {
-  motoristaId: string
   nome: string
   disponivel: boolean
   chamados: DemandaVendaPublic[]
