@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: frontend-motorista-ajustes-usabilidade | plano: 00bcba9d | 2026-08-07 20:02:23
-// Cheguei: flash verde de confirmacao (0.5s) + navegacao pra Vendas nao espera mais o recarregamento da lista (roda em paralelo, em segundo plano)
+// [mcp-local harness] feature: frontend-motorista-som-arquivo-real | plano: ee27d3a1 | 2026-08-07 20:53:19
+// Ajusta chamadas a iniciarAlarme()/pararAlarme() pra nova assinatura sem interval id (usa ref booleano em vez de numero)
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
 import { iniciarAlarme, pararAlarme } from "../lib/alarme"
 import {
@@ -85,12 +85,12 @@ function MinhasDemandas({
   const [alertaChamado, setAlertaChamado] = useState<DemandaVendaPublic | null>(null)
 
   const idsVistosRef = useRef<Set<string> | null>(null)
-  const alarmeIntervalRef = useRef<number | null>(null)
+  const alarmeTocandoRef = useRef(false)
 
   const pararAlarmeSonoro = useCallback(() => {
-    if (alarmeIntervalRef.current !== null) {
-      pararAlarme(alarmeIntervalRef.current)
-      alarmeIntervalRef.current = null
+    if (alarmeTocandoRef.current) {
+      pararAlarme()
+      alarmeTocandoRef.current = false
     }
   }, [])
 
@@ -108,11 +108,12 @@ function MinhasDemandas({
       const idsAtuais = idsPrecisandoAcao(separadas.agora, meuId)
       if (idsVistosRef.current !== null) {
         const novos = [...idsAtuais].filter((id) => !idsVistosRef.current!.has(id))
-        if (novos.length > 0 && alarmeIntervalRef.current === null) {
+        if (novos.length > 0 && !alarmeTocandoRef.current) {
           const chamadoNovo = separadas.agora.find((d) => d.id === novos[0])
           if (chamadoNovo) {
             setAlertaChamado(chamadoNovo)
-            alarmeIntervalRef.current = iniciarAlarme()
+            iniciarAlarme()
+            alarmeTocandoRef.current = true
           }
         }
       }

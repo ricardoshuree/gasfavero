@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: frontend-motorista-ajustes-usabilidade | plano: 00bcba9d | 2026-08-07 20:02:44
-// Adiciona espacador entre Aceitar e Recusar, reduz peso visual do Recusar (menos destaque = menos chance de toque acidental)
+// [mcp-local harness] feature: frontend-motorista-cor-verde-final | plano: 048885e2 | 2026-08-07 21:38:21
+// Verde ajustado pro hex exato pedido (#00A63E)
 import type { CSSProperties } from "react"
 import type { DemandaVendaPublic } from "../lib/demandas"
 import { CORES_APP as CORES } from "../theme"
@@ -16,6 +16,10 @@ import { CORES_APP as CORES } from "../theme"
 // até atender"), é necessário Firebase Cloud Messaging (push
 // notification nativa) + tela de alarme sobre a lock screen --
 // escopo maior, decisão de fazer depois (ver conversa com Ricardo).
+
+// Verde de sucesso -- contraste forte com o fundo vermelho do
+// alerta (hex exato pedido pelo Ricardo).
+const VERDE_ACEITAR = "#00A63E"
 
 function formatarEndereco(d: DemandaVendaPublic): string {
   const { rua_nome, numero, complemento, bairro_nome } = d.endereco
@@ -124,8 +128,8 @@ const estilos: Record<string, CSSProperties> = {
     padding: "0.9rem",
     borderRadius: "0.6rem",
     border: "none",
-    background: CORES.fundoCardInterno,
-    color: CORES.destaque,
+    background: VERDE_ACEITAR,
+    color: "#FFFFFF",
     fontWeight: 700,
     fontSize: "1rem",
   },
