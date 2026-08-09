@@ -1,5 +1,7 @@
-# [mcp-local harness] feature: fix-n1-demandas-e-cores-card | plano: 46879d5c | 2026-08-08 15:26:46
-# Corrige N+1: nova _to_demandas_public_batch faz batch-load de todas as relacoes em vez de N round-trips por chamado; usada nas rotas de listagem
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09 14:22:49
+# Endpoint de token FCM + disparo de push best-effort em create/reatribuir chamado
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09
+# Endpoint PUT /motoristas/{id}/fcm-token + disparo de push (best-effort) em create/reatribuir chamado
 # [mcp-local harness] feature: fase2-rotas-cancelar-reatribuir-disponibilidade | plano: c5f719de | 2026-08-08 11:06:09
 # Endpoints novos: cancelar (qualquer estado ativo), reatribuir (so pendente), disponibilidade (GET lista + PUT toggle). Recusar legado ganha protecao reforcada (action=delete)
 """
@@ -35,7 +37,15 @@ atendente": cancelar, reatribuir e recusar (legado) exigem a ação
 nesse módulo (sem Apagar) -- então essas 3 rotas ficam automaticamente
 fechadas pra ele, sem precisar de um módulo RBAC novo. Gerente/Admin/
 Operador têm CRUD completo em delegacao, então continuam liberados.
+
+PUSH NOTIFICATION (Fase 4, sessão 09/08) -- criar ou reatribuir um
+chamado dispara um push FCM best-effort (ver
+_disparar_push_chamado/app/core/firebase_push.py) além do que já
+existia (o motorista continua vendo o chamado no polling de 15s
+mesmo sem push nenhum -- push é só acelerador de robustez, nunca
+dependência crítica do fluxo).
 """
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -45,6 +55,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import col, select
 
 from app.api.deps import CurrentUser, SessionDep, require_module_permission
+from app.core.firebase_push import TokenFcmInvalido, enviar_novo_chamado
 from app.models import (
     Bairro,
     Cidade,
@@ -60,8 +71,10 @@ from app.models import (
     Endereco,
     EnderecoPublic,
     Item,
+    Message,
     MotoristaDisponibilidadePublic,
     MotoristaDisponibilidadeUpdate,
+    MotoristaFcmTokenUpdate,
     MotoristaLocalizacao,
     MotoristaLocalizacaoPublic,
     MotoristaLocalizacaoUpdate,
@@ -75,6 +88,8 @@ from app.models import (
 )
 
 router = APIRouter(tags=["delegacao"])
+
+logger = logging.getLogger(__name__)
 
 MODULE = "delegacao"
 
@@ -352,6 +367,66 @@ def _to_localizacao_public(
     )
 
 
+def _disparar_push_chamado(session: SessionDep, demanda: DemandaVenda) -> None:
+    """Push FCM best-effort avisando de um chamado novo/reatribuído --
+    NUNCA levanta exceção (o try/except mais externo garante isso),
+    porque isso roda DEPOIS do commit da operação principal (criar ou
+    reatribuir chamado), que já aconteceu e não pode ser desfeita só
+    porque o push falhou.
+
+    Chamado ABERTO (motorista_id None): manda pra TODOS os motoristas
+    disponíveis com token registrado -- espelha o mesmo universo de
+    gente que pode aceitar esse chamado no app. Chamado com dono
+    (convite direto ou reatribuído pra alguém específico): manda só
+    pra ele, disponível ou não -- o atendente decidiu mandar pra essa
+    pessoa especificamente (mesma lógica de negócio já documentada em
+    reatribuir_demanda_venda: o atendente pode saber de algo que o
+    sistema não sabe)."""
+    try:
+        cliente = session.get(Cliente, demanda.cliente_id)
+        endereco = session.get(Endereco, demanda.endereco_id)
+        rua = session.get(Rua, endereco.rua_id) if endereco else None
+        endereco_resumo = (
+            f"{rua.nome}, {endereco.numero}" if rua and endereco else ""
+        )
+        cliente_nome = cliente.nome if cliente else "(cliente removido)"
+
+        if demanda.motorista_id is not None:
+            motorista = session.get(User, demanda.motorista_id)
+            motoristas_alvo = [motorista] if motorista else []
+        else:
+            role = session.exec(
+                select(Role).where(Role.name == ROLE_MOTORISTA)
+            ).first()
+            if not role:
+                return
+            motoristas_alvo = list(
+                session.exec(
+                    select(User)
+                    .join(UserRole, UserRole.user_id == User.id)
+                    .where(UserRole.role_id == role.id)
+                    .where(User.disponivel.is_(True))
+                ).all()
+            )
+
+        for motorista in motoristas_alvo:
+            if not motorista.fcm_token:
+                continue
+            try:
+                enviar_novo_chamado(
+                    fcm_token=motorista.fcm_token,
+                    demanda_id=str(demanda.id),
+                    cliente_nome=cliente_nome,
+                    endereco_resumo=endereco_resumo,
+                )
+            except TokenFcmInvalido:
+                motorista.fcm_token = None
+                session.add(motorista)
+                session.commit()
+    except Exception:
+        logger.warning("Falha ao disparar push do chamado %s", demanda.id, exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Rotas — Chamado
 # ---------------------------------------------------------------------------
@@ -427,7 +502,8 @@ def create_demanda_venda(
     """Despacha um chamado. Sempre nasce com status 'pendente'.
     criado_por_id é sempre o usuário autenticado que fez a chamada (o
     atendente), NUNCA o motorista. motorista_id omitido = chamado
-    ABERTO (qualquer motorista pode aceitar)."""
+    ABERTO (qualquer motorista pode aceitar). Dispara push FCM
+    best-effort pro(s) motorista(s) alvo -- ver _disparar_push_chamado."""
     cliente = session.get(Cliente, demanda_in.cliente_id)
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
@@ -470,6 +546,7 @@ def create_demanda_venda(
 
     session.commit()
     session.refresh(demanda)
+    _disparar_push_chamado(session, demanda)
     return _to_demanda_public(session, demanda)
 
 
@@ -609,7 +686,8 @@ def reatribuir_demanda_venda(
 
     Só funciona a partir de 'pendente' por enquanto -- reatribuir um
     chamado já 'aceita' tiraria de um motorista que talvez já esteja a
-    caminho, fora de escopo por agora."""
+    caminho, fora de escopo por agora. Dispara push FCM best-effort
+    pro novo destino -- ver _disparar_push_chamado."""
     demanda = session.get(DemandaVenda, demanda_id)
     if not demanda:
         raise HTTPException(status_code=404, detail="Chamado não encontrado")
@@ -629,6 +707,7 @@ def reatribuir_demanda_venda(
     session.add(demanda)
     session.commit()
     session.refresh(demanda)
+    _disparar_push_chamado(session, demanda)
     return _to_demanda_public(session, demanda)
 
 
@@ -779,3 +858,35 @@ def read_disponibilidade_motoristas(session: SessionDep) -> Any:
             for m in motoristas
         ]
     )
+
+
+# ---------------------------------------------------------------------------
+# Rotas — Token FCM do Motorista (push notification real, Fase 4)
+# ---------------------------------------------------------------------------
+
+@router.put(
+    "/motoristas/{motorista_id}/fcm-token",
+    response_model=Message,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))],
+)
+def atualizar_fcm_token_motorista(
+    *,
+    session: SessionDep,
+    motorista_id: uuid.UUID,
+    token_in: MotoristaFcmTokenUpdate,
+) -> Any:
+    """Registra/atualiza o token FCM do aparelho ATUAL do motorista --
+    chamado pelo app ao logar e sempre que o Firebase renovar o token
+    automaticamente (tokens FCM não são permanentes; o SDK client-side
+    dispara um callback quando isso acontece). Mesmo gate de permissão
+    de /disponibilidade e /localizacao (ação "update" no módulo
+    delegacao, que o Motorista tem pra si mesmo). Sobrescreve sempre
+    -- ver comentário em MotoristaFcmTokenUpdate (models.py)."""
+    motorista = session.get(User, motorista_id)
+    if not motorista:
+        raise HTTPException(status_code=404, detail="Motorista não encontrado")
+
+    motorista.fcm_token = token_in.fcm_token
+    session.add(motorista)
+    session.commit()
+    return Message(message="Token FCM atualizado")

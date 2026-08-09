@@ -1,3 +1,7 @@
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09 14:16:06
+# Adiciona dependencia firebase-admin
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09
+# Adiciona firebase-admin -- SDK do backend para enviar push notification via FCM
 # [mcp-local harness] feature: fix-rbac-supabase-production-ready | plano: 509f25bf | 2026-08-04 07:24:17
 # Adiciona cryptography como dependencia explicita, exigida pelo PyJWT/PyJWKClient para validar assinaturas ES256/RS256 dos tokens do Supabase Auth
 [project]
@@ -22,6 +26,7 @@ dependencies = [
     "pyjwt<3.0.0,>=2.13.0",
     "cryptography>=43.0.0",
     "pwdlib[argon2,bcrypt]>=0.3.0",
+    "firebase-admin>=6.5.0,<7.0.0",
 ]
 
 [dependency-groups]

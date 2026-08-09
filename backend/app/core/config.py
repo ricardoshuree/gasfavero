@@ -1,3 +1,7 @@
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09 14:16:31
+# Adiciona FIREBASE_SERVICE_ACCOUNT_JSON como setting opcional
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09
+# Adiciona FIREBASE_SERVICE_ACCOUNT_JSON -- credencial do Firebase Admin SDK (push notification), opcional, mesmo padrao best-effort do GOOGLE_GEOCODING_API_KEY
 # [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 0144c501 | 2026-08-06 20:12:33
 # Adiciona GOOGLE_GEOCODING_API_KEY como campo opcional de Settings
 import secrets
@@ -115,6 +119,24 @@ class Settings(BaseSettings):
     # app/core/geocoding.py.
     # ------------------------------------------------------------------
     GOOGLE_GEOCODING_API_KEY: str | None = None
+
+    # ------------------------------------------------------------------
+    # Firebase Admin SDK -- push notification real (FCM) pro app do
+    # motorista (Fase 4, sessão 09/08). Guarda o CONTEÚDO INTEIRO do
+    # JSON da Service Account Key como uma única string (não um
+    # caminho de arquivo) -- assim funciona igual em qualquer
+    # ambiente: local (.env) e Railway (Variables), sem depender de um
+    # arquivo físico no filesystem do container em produção. Nunca
+    # commitar o valor real -- fica só em .env local (gitignored) e nas
+    # Variables do Railway.
+    #
+    # Opcional de propósito, mesmo padrão best-effort do
+    # GOOGLE_GEOCODING_API_KEY acima: se não configurada, o envio de
+    # push simplesmente não roda (ver app/core/firebase_push.py) --
+    # nunca quebra o fluxo de criar/aceitar/reatribuir chamado, que já
+    # funciona via polling independente disso.
+    # ------------------------------------------------------------------
+    FIREBASE_SERVICE_ACCOUNT_JSON: str | None = None
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

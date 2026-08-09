@@ -1,5 +1,10 @@
-// [mcp-local harness] feature: frontend-motorista-ajustes-usabilidade | plano: 00bcba9d | 2026-08-07 20:03:07
-// Adiciona listener global de primeiro toque (pointerdown) que desbloqueia o audio do alarme -- roda uma vez so, em qualquer lugar do app
+// [mcp-local harness] feature: fcm-fix-registro-pos-login | plano: aca5f641 | 2026-08-09 18:53:49
+// Chama window.AndroidFCM.sincronizar() apos persistir motorista_id no login
+// [mcp-local harness] feature: fcm-fix-registro-pos-login | plano: aca5f641 | 2026-08-09
+// Chama window.AndroidFCM.sincronizar() apos persistir motorista_id -- forca o nativo a tentar registrar o token de novo agora que a sessao existe (onNewToken() sozinho nao cobre o caso "token gerado antes do login")
+// [mcp-local harness] feature: fcm-android-nativo | plano: 6356739b | 2026-08-09
+// Persiste motorista_id nas Preferences (mesmo storage do access_token) -- ponte pro service nativo de push registrar o token sem precisar de plugin novo
+import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
 import FinanceiroTela from "./components/FinanceiroTela"
@@ -18,6 +23,24 @@ type Estado =
   | { fase: "logado"; token: string; usuario: UserMe }
   | { fase: "erro"; mensagem: string }
 
+// Chave usada tanto aqui quanto pelo service nativo de push
+// (MotoristaFirebaseMessagingService.java / FcmTokenRegistrar.java,
+// PREFS_NOME/CHAVE_MOTORISTA_ID) -- ver comentário completo lá.
+// Mantida como constante nos dois lugares (não dá pra compartilhar
+// literalmente entre Java e TS), então qualquer mudança de nome
+// precisa ser feita nos dois arquivos ao mesmo tempo.
+const MOTORISTA_ID_KEY = "motorista_id"
+
+// Ponte JS -> nativo (Android) exposta por MainActivity via
+// WebView.addJavascriptInterface -- ver comentário completo lá.
+// Inexistente no browser (dev via `npm run dev`) e no iOS (não temos
+// build iOS) -- por isso sempre acessado com `?.`, nunca chamado
+// direto. Ausência silenciosa é o comportamento correto nesses
+// ambientes, não um erro.
+type JanelaComPonteAndroid = Window & {
+  AndroidFCM?: { sincronizar?: () => void }
+}
+
 function App() {
   const [estado, setEstado] = useState<Estado>({ fase: "verificando" })
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("demandas")
@@ -31,6 +54,23 @@ function App() {
     try {
       const usuario = await fetchCurrentUser(token)
       setEstado({ fase: "logado", token, usuario })
+      // Persiste o motorista_id nas Preferences (mesmo storage
+      // nativo do access_token) -- é a partir daqui que o service
+      // nativo de push (Fase 4, sessão 09/08) consegue montar a
+      // chamada de registro de token FCM sem precisar de um plugin
+      // Capacitor customizado. Ver MotoristaFirebaseMessagingService.java.
+      await Preferences.set({ key: MOTORISTA_ID_KEY, value: usuario.id })
+
+      // Força uma nova tentativa de registro do token FCM AGORA que
+      // a sessão existe -- bug real encontrado testando nesta sessão
+      // (09/08): o token normalmente já é gerado pelo Firebase assim
+      // que o app abre pela primeira vez, ANTES do motorista
+      // terminar o login. Nesse momento o onNewToken() nativo dispara
+      // mas não encontra sessão salva ainda, e como o token não
+      // rotaciona com frequência, o registro podia nunca mais ser
+      // tentado (motorista ficaria sem push por semanas, sem erro
+      // nenhum visível). Ver MainActivity.java / FcmTokenRegistrar.java.
+      ;(window as JanelaComPonteAndroid).AndroidFCM?.sincronizar?.()
     } catch {
       // Token invalido/expirado -- limpa e volta pro login, sem
       // travar o usuario numa tela de erro

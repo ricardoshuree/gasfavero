@@ -1,3 +1,7 @@
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09 14:20:01
+# Adiciona User.fcm_token e MotoristaFcmTokenUpdate
+# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09
+# Adiciona User.fcm_token + MotoristaFcmTokenUpdate (push notification real via FCM)
 # [mcp-local harness] feature: fase1-modelos-disponibilidade-cancelamento | plano: fb2e15ac | 2026-08-08 11:04:25
 # User.disponivel + novos modelos MotoristaDisponibilidade* e DemandaVendaReatribuirRequest + docstrings atualizadas (ciclo de vida com cancelada, finalizada_em generico, sem mais recusar mudando banco)
 import uuid
@@ -279,6 +283,17 @@ class User(UserBase, table=True):
     # combo de despacho por "só disponíveis" não pode começar
     # excluindo todo mundo no dia em que essa feature for pro ar.
     disponivel: bool = Field(default=True)
+    # Token FCM (Fase 4, push notification real -- sessão 09/08) --
+    # identifica O APARELHO ATUAL do motorista pro Firebase Cloud
+    # Messaging entregar push. NULL até o app registrar um token pela
+    # primeira vez (login, ou renovação automática do token pelo
+    # Firebase). Igual a `disponivel`, fica em User (não numa tabela
+    # separada) porque é 1:1 com o usuário -- cada motorista tem no
+    # máximo 1 aparelho ativo por vez neste app (reinstalar/trocar de
+    # aparelho simplesmente sobrescreve o token antigo, não temos
+    # multi-device). Nunca exposto em nenhum *Public -- é um detalhe
+    # de entrega, não informação de negócio.
+    fcm_token: str | None = Field(default=None, max_length=255)
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
     roles: list["UserRole"] = Relationship(back_populates="user", cascade_delete=True)
 
@@ -1317,6 +1332,21 @@ class MotoristasDisponibilidadePublic(SQLModel):
     o combo de despacho em /chamado (só disponíveis) e por uma futura
     tela gerencial de disponibilidade."""
     data: list[MotoristaDisponibilidadePublic]
+
+
+# ---- Token FCM do motorista (endpoints em delegacao.py) ----
+#
+# Push notification real (Fase 4, sessão 09/08) -- ver
+# app/core/firebase_push.py pro envio propriamente dito.
+
+class MotoristaFcmTokenUpdate(SQLModel):
+    """Corpo de PUT /motoristas/{motorista_id}/fcm-token -- chamado
+    pelo app do motorista ao logar e sempre que o Firebase renovar o
+    token automaticamente (tokens FCM não são permanentes, o SDK
+    client-side avisa quando muda). Sobrescreve sempre -- não faz
+    sentido guardar histórico de tokens antigos, só o atual importa
+    pra entregar push."""
+    fcm_token: str = Field(min_length=1, max_length=255)
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,7 @@
+// [mcp-local harness] feature: fcm-android-nativo | plano: 6356739b | 2026-08-09 14:34:42
+// logout() tambem limpa motorista_id das Preferences
+// [mcp-local harness] feature: fcm-android-nativo | plano: 6356739b | 2026-08-09
+// logout() tambem limpa motorista_id (higiene -- evita id de sessao anterior sobrando em aparelho compartilhado)
 // [mcp-local harness] feature: frontend-motorista-login | plano: 8f6497c0 | 2026-08-07 17:18:16
 // Login/logout/token via @capacitor/preferences, mesmo contrato do backend (POST /login/access-token form-urlencoded)
 import { Preferences } from "@capacitor/preferences"
@@ -9,6 +13,11 @@ import { API_URL, ApiError, request } from "./api"
 // cenarios de pouca memoria, Preferences usa armazenamento nativo
 // (SharedPreferences no Android).
 const TOKEN_KEY = "access_token"
+
+// Mesma chave que App.tsx grava depois de fetchCurrentUser() e que
+// MotoristaFirebaseMessagingService.java lê nativamente pra registrar
+// o token FCM -- ver comentário completo em App.tsx.
+const MOTORISTA_ID_KEY = "motorista_id"
 
 type LoginResponse = {
   access_token: string
@@ -47,6 +56,7 @@ async function getToken(): Promise<string | null> {
 
 async function logout(): Promise<void> {
   await Preferences.remove({ key: TOKEN_KEY })
+  await Preferences.remove({ key: MOTORISTA_ID_KEY })
 }
 
 type UserMe = {
