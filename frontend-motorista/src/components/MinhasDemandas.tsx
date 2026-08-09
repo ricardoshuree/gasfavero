@@ -1,3 +1,7 @@
+// [mcp-local harness] feature: deeplink-google-maps | plano: c4f195c2 | 2026-08-09 13:43:13
+// Adiciona botao Abrir no Google Maps no card do chamado aceito, com deep-link google.navigation
+// [mcp-local harness] feature: deeplink-google-maps | plano: c4f195c2 | 2026-08-09
+// Adiciona botao "Abrir no Google Maps" no card do chamado aceito -- deep-link via window.open(url, "_system")
 // [mcp-local harness] feature: ajuste-cinza-cancelado-35 | plano: 12363cb8 | 2026-08-08 12:23:39
 // Cinza do card Cancelado ajustado de #5C5C5C (60%) para #A6A6A6 (35%)
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
@@ -7,6 +11,7 @@ import {
   aceitarDemanda,
   concluirDemanda,
   type DemandaVendaPublic,
+  type EnderecoPublic,
   listarDemandas,
   separarChamadas,
 } from "../lib/demandas"
@@ -49,6 +54,24 @@ function formatarTempoDecorrido(isoDate: string): string {
   const horas = Math.floor(minutos / 60)
   const resto = minutos % 60
   return resto === 0 ? `${horas}h` : `${horas}h${resto}`
+}
+
+/** Deep-link pro app nativo do Google Maps, já em modo de navegação
+ * turn-by-turn (não só um pin) -- esquema `google.navigation:`
+ * reconhecido pelo próprio app do Maps no Android. Usa as
+ * coordenadas que já vêm no payload do endereço (geocodificadas na
+ * criação do chamado, ver delegacao.py); zero custo de API adicional
+ * aqui, nenhuma chamada nova ao Google.
+ *
+ * `window.open(url, "_system")` -- dentro da WebView do Capacitor,
+ * o target "_system" delega pro handler nativo do Android (abre o
+ * Google Maps se só um app de navegação estiver instalado, ou o
+ * seletor do sistema se houver mais de um). Não precisa de nenhum
+ * plugin do Capacitor pra isso. */
+function abrirNoGoogleMaps(endereco: EnderecoPublic) {
+  if (endereco.latitude == null || endereco.longitude == null) return
+  const url = `google.navigation:q=${endereco.latitude},${endereco.longitude}&mode=d`
+  window.open(url, "_system")
 }
 
 /** Chamados que "precisam de ação" -- abertos (qualquer um aceita)
@@ -361,6 +384,7 @@ function CardAgora({
 }) {
   const aberto = d.motorista_id === null
   const meuAceito = d.motorista_id === meuId && d.status === "aceita"
+  const temCoordenadas = d.endereco.latitude != null && d.endereco.longitude != null
 
   const tempo = meuAceito
     ? d.respondida_em && formatarTempoDecorrido(d.respondida_em)
@@ -383,13 +407,20 @@ function CardAgora({
       </div>
 
       {meuAceito ? (
-        <button
-          style={confirmado ? estilos.botaoCheguelConfirmado : estilos.botaoCheguei}
-          disabled={processando || confirmado}
-          onClick={onPedirConfirmacaoChegada}
-        >
-          {confirmado ? "Confirmado ✓" : processando ? "..." : "Cheguei"}
-        </button>
+        <>
+          {temCoordenadas && (
+            <button style={estilos.botaoMaps} onClick={() => abrirNoGoogleMaps(d.endereco)}>
+              Abrir no Google Maps
+            </button>
+          )}
+          <button
+            style={confirmado ? estilos.botaoCheguelConfirmado : estilos.botaoCheguei}
+            disabled={processando || confirmado}
+            onClick={onPedirConfirmacaoChegada}
+          >
+            {confirmado ? "Confirmado ✓" : processando ? "..." : "Cheguei"}
+          </button>
+        </>
       ) : (
         // Sem opção de recusar aqui -- nem aberto nem convite direto
         // (ver regra de negócio documentada em AlertaChamado.tsx).
@@ -544,6 +575,21 @@ const estilos: Record<string, CSSProperties> = {
     color: CORES.destaqueTexto,
     fontWeight: 700,
     fontSize: "0.9rem",
+  },
+  // "Abrir no Google Maps" -- secundário, fica ACIMA do "Cheguei"
+  // (ação primária). Outline com a mesma cor do "Cheguei" (azul,
+  // estado "aceito") pra sinalizar visualmente que pertence ao mesmo
+  // momento do fluxo, mas sem competir com a ação principal.
+  botaoMaps: {
+    width: "100%",
+    padding: "0.65rem",
+    borderRadius: "0.5rem",
+    border: `1.5px solid ${CORES.aceito}`,
+    background: "#FFFFFF",
+    color: CORES.aceito,
+    fontWeight: 700,
+    fontSize: "0.85rem",
+    marginBottom: "0.5rem",
   },
   botaoCheguei: {
     width: "100%",
