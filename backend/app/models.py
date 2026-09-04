@@ -1370,3 +1370,90 @@ class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
 
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Plano de Contas + Lançamento Contábil
+# (Fase 1 do fechamento diário -- sessão 2026-09-04)
+#
+# Plano de contas fixo seguindo o padrão contábil brasileiro:
+#   1xxx Ativo   (Conta Mestre, Caixa em Trânsito por motorista,
+#                 Contas a Receber, Maquininha)
+#   2xxx Receita (Vendas à Vista, Vendas no Fiado)
+#   3xxx Despesa (Quebra de Caixa, Sobra de Caixa, Taxas de Cartão)
+#
+# Contas sintéticas agrupam; contas analíticas recebem lançamentos.
+# Contas de Caixa em Trânsito por motorista (1101, 1102, …) são
+# criadas dinamicamente na abertura do dia -- não fazem parte do seed.
+#
+# LancamentoContabil usa partidas dobradas simples: cada lançamento
+# tem uma conta de débito e uma de crédito. Referências opcionais a
+# venda_id e abertura_id permitem rastreabilidade completa.
+# ---------------------------------------------------------------------------
+
+class Conta(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    numero: str = Field(unique=True, max_length=10)
+    nome: str = Field(max_length=255)
+    # sintetica = agrupadora (não recebe lançamentos diretos)
+    # analitica = recebe lançamentos
+    tipo: str = Field(max_length=20)
+    pai_id: uuid.UUID | None = Field(default=None, foreign_key="conta.id", ondelete="RESTRICT")
+    # NULL = conta da distribuidora; preenchido = conta do motorista
+    # (Caixa em Trânsito individuais criados na abertura do dia)
+    motorista_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="RESTRICT")
+    ativo: bool = Field(default=True)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+class LancamentoContabil(SQLModel, table=True):
+    __tablename__ = "lancamento_contabil"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    data: date = Field()
+    descricao: str = Field(max_length=500)
+    valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    debito_id: uuid.UUID = Field(foreign_key="conta.id", ondelete="RESTRICT")
+    credito_id: uuid.UUID = Field(foreign_key="conta.id", ondelete="RESTRICT")
+    # rastreabilidade opcional
+    venda_id: uuid.UUID | None = Field(default=None, foreign_key="venda.id", ondelete="SET NULL")
+    abertura_id: uuid.UUID | None = Field(default=None)  # FK adicionada na Fase 2
+    criado_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="RESTRICT")
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+# ---- Response models de Conta (endpoints em fechamento.py -- Fase 2) ----
+
+class ContaPublic(SQLModel):
+    id: uuid.UUID
+    numero: str
+    nome: str
+    tipo: str
+    pai_id: uuid.UUID | None = None
+    motorista_id: uuid.UUID | None = None
+    motorista_nome: str | None = None
+    ativo: bool
+    # saldo calculado dinamicamente pelo endpoint (não é coluna do banco)
+    saldo: Decimal = Decimal("0")
+
+
+class ContasPublic(SQLModel):
+    data: list[ContaPublic]
+
+
+class LancamentoContabilPublic(SQLModel):
+    id: uuid.UUID
+    data: date
+    descricao: str
+    valor: Decimal
+    debito_numero: str
+    debito_nome: str
+    credito_numero: str
+    credito_nome: str
+    venda_id: uuid.UUID | None = None
+    abertura_id: uuid.UUID | None = None
+    created_at: datetime
