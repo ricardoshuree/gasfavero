@@ -15,6 +15,7 @@ import { Route as RecoverPasswordRouteImport } from './routes/recover-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupB2cDisabledRouteImport } from './routes/signup-b2c-disabled'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
+import { Route as LayoutAberturaDiaRouteImport } from './routes/_layout/abertura-dia'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutChamadoRouteImport } from './routes/_layout/chamado'
 import { Route as LayoutChamadosAtivosRouteImport } from './routes/_layout/chamados-ativos'
@@ -57,6 +58,11 @@ const SignupB2cDisabledRoute = SignupB2cDisabledRouteImport.update({
 const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutAberturaDiaRoute = LayoutAberturaDiaRouteImport.update({
+  id: '/abertura-dia',
+  path: '/abertura-dia',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
+  '/abertura-dia': typeof LayoutAberturaDiaRoute
   '/admin': typeof LayoutAdminRoute
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
+  '/abertura-dia': typeof LayoutAberturaDiaRoute
   '/admin': typeof LayoutAdminRoute
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
@@ -179,6 +187,7 @@ export interface FileRoutesById {
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
+  '/_layout/abertura-dia': typeof LayoutAberturaDiaRoute
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/chamado': typeof LayoutChamadoRoute
   '/_layout/chamados-ativos': typeof LayoutChamadosAtivosRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/recover-password'
     | '/reset-password'
     | '/signup-b2c-disabled'
+    | '/abertura-dia'
     | '/admin'
     | '/chamado'
     | '/chamados-ativos'
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | '/recover-password'
     | '/reset-password'
     | '/signup-b2c-disabled'
+    | '/abertura-dia'
     | '/admin'
     | '/chamado'
     | '/chamados-ativos'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/recover-password'
     | '/reset-password'
     | '/signup-b2c-disabled'
+    | '/_layout/abertura-dia'
     | '/_layout/admin'
     | '/_layout/chamado'
     | '/_layout/chamados-ativos'
@@ -312,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof LayoutIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/abertura-dia': {
+      id: '/_layout/abertura-dia'
+      path: '/abertura-dia'
+      fullPath: '/abertura-dia'
+      preLoaderRoute: typeof LayoutAberturaDiaRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/admin': {
@@ -416,6 +435,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface LayoutRouteChildren {
+  LayoutAberturaDiaRoute: typeof LayoutAberturaDiaRoute
   LayoutAdminRoute: typeof LayoutAdminRoute
   LayoutChamadoRoute: typeof LayoutChamadoRoute
   LayoutChamadosAtivosRoute: typeof LayoutChamadosAtivosRoute
@@ -434,6 +454,7 @@ interface LayoutRouteChildren {
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutAberturaDiaRoute: LayoutAberturaDiaRoute,
   LayoutAdminRoute: LayoutAdminRoute,
   LayoutChamadoRoute: LayoutChamadoRoute,
   LayoutChamadosAtivosRoute: LayoutChamadosAtivosRoute,

@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: item16-chamados-ativos | plano: a49dfdf1 | 2026-08-08 14:23:10
-// Suporte a gate por acao especifica (action opcional em MODULE_ITEMS, default can_read) + item "Chamados Ativos" gateado por can_delete
+// [mcp-local harness] feature: abertura-dia-frontend | plano: c2315bde | 2026-09-04 15:21:50
+// Adiciona item Abertura do Dia no sidebar com ícone Sunrise, módulo fechamento
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
@@ -8,46 +8,28 @@
  *
  * Itens controlados por módulo (visíveis se can_read, salvo os que
  * declaram "action" diferente -- ver campo `action` em MODULE_ITEMS):
- *   - Vendas             → módulo "vendas"
- *   - Recebimento de Vale → módulo "vendas" (mesma permissão de Vendas)
- *   - Livro de Vendas    → módulo "livro_vendas" (módulo próprio, não
- *                           reaproveita "vendas" -- pode ser restrito
- *                           independentemente, ex: só "gerente")
- *   - Inadimplentes      → módulo "inadimplencia" (já existia
- *                           cadastrado no banco desde a migration de
- *                           módulos de negócio, nunca usado até agora)
- *   - Mapa               → módulo "mapa" (idem -- já existia
- *                           cadastrado, nunca usado até a Fase 3 da
- *                           Delegação de Venda). Só visualização
- *                           (marcadores de motoristas via polling).
- *   - Chamado            → módulo "delegacao" (mesmo módulo dos
- *                           endpoints de demandas-venda). Tela onde o
- *                           atendente despacha uma entrega -- fica
- *                           logo abaixo de Mapa, pedido do Ricardo.
- *   - Chamados Ativos    → módulo "delegacao", action "can_delete"
- *                           (NÃO "can_read"!). Motorista tem Ver+
- *                           Editar em delegacao mas não Apagar --
- *                           gatear por delete aqui é o que garante
- *                           que só quem pode cancelar/reatribuir
- *                           (Admin/Gerente/Operador) enxerga essa
- *                           tela de gestão. Ver comentário completo
- *                           em routes/_layout/chamados-ativos.tsx.
- *   - Produtos            → módulo "produtos" (gasfavero-específico)
- *   - Preços             → módulo "produtos" (mesmo módulo, tela diferente)
- *   - Clientes           → módulo "clientes"
- *   - Bloco de Vale      → módulo "vales"
+ *   - Vendas              → módulo "vendas"
+ *   - Recebimento de Vale → módulo "vendas"
+ *   - Livro de Vendas     → módulo "livro_vendas"
+ *   - Inadimplentes       → módulo "inadimplencia"
+ *   - Mapa                → módulo "mapa"
+ *   - Chamado             → módulo "delegacao"
+ *   - Chamados Ativos     → módulo "delegacao", action "can_delete"
+ *   - Abertura do Dia     → módulo "fechamento", action "can_read"
+ *   - Produtos            → módulo "produtos"
+ *   - Preços              → módulo "produtos"
+ *   - Clientes            → módulo "clientes"
+ *   - Bloco de Vale       → módulo "vales"
  *   - Usuários            → módulo "usuarios"
  *   - Configurações       → módulo "configuracoes"
  *
  * Itens exclusivos de superuser:
- *   - Admin        → apenas is_superuser
- *   - Permissões   → apenas is_superuser (matriz Role x Módulo x Ação)
+ *   - Admin
+ *   - Permissões
  *
- * Para adicionar um novo módulo num ERP filho:
- *   1. Cadastre o módulo no banco (migration ou seed)
- *   2. Adicione uma entrada em MODULE_ITEMS abaixo com o mesmo nome de módulo
- *   3. O menu aparece automaticamente para quem tiver permissão
- *      (por padrão can_read -- declare `action` se precisar de outra)
+ * Plano futuro (quando fechamento do dia estiver pronto):
+ *   Agrupar "Abertura do Dia" e "Fechamento do Dia" sob o grupo
+ *   "Operação Diária" no sidebar.
  */
 
 import {
@@ -64,6 +46,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Sunrise,
   Ticket,
   Users,
   UsersRound,
@@ -82,15 +65,10 @@ import { usePermissions } from "@/hooks/usePermissions"
 import { type Item, Main } from "./Main"
 import { User } from "./User"
 
-// Itens sempre visíveis para qualquer usuário autenticado
 const FIXED_ITEMS: Item[] = [{ icon: Home, title: "Dashboard", path: "/" }]
 
 type PermissionAction = "can_create" | "can_read" | "can_update" | "can_delete"
 
-// Mapeamento de módulo → item de menu. `action` é opcional --
-// omitido, o padrão é "can_read" (como sempre foi); declare
-// explicitamente quando o item precisa de um nível de permissão
-// diferente (ex: Chamados Ativos exige can_delete, não só can_read).
 const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> = [
   { module: "vendas", icon: ShoppingCart, title: "Vendas", path: "/vendas" },
   {
@@ -125,6 +103,12 @@ const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> 
     title: "Chamados Ativos",
     path: "/chamados-ativos",
   },
+  {
+    module: "fechamento",
+    icon: Sunrise,
+    title: "Abertura do Dia",
+    path: "/abertura-dia",
+  },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
   {
@@ -143,7 +127,6 @@ const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> 
   },
 ]
 
-// Itens exclusivos de superuser (acesso administrativo completo)
 const ADMIN_ITEM: Item = { icon: Package, title: "Admin", path: "/admin" }
 const PERMISSIONS_ITEM: Item = {
   icon: ShieldCheck,
@@ -163,9 +146,8 @@ export function AppSidebar() {
     return canRead(module)
   }
 
-  // Monta os itens de menu de acordo com as permissões
   const moduleItems: Item[] = isLoading
-    ? [] // não mostra nada enquanto carrega — evita flash de itens
+    ? []
     : MODULE_ITEMS.filter((item) =>
         checkPermission(item.module, item.action ?? "can_read"),
       )
