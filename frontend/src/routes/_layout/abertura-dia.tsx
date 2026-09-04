@@ -1,9 +1,9 @@
-// [mcp-local harness] feature: carga-produtos-abertura-fechamento | plano: b7702599 | 2026-09-04 18:20:56
-// Adiciona grid de produtos no modal de abertura do dia
+// [mcp-local harness] feature: abertura-enter-navegacao | plano: ebc4be87 | 2026-09-04 18:28:26
+// Navegação por Enter entre campos — fundo de troco → produtos em sequência → confirmar abertura via useRef
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import { UsersService } from "@/client"
 import { Badge } from "@/components/ui/badge"
@@ -89,8 +89,9 @@ function ModalAbertura({
   const [quantidades, setQuantidades] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const confirmarRef = useRef<HTMLButtonElement>(null)
+  const produtoRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  // Busca lista de produtos
   const { data: produtosData } = useQuery({
     queryKey: ["precos"],
     queryFn: () => apiFetch("/precos/"),
@@ -125,6 +126,29 @@ function ModalAbertura({
     }
   }
 
+  // Enter no fundo de troco → foca no primeiro produto (se houver) ou confirma
+  const handleFundoKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return
+    e.preventDefault()
+    if (produtos.length > 0) {
+      produtoRefs.current[0]?.focus()
+    } else {
+      confirmarRef.current?.click()
+    }
+  }
+
+  // Enter num campo de produto → avança para o próximo ou confirma no último
+  const handleProdutoKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key !== "Enter") return
+    e.preventDefault()
+    const proximo = produtoRefs.current[index + 1]
+    if (proximo) {
+      proximo.focus()
+    } else {
+      confirmarRef.current?.click()
+    }
+  }
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -141,7 +165,7 @@ function ModalAbertura({
               placeholder="Ex: 200,00"
               value={fundo}
               onChange={(e) => setFundo(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleConfirmar()}
+              onKeyDown={handleFundoKeyDown}
               autoFocus
             />
           </div>
@@ -150,10 +174,11 @@ function ModalAbertura({
             <div className="grid gap-2">
               <Label>Carga de produtos (opcional)</Label>
               <div className="rounded-lg border divide-y">
-                {produtos.map((p) => (
+                {produtos.map((p, index) => (
                   <div key={p.id} className="flex items-center justify-between px-3 py-2">
                     <span className="text-sm">{p.title}</span>
                     <Input
+                      ref={(el) => { produtoRefs.current[index] = el }}
                       type="number"
                       min={0}
                       value={quantidades[p.id] || ""}
@@ -164,13 +189,14 @@ function ModalAbertura({
                           [p.id]: Number(e.target.value) || 0,
                         }))
                       }
+                      onKeyDown={(e) => handleProdutoKeyDown(e, index)}
                       className="w-20 h-7 text-right"
                     />
                   </div>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Informe a quantidade de cada produto carregado no caminhão.
+                Enter navega entre os campos. No último produto, confirma a abertura.
               </p>
             </div>
           )}
@@ -179,7 +205,7 @@ function ModalAbertura({
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={handleConfirmar} disabled={loading}>
+          <Button ref={confirmarRef} onClick={handleConfirmar} disabled={loading}>
             {loading ? "Confirmando..." : "Confirmar abertura"}
           </Button>
         </DialogFooter>
