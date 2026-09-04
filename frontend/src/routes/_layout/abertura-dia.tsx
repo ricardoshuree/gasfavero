@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: abertura-dia-frontend | plano: c2315bde | 2026-09-04 15:21:19
-// Tela de abertura do dia com lista de motoristas, modal de abertura com fundo de troco e modal de edição com senha do gerente
+// [mcp-local harness] feature: abertura-enter | plano: 08383e98 | 2026-09-04 15:58:42
+// Adiciona onKeyDown Enter no input de fundo de troco e nos campos de email/senha/novo fundo da edição
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
@@ -122,6 +122,7 @@ function ModalAbertura({
             placeholder="Ex: 200,00"
             value={fundo}
             onChange={(e) => setFundo(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleConfirmar()}
             autoFocus
           />
         </div>
@@ -218,6 +219,7 @@ function ModalEdicao({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleVerificarSenha()}
                   autoFocus
                 />
               </div>
@@ -249,6 +251,7 @@ function ModalEdicao({
                 inputMode="decimal"
                 value={novoFundo}
                 onChange={(e) => setNovoFundo(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSalvar()}
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
@@ -300,28 +303,19 @@ function AberturaDia() {
         </p>
       </div>
 
-      {/* Cards de resumo */}
       <div className="flex gap-4 flex-wrap">
         <div className="rounded-lg border p-4 min-w-[160px]">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            Data
-          </p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Data</p>
           <p className="text-lg font-bold mt-1">
             {new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR")}
           </p>
         </div>
         <div className="rounded-lg border p-4 min-w-[160px]">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            Despachados
-          </p>
-          <p className="text-lg font-bold mt-1">
-            {totalAbertos} / {motoristas.length}
-          </p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Despachados</p>
+          <p className="text-lg font-bold mt-1">{totalAbertos} / {motoristas.length}</p>
         </div>
         <div className="rounded-lg border p-4 min-w-[160px]">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            Total em troco
-          </p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total em troco</p>
           <p className="text-lg font-bold mt-1">
             {formatMoney(
               motoristas
@@ -332,14 +326,10 @@ function AberturaDia() {
         </div>
       </div>
 
-      {/* Lista de motoristas */}
       {isLoading ? (
         <div className="grid gap-3">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-lg border bg-muted/40"
-            />
+            <div key={i} className="h-20 animate-pulse rounded-lg border bg-muted/40" />
           ))}
         </div>
       ) : motoristas.length === 0 ? (
@@ -369,8 +359,7 @@ function AberturaDia() {
                       </span>
                       {m.aberto_em && (
                         <span>
-                          {" "}
-                          · Aberto às{" "}
+                          {" "}· Aberto às{" "}
                           {new Date(m.aberto_em).toLocaleTimeString("pt-BR", {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -379,9 +368,7 @@ function AberturaDia() {
                       )}
                     </p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Aguardando abertura
-                    </p>
+                    <p className="text-sm text-muted-foreground">Aguardando abertura</p>
                   )}
                 </div>
               </div>
@@ -430,5 +417,3 @@ function AberturaDia() {
     </div>
   )
 }
-
-
