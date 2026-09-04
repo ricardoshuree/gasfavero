@@ -1,14 +1,15 @@
-// [mcp-local harness] feature: livro-vendas-breakdown-forma-pagamento | plano: b1a54aef | 2026-08-06 10:02:23
-// Card "Em caixa" agora inclui a lista cartao/pix/dinheiro/vale abaixo, mantendo o card "Em aberto" como antes
+// [mcp-local harness] feature: cartao-debito-credito | plano: 40efe8ed | 2026-09-04 13:55:06
+// Labels cartao_debito e cartao_credito, mantendo cartao como fallback legado
 // Quadros informativos do Livro de Vendas -- "Em caixa" (vendas já
 // pagas, com detalhamento por forma de pagamento logo abaixo) e "Em
 // aberto" (vendas em vale ainda não pagas), ambos filtrados pelo
-// período do escopo ativo do menu interativo. Mesmo padrão visual do
-// ResumoCards de Recebimento de Vale.
+// período do escopo ativo do menu interativo.
 import { Card, CardContent } from "@/components/ui/card"
 
 const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
-  cartao: "Cartão de crédito",
+  cartao_debito: "Cartão Débito",
+  cartao_credito: "Cartão Crédito",
+  cartao: "Cartão",  // legado -- registros anteriores à migration m8n9o0p1q2r3
   pix: "Pix",
   dinheiro: "Dinheiro",
   vale: "Vale",

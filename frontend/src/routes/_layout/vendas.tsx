@@ -220,10 +220,7 @@ function Vendas() {
           endereco_id: endereco?.id,
           motorista_id: motoristaId,
           forma_pagamento: formaPagamento as
-            | "cartao"
-            | "pix"
-            | "dinheiro"
-            | "vale",
+            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale",
           vale_numero:
             formaPagamento === "vale" && valeNumero
               ? Number(valeNumero)
@@ -396,3 +393,4 @@ function Vendas() {
     </div>
   )
 }
+

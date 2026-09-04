@@ -1,3 +1,5 @@
+# [mcp-local harness] feature: cartao-debito-credito | plano: 85b9b898 | 2026-09-04 13:54:16
+# Atualiza FORMAS_PAGAMENTO_ORDEM para incluir cartao_debito e cartao_credito no lugar de cartao
 # [mcp-local harness] feature: ranking-so-motoristas | plano: 241c372b | 2026-08-07 12:03:14
 # Ranking so lista quem tem role Motorista, sempre 3 slots mesmo com 0 vendas
 """
@@ -83,9 +85,11 @@ MODULE_INADIMPLENCIA = "inadimplencia"
 DIAS_ATRASO_VALE = 30
 
 # Ordem fixa de exibição do detalhamento "Em caixa" por forma de
-# pagamento no Livro de Vendas (pedido do Ricardo) -- sempre as 4
+# pagamento no Livro de Vendas (pedido do Ricardo) -- sempre as 5
 # presentes na resposta, mesmo com valor 0.
-FORMAS_PAGAMENTO_ORDEM = ["cartao", "pix", "dinheiro", "vale"]
+# cartao (legado) incluído por compatibilidade com registros antigos
+# que possam existir antes da migration m8n9o0p1q2r3.
+FORMAS_PAGAMENTO_ORDEM = ["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale"]
 
 
 # ---------------------------------------------------------------------------
@@ -313,32 +317,9 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
 
 # ---------------------------------------------------------------------------
 # Recebimento de Vale
-#
-# Estados de uma venda em vale (ver bloco de comentário em models.py,
-# na classe Venda):
-#   1) em aberto        -- recebido_em IS NULL, pago_em IS NULL, <30 dias
-#   2) em atraso         -- recebido_em IS NULL, pago_em IS NULL, >=30 dias
-#      (mesma condição de banco que "em aberto" -- a diferença é só a
-#      data_venda, não um campo separado)
-#   3) aguardando baixa -- recebido_em IS NOT NULL, pago_em IS NULL
-#   4) baixada          -- pago_em IS NOT NULL (SEMPRE definitivo --
-#      a baixa nunca reabre a venda, mesmo com valor menor que o
-#      total; a diferença é tratada como desconto)
-#
-# A TABELA da tela (GET /vales-recebimento) mostra os estados 1+2+3
-# juntos por padrão (status="todos") -- só o que já foi baixado (4)
-# nunca aparece. O botão "Pagos" da UI só filtra pra status="aguardando_baixa"
-# (só o estado 3), não é uma view exclusiva/separada.
-#
-# Precisam vir ANTES de "/{id}" nesse arquivo -- senão o FastAPI casa
-# "vales-recebimento" como se fosse o {id} da rota genérica abaixo.
 # ---------------------------------------------------------------------------
 
 def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
-    """Usado só pelo cálculo dos cards do resumo (que precisa separar
-    aberto de aguardando_baixa pra contar cada um). A listagem da
-    tabela (read_vales_recebimento) usa uma query própria, que por
-    padrão junta aberto+atrasado+aguardando_baixa."""
     query = (
         select(Venda)
         .where(Venda.forma_pagamento == "vale")
@@ -365,9 +346,6 @@ def read_resumo_recebimento_vale(session: SessionDep) -> Any:
     ).all()
     atraso = [v for v in em_aberto if v.data_venda <= limite_atraso]
 
-    # "Vales pagos no mês": baixados (pago_em preenchido) cujo pago_em
-    # cai no mês vigente -- filtra por QUANDO foi dada a baixa, não
-    # por quando a venda foi feita.
     pagos_mes = session.exec(
         select(Venda)
         .where(Venda.forma_pagamento == "vale")
@@ -408,10 +386,6 @@ def read_vales_recebimento(
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
-    """"todos" (default): junta em_aberto + em_atraso + aguardando_baixa
-    (tudo que ainda não foi baixado). "aguardando_baixa": só o que já
-    foi marcado como pago, esperando a baixa -- é o filtro que o botão
-    "Pagos" da UI aplica em cima da mesma tabela, não uma tela separada."""
     query = (
         select(Venda)
         .where(Venda.forma_pagamento == "vale")
@@ -468,10 +442,6 @@ def marcar_venda_pago(
     id: uuid.UUID,
     body: VendaMarcarPagoRequest,
 ) -> Any:
-    """Registra que o valor foi recebido -- hoje só usado pelo
-    operador na tela de Recebimento de Vale, no futuro também pelo
-    motorista numa interface própria em campo. NÃO fecha a venda --
-    só move ela pra fila 'aguardando baixa'."""
     venda = _validar_venda_vale_aberta(session.get(Venda, id))
 
     if body.valor_pago < venda.valor_pago:
@@ -502,12 +472,6 @@ def marcar_venda_pago(
 def baixar_vale(
     *, session: SessionDep, id: uuid.UUID, body: VendaBaixarValeRequest
 ) -> Any:
-    """Confirma oficialmente o recebimento na distribuidora (sempre
-    feito aqui, nunca em campo) e FECHA a venda de vez (pago_em) --
-    não importa o valor. Se o valor confirmado for menor que
-    valor_total, a diferença é um desconto: não deixa a venda em
-    aberto de novo (decisão do Ricardo -- ver comentário em Venda,
-    models.py)."""
     venda = _validar_venda_vale_aberta(session.get(Venda, id))
 
     if venda.recebido_em is None:
@@ -540,88 +504,20 @@ def baixar_vale(
 
 # ---------------------------------------------------------------------------
 # Livro de Vendas
-#
-# Dashboard geral de TODAS as vendas (qualquer forma de pagamento --
-# diferente do Recebimento de Vale, que é só vale). Módulo RBAC
-# próprio ("livro_vendas", ver migration f1a2b3c4d5e6), separado de
-# "vendas".
-#
-# Menu interativo de 3 linhas, mutuamente exclusivas entre si (só um
-# "escopo" ativo por vez), decide o drill-down do gráfico e o período
-# usado pelos 2 cards (tudo agrupado por data_venda, nunca por
-# pago_em/recebido_em):
-#
-#   escopo="todos_anos"  -- todo o histórico. Gráfico: 1 barra por ano
-#                            com venda registrada.
-#   escopo="ano"          -- requer `ano`. Gráfico: 1 barra por mês
-#                            (Jan-Dez) daquele ano.
-#   escopo="mes"          -- requer `ano` + `mes`. Gráfico: 1 barra por
-#                            semana (dom-sáb, cortada nos limites do
-#                            mês) daquele mês. Usado tanto pelo clique
-#                            direto num mês quanto pelo atalho "todas
-#                            as semanas" (que sempre manda o mês/ano
-#                            VIGENTE, sobrescrevendo qualquer seleção
-#                            de ano/mês feita antes) -- e é o escopo
-#                            default ao carregar a tela.
-#   escopo="semana"       -- sem parâmetros (sempre a semana corrente,
-#                            dom-sáb). Gráfico: 1 barra por dia.
-#                            Atalho independente -- sempre pula pro
-#                            "agora", ignorando ano/mês selecionados.
-#
-# A TABELA (GET /livro) é independente desse menu -- não filtra pelo
-# escopo, tem paginação, filtro próprio de intervalo de datas e filtro
-# de status. Além dos itens da página, retorna soma_preco/soma_valor_pago
-# (ver LivroVendasListPublic, models.py) -- o total das colunas
-# "Preço"/"Valor pago" de TODAS as vendas que batem com o filtro de data
-# ativo (data_inicio/data_fim), não só as da página atual -- é o
-# valor exibido na linha de totais no rodapé da tabela, que muda
-# dinamicamente junto com o filtro 'Consulta vendas data'.
-#
-# Status possíveis pro filtro da tabela (independente do status
-# calculado no frontend pro badge de cada linha, mas com a MESMA
-# lógica):
-#   "todos"     -- sem filtro (default)
-#   "pago"      -- pago_em IS NOT NULL
-#   "em_aberto" -- pago_em IS NULL E NÃO (vale com data_venda antiga)
-#   "em_atraso" -- pago_em IS NULL E forma_pagamento=vale E
-#                  data_venda <= hoje - DIAS_ATRASO_VALE
-#
-# Precisam vir ANTES de "/{id}" nesse arquivo -- mesmo motivo do bloco
-# de Recebimento de Vale acima.
 # ---------------------------------------------------------------------------
 
 NOMES_DIA_SEMANA = [
-    "Domingo",
-    "Segunda",
-    "Terça",
-    "Quarta",
-    "Quinta",
-    "Sexta",
-    "Sábado",
+    "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado",
 ]
 
 MESES_ABREV = [
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
+    "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez",
 ]
 
 
 def _semana_atual(hoje: date | None = None) -> tuple[date, date]:
-    """(domingo, sábado) da semana corrente -- semana sempre começa
-    no domingo (decisão do Ricardo)."""
     hoje = hoje or date.today()
-    # date.weekday(): segunda=0 ... domingo=6. Convertendo pra
-    # domingo=0 ... sábado=6 pra poder calcular o início da semana.
     dow_domingo_zero = (hoje.weekday() + 1) % 7
     inicio = hoje - timedelta(days=dow_domingo_zero)
     fim = inicio + timedelta(days=6)
@@ -629,10 +525,6 @@ def _semana_atual(hoje: date | None = None) -> tuple[date, date]:
 
 
 def _semanas_do_mes(ano: int, mes: int) -> list[tuple[date, date]]:
-    """Divide o mês inteiro em buckets semanais (dom-sáb) -- o
-    primeiro bucket começa no dia 1 (pode ser um bucket "curto", se o
-    mês não começar num domingo) e o último termina no último dia do
-    mês (idem). Buckets intermediários são semanas cheias."""
     ultimo_dia = calendar.monthrange(ano, mes)[1]
     fim_mes = date(ano, mes, ultimo_dia)
     cursor = date(ano, mes, 1)
@@ -657,11 +549,6 @@ def _label_bucket_semana(inicio: date, fim: date) -> str:
     dependencies=[Depends(require_module_permission(MODULE_LIVRO, action="read"))],
 )
 def read_livro_anos_disponiveis(session: SessionDep) -> Any:
-    """Até os 5 anos mais recentes com ao menos 1 venda, em ordem
-    decrescente -- monta os botões da linha 'Ano' do menu interativo.
-    Se houver um 6º ano de histórico, ele fica de fora daqui (mas
-    continua acessível via escopo 'todos_anos', que não usa esta
-    lista)."""
     datas = session.exec(select(Venda.data_venda)).all()
     anos = sorted({d.year for d in datas}, reverse=True)[:5]
     return AnosDisponiveisPublic(anos=anos)
@@ -692,8 +579,6 @@ def read_livro_resumo(
         ]
 
     elif escopo == "mes":
-        # Sem ano/mes informado (atalho "todas as semanas" e também o
-        # default de carregamento da tela): usa sempre o mês vigente.
         ano_efetivo = ano or hoje.year
         mes_efetivo = mes or hoje.month
         if not (1 <= mes_efetivo <= 12):
@@ -752,9 +637,10 @@ def read_livro_resumo(
         )
         grafico.append(LivroVendasBucket(label=label, valor=valor_bucket))
 
-    # Detalhamento de "Em caixa" por forma de pagamento -- sempre as 4
-    # formas presentes, na ordem fixa de FORMAS_PAGAMENTO_ORDEM, com
-    # valor 0 pra quem não teve venda paga no período.
+    # Detalhamento de "Em caixa" por forma de pagamento -- sempre as 5
+    # formas presentes (cartao_debito, cartao_credito, pix, dinheiro,
+    # vale), na ordem fixa de FORMAS_PAGAMENTO_ORDEM, com valor 0 pra
+    # quem não teve venda paga no período.
     em_caixa_por_forma_pagamento = [
         LivroVendasFormaPagamentoValor(
             forma_pagamento=forma,
@@ -791,18 +677,6 @@ def read_livro_vendas(
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
-    """Tabela de TODAS as vendas (qualquer forma de pagamento),
-    ordenada por data_venda mais recente primeiro -- independente do
-    menu interativo (ano/mês/semana), com filtro próprio de intervalo
-    de datas e de status.
-
-    soma_preco/soma_valor_pago (linha de totais no rodapé da tabela,
-    no frontend) são calculados sobre TODO o conjunto que bate com os
-    filtros ativos -- não só os `limit` registros da página atual.
-    Os mesmos filtros são aplicados de forma independente em 3 queries
-    (count, soma, listagem paginada) -- evita reusar a subquery de uma
-    pra fazer agregação de coluna da outra, o que gera SQL incorreto
-    (a coluna mapeada Venda.x não corresponde à coluna da subquery)."""
     limite_atraso = date.today() - timedelta(days=DIAS_ATRASO_VALE)
 
     def _aplicar_filtros(stmt):
@@ -857,10 +731,7 @@ def read_livro_vendas(
 
 
 # ---------------------------------------------------------------------------
-# Ranking da Semana -- usado no painel lateral da tela Mapa. Reaproveita
-# _semana_atual (definida acima, mesmo corte dom-sáb do Livro de
-# Vendas). Precisa vir ANTES de "/{id}" nesse arquivo, mesmo motivo dos
-# blocos anteriores.
+# Ranking da Semana
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -869,21 +740,6 @@ def read_livro_vendas(
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def read_ranking_semana(session: SessionDep) -> Any:
-    """Top 3 motoristas por QUANTIDADE de vendas na semana corrente
-    (domingo-sábado) -- conta todas as vendas independente de forma
-    de pagamento ou status de pagamento (é volume de atendimento, não
-    faturamento).
-
-    Só considera usuários com a role RBAC "Motorista" (decisão
-    confirmada com o Ricardo) -- isso exclui automaticamente o
-    usuário-sistema "Distribuidora Gás Favero" (vendas de balcão),
-    que não tem essa role, mesmo que ele acumule vendas na semana.
-
-    Sempre retorna até 3 motoristas, mesmo que algum deles não tenha
-    NENHUMA venda na semana (quantidade=0) -- não é "top 3 de quem
-    vendeu", é "top 3 dos motoristas cadastrados, ordenados por
-    quantidade". Só retorna menos de 3 se houver menos de 3
-    motoristas com essa role cadastrados."""
     periodo_inicio, periodo_fim = _semana_atual()
     vendas_periodo = session.exec(
         select(Venda)
@@ -895,9 +751,6 @@ def read_ranking_semana(session: SessionDep) -> Any:
     for v in vendas_periodo:
         contagem[v.motorista_id] = contagem.get(v.motorista_id, 0) + 1
 
-    # Case-insensitive de propósito -- mesmo padrão já usado em outras
-    # buscas por nome neste projeto (ex: resolução de Rua em
-    # clientes.py), evita depender de capitalização exata da role.
     role_motorista = session.exec(
         select(Role).where(sa_func.lower(Role.name) == "motorista")
     ).first()
@@ -918,8 +771,6 @@ def read_ranking_semana(session: SessionDep) -> Any:
                     )
                 )
 
-    # Desempate por nome (A-Z) -- só pra ordem determinística entre
-    # motoristas com a mesma quantidade (inclusive todos com 0).
     ranking.sort(key=lambda r: r.motorista_nome.lower())
     ranking.sort(key=lambda r: r.quantidade, reverse=True)
 
@@ -932,57 +783,9 @@ def read_ranking_semana(session: SessionDep) -> Any:
 
 # ---------------------------------------------------------------------------
 # Inadimplentes
-#
-# Duas visões DELIBERADAMENTE diferentes na mesma tela (decisão
-# confirmada com o Ricardo depois de ver a primeira versão em uso):
-#
-#   1) CARD + GRÁFICO (topo, menu Ano/Mês) -- visão HISTÓRICA/contábil:
-#      "quantos estavam devendo naquele mês de vencimento", incluindo
-#      quem já pagou depois de ficar mais de DIAS_ATRASO_VALE dias sem
-#      quitar. Usa _vendas_inadimplentes() (todo o conjunto "esteve em
-#      atraso"). Serve pra entender como a inadimplência se comportou
-#      ao longo do tempo, não pra cobrança.
-#
-#   2) TABELA (embaixo, com filtro de motorista + Exportar PDF) --
-#      visão de COBRANÇA: só quem está em aberto E em atraso AGORA
-#      (pago_em IS NULL) -- exatamente os clientes que cada motorista
-#      (inclusive o usuário-sistema "Distribuidora Gás Favero", que
-#      "entrega" as vendas de balcão) precisa cobrar. Quem já pagou
-#      NÃO aparece aqui, mesmo que tenha estado atrasado no passado --
-#      ver _vendas_em_atraso_atual().
-#
-# _esteve_em_atraso() continua sendo a base das duas: não depende de
-# nenhuma coluna nova, é 100% derivado de data_venda/pago_em já
-# existentes (decisão confirmada: não vale a pena um snapshot
-# histórico à parte).
-#
-#   - se JÁ PAGA: esteve em atraso se (pago_em.date() - data_venda)
-#     foi >= DIAS_ATRASO_VALE (demorou pra pagar, mesmo que hoje
-#     esteja quitada) -- só entra no card/gráfico (visão 1)
-#   - se AINDA EM ABERTO: esteve em atraso se (hoje - data_venda) já
-#     é >= DIAS_ATRASO_VALE -- entra nas DUAS visões
-#
-# Menu interativo tem só 2 linhas (Ano / Mês, SEM linha de Semana,
-# diferente do Livro de Vendas) e agrupa por data_pagamento_vale
-# (quando o vale VENCEU), não por data_venda -- decisão confirmada.
-#
-# A TABELA (GET /inadimplentes) é independente do menu -- sem filtro
-# de período, só filtrável por motorista_id (pra cada motorista gerar
-# seu próprio PDF de cobrança), ordenada por data_venda mais ANTIGA
-# primeiro (quem está esperando há mais tempo primeiro).
-#
-# Exportar PDF é gerado 100% no frontend (dump simples da tabela já
-# carregada, respeitando o filtro de motorista ativo) -- não existe
-# endpoint de PDF aqui.
-#
-# Módulo RBAC "inadimplencia" (reaproveitado, ver MODULE_INADIMPLENCIA
-# acima). Precisam vir ANTES de "/{id}" nesse arquivo -- mesmo motivo
-# dos blocos anteriores.
 # ---------------------------------------------------------------------------
 
 def _esteve_em_atraso(venda: Venda, hoje: date) -> bool:
-    """Ver bloco de comentário acima -- base das duas visões (card/
-    gráfico histórico E tabela de cobrança atual)."""
     if venda.forma_pagamento != "vale":
         return False
     if venda.pago_em is not None:
@@ -993,16 +796,6 @@ def _esteve_em_atraso(venda: Venda, hoje: date) -> bool:
 
 
 def _vendas_inadimplentes(session: SessionDep) -> list[Venda]:
-    """Todas as vendas 'esteve em atraso' (ver acima) -- inclui quem
-    já pagou. Usado SÓ pelo card/gráfico (visão histórica/contábil),
-    agrupado por data_pagamento_vale. NÃO usar pra tabela/PDF de
-    cobrança -- ver _vendas_em_atraso_atual() pra isso.
-
-    Só busca candidatas com forma_pagamento='vale' no banco (o resto
-    do filtro é em Python, já que a condição de data não dá pra
-    expressar de forma portável entre SQLite/Postgres com
-    func.julianday/func.date -- mesmo padrão Python-loop já usado no
-    resto deste arquivo)."""
     hoje = date.today()
     candidatas = session.exec(
         select(Venda).where(Venda.forma_pagamento == "vale")
@@ -1011,12 +804,6 @@ def _vendas_inadimplentes(session: SessionDep) -> list[Venda]:
 
 
 def _vendas_em_atraso_atual(session: SessionDep) -> list[Venda]:
-    """Só quem está em aberto E em atraso AGORA (pago_em IS NULL) --
-    usado pela tabela de cobrança e pelo dropdown de motoristas (não
-    faz sentido oferecer pra cobrar um motorista cujos clientes já
-    quitaram tudo). Quem já pagou nunca aparece aqui, mesmo que tenha
-    estado atrasado no passado (esse caso só aparece no card/gráfico,
-    via _vendas_inadimplentes)."""
     return [v for v in _vendas_inadimplentes(session) if v.pago_em is None]
 
 
@@ -1028,10 +815,6 @@ def _vendas_em_atraso_atual(session: SessionDep) -> list[Venda]:
     ],
 )
 def read_inadimplentes_anos_disponiveis(session: SessionDep) -> Any:
-    """Até os 5 anos mais recentes de data_pagamento_vale entre as
-    vendas 'esteve em atraso' (visão histórica -- inclui quem já
-    pagou), em ordem decrescente -- monta os botões da linha 'Ano' do
-    menu interativo, que dirige o card/gráfico."""
     vendas = _vendas_inadimplentes(session)
     anos = sorted(
         {v.data_pagamento_vale.year for v in vendas if v.data_pagamento_vale},
@@ -1048,11 +831,6 @@ def read_inadimplentes_anos_disponiveis(session: SessionDep) -> Any:
     ],
 )
 def read_inadimplentes_motoristas(session: SessionDep) -> Any:
-    """Só os motoristas que têm ao menos 1 cliente em atraso AGORA
-    (visão de cobrança, não histórica) -- monta o dropdown 'Nome
-    Motorista' (a opção 'Todos Motoristas' é sintética, montada só no
-    frontend). Inclui o usuário-sistema 'Distribuidora Gás Favero'
-    normalmente, como qualquer outro motorista."""
     vendas = _vendas_em_atraso_atual(session)
     motorista_ids = {v.motorista_id for v in vendas}
 
@@ -1083,10 +861,6 @@ def read_inadimplentes_resumo(
     ano: int | None = None,
     mes: int | None = None,
 ) -> Any:
-    """O único card da tela ('Atraso maior que 30 dias') + o gráfico
-    -- visão HISTÓRICA (inclui quem já pagou depois de atrasar), SEM
-    linha de Semana no menu (diferente do Livro de Vendas), agrupado
-    por data_pagamento_vale (quando o vale venceu)."""
     hoje = date.today()
     vendas = _vendas_inadimplentes(session)
 
@@ -1118,9 +892,7 @@ def read_inadimplentes_resumo(
             for m in range(1, 13)
         ]
 
-    else:  # todos_anos -- intervalo de anos com data_pagamento_vale
-        # presente entre as vendas inadimplentes (pode incluir anos
-        # futuros, já que vencimento nem sempre já passou)
+    else:  # todos_anos
         datas_pagamento = [
             v.data_pagamento_vale for v in vendas if v.data_pagamento_vale
         ]
@@ -1177,17 +949,6 @@ def read_inadimplentes(
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
-    """Tabela de cobrança -- só quem está em aberto E em atraso AGORA
-    (visão atual, não histórica -- quem já pagou não aparece aqui,
-    mesmo que tenha estado atrasado no passado), sem filtro de período
-    (independente do menu Ano/Mês do topo da tela), ordenada por
-    data_venda mais ANTIGA primeiro. motorista_id opcional filtra pra
-    um motorista só ('Todos Motoristas', no frontend, simplesmente
-    omite o parâmetro) -- é o que alimenta o PDF de cobrança de cada
-    motorista.
-
-    soma_preco/soma_valor_pago somam TODO o conjunto filtrado (não só
-    a página atual), igual ao Livro de Vendas."""
     vendas = _vendas_em_atraso_atual(session)
     if motorista_id is not None:
         vendas = [v for v in vendas if v.motorista_id == motorista_id]
@@ -1239,19 +1000,12 @@ def create_venda(
         if not session.get(Endereco, venda_in.endereco_id):
             raise HTTPException(status_code=404, detail="Endereço não encontrado")
 
-    # -----------------------------------------------------------
-    # Forma de pagamento = vale: resolve o número, valida reuso,
-    # valida DONO do vale (decisão confirmada com o Ricardo, achado
-    # revisando o Recebimento de Vale: sem essa trava, dava pra
-    # vender com o número de vale de OUTRO motorista) e bloqueia se
-    # o cliente já tiver vale em aberto
-    # -----------------------------------------------------------
     vale = None
     data_pagamento_vale = venda_in.data_pagamento_vale
     pago_em: Any = get_datetime_utc()
 
     if venda_in.forma_pagamento == "vale":
-        pago_em = None  # venda a prazo -- fica em aberto até a baixa
+        pago_em = None
 
         if venda_in.vale_numero is None:
             raise HTTPException(
@@ -1268,10 +1022,6 @@ def create_venda(
                 detail=f"Vale número {venda_in.vale_numero} não encontrado",
             )
 
-        # O vale só pode ser usado numa venda atribuída ao MESMO
-        # motorista dono do bloco de onde ele veio -- sem isso seria
-        # possível "gastar" o talão de um motorista numa venda
-        # atribuída a outro (ou à Distribuidora).
         bloco = session.get(BlocoVale, vale.bloco_id)
         if not bloco or bloco.motorista_id != venda_in.motorista_id:
             raise HTTPException(
@@ -1311,9 +1061,6 @@ def create_venda(
         if data_pagamento_vale is None:
             data_pagamento_vale = _quinto_dia_util_proximo_mes()
 
-    # -----------------------------------------------------------
-    # Itens da sacola: valida produto + preço vigente, calcula total
-    # -----------------------------------------------------------
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 

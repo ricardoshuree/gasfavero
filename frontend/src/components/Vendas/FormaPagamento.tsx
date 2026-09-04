@@ -1,19 +1,25 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:40:37
-// Botoes quadrados de forma de pagamento + campos de vale condicionais
+// [mcp-local harness] feature: cartao-debito-credito | plano: 85b9b898 | 2026-09-04 13:51:32
+// Adiciona botão cartao_credito ao lado de cartao_debito, mantendo o ícone CreditCard para os dois
 import { Banknote, CreditCard, QrCode, Receipt } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
-export type FormaPagamentoValue = "cartao" | "pix" | "dinheiro" | "vale"
+export type FormaPagamentoValue =
+  | "cartao_debito"
+  | "cartao_credito"
+  | "pix"
+  | "dinheiro"
+  | "vale"
 
 const OPCOES: {
   value: FormaPagamentoValue
   label: string
   icon: typeof CreditCard
 }[] = [
-  { value: "cartao", label: "Cartão", icon: CreditCard },
+  { value: "cartao_debito", label: "Débito", icon: CreditCard },
+  { value: "cartao_credito", label: "Crédito", icon: CreditCard },
   { value: "pix", label: "Pix", icon: QrCode },
   { value: "dinheiro", label: "Dinheiro", icon: Banknote },
   { value: "vale", label: "Vale", icon: Receipt },
@@ -39,7 +45,7 @@ export function FormaPagamento({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium">Forma de Pagamento</p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
         {OPCOES.map((opcao) => {
           const Icon = opcao.icon
           const selecionado = value === opcao.value
@@ -56,7 +62,7 @@ export function FormaPagamento({
               )}
             >
               <Icon className="h-6 w-6" />
-              <span className="font-semibold">{opcao.label}</span>
+              <span className="font-semibold text-xs">{opcao.label}</span>
             </button>
           )
         })}

@@ -808,7 +808,7 @@ class VendaCreate(SQLModel):
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID | None = None
     motorista_id: uuid.UUID
-    forma_pagamento: Literal["cartao", "pix", "dinheiro", "vale"]
+    forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale"]
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
@@ -1369,3 +1369,4 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+

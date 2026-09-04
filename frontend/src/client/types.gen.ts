@@ -746,7 +746,7 @@ export type VendaCreate = {
     cliente_id: string;
     endereco_id?: (string | null);
     motorista_id: string;
-    forma_pagamento: 'cartao' | 'pix' | 'dinheiro' | 'vale';
+    forma_pagamento: 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale';
     vale_numero?: (number | null);
     data_pagamento_vale?: (string | null);
     valor_pago: (number | string);
@@ -754,7 +754,7 @@ export type VendaCreate = {
     itens: Array<VendaItemCreate>;
 };
 
-export type forma_pagamento = 'cartao' | 'pix' | 'dinheiro' | 'vale';
+export type forma_pagamento = 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale';
 
 export type VendaItemCreate = {
     produto_id: string;
