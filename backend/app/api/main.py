@@ -1,10 +1,11 @@
-# [mcp-local harness] feature: delegacao-venda-fase2-geocoding | plano: 938523a3 | 2026-08-06 20:17:03
-# Registra geografia.enderecos_router
+# [mcp-local harness] feature: abertura-dia | plano: 8346bf80 | 2026-09-04 15:11:40
+# Registra fechamento.router no api_router
 from fastapi import APIRouter
 
 from app.api.routes import (
     clientes,
     delegacao,
+    fechamento,
     geografia,
     items,
     login,
@@ -33,6 +34,7 @@ api_router.include_router(precos.router)
 api_router.include_router(vales.router)
 api_router.include_router(vendas.router)
 api_router.include_router(delegacao.router)
+api_router.include_router(fechamento.router)
 
 
 if settings.ENVIRONMENT == "local":
