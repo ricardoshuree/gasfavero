@@ -20,6 +20,7 @@ import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutChamadoRouteImport } from './routes/_layout/chamado'
 import { Route as LayoutChamadosAtivosRouteImport } from './routes/_layout/chamados-ativos'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
+import { Route as LayoutFechamentoDiaRouteImport } from './routes/_layout/fechamento-dia'
 import { Route as LayoutInadimplentesRouteImport } from './routes/_layout/inadimplentes'
 import { Route as LayoutLivroVendasRouteImport } from './routes/_layout/livro-vendas'
 import { Route as LayoutMapaRouteImport } from './routes/_layout/mapa'
@@ -85,6 +86,11 @@ const LayoutClientesRoute = LayoutClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutFechamentoDiaRoute = LayoutFechamentoDiaRouteImport.update({
+  id: '/fechamento-dia',
+  path: '/fechamento-dia',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutInadimplentesRoute = LayoutInadimplentesRouteImport.update({
   id: '/inadimplentes',
   path: '/inadimplentes',
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
+  '/fechamento-dia': typeof LayoutFechamentoDiaRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
   '/mapa': typeof LayoutMapaRoute
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
+  '/fechamento-dia': typeof LayoutFechamentoDiaRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
   '/mapa': typeof LayoutMapaRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/_layout/chamado': typeof LayoutChamadoRoute
   '/_layout/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/_layout/clientes': typeof LayoutClientesRoute
+  '/_layout/fechamento-dia': typeof LayoutFechamentoDiaRoute
   '/_layout/inadimplentes': typeof LayoutInadimplentesRoute
   '/_layout/livro-vendas': typeof LayoutLivroVendasRoute
   '/_layout/mapa': typeof LayoutMapaRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/chamado'
     | '/chamados-ativos'
     | '/clientes'
+    | '/fechamento-dia'
     | '/inadimplentes'
     | '/livro-vendas'
     | '/mapa'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/chamado'
     | '/chamados-ativos'
     | '/clientes'
+    | '/fechamento-dia'
     | '/inadimplentes'
     | '/livro-vendas'
     | '/mapa'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/_layout/chamado'
     | '/_layout/chamados-ativos'
     | '/_layout/clientes'
+    | '/_layout/fechamento-dia'
     | '/_layout/inadimplentes'
     | '/_layout/livro-vendas'
     | '/_layout/mapa'
@@ -361,6 +373,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutClientesRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/fechamento-dia': {
+      id: '/_layout/fechamento-dia'
+      path: '/fechamento-dia'
+      fullPath: '/fechamento-dia'
+      preLoaderRoute: typeof LayoutFechamentoDiaRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/inadimplentes': {
       id: '/_layout/inadimplentes'
       path: '/inadimplentes'
@@ -440,6 +459,7 @@ interface LayoutRouteChildren {
   LayoutChamadoRoute: typeof LayoutChamadoRoute
   LayoutChamadosAtivosRoute: typeof LayoutChamadosAtivosRoute
   LayoutClientesRoute: typeof LayoutClientesRoute
+  LayoutFechamentoDiaRoute: typeof LayoutFechamentoDiaRoute
   LayoutInadimplentesRoute: typeof LayoutInadimplentesRoute
   LayoutLivroVendasRoute: typeof LayoutLivroVendasRoute
   LayoutMapaRoute: typeof LayoutMapaRoute
@@ -459,6 +479,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutChamadoRoute: LayoutChamadoRoute,
   LayoutChamadosAtivosRoute: LayoutChamadosAtivosRoute,
   LayoutClientesRoute: LayoutClientesRoute,
+  LayoutFechamentoDiaRoute: LayoutFechamentoDiaRoute,
   LayoutInadimplentesRoute: LayoutInadimplentesRoute,
   LayoutLivroVendasRoute: LayoutLivroVendasRoute,
   LayoutMapaRoute: LayoutMapaRoute,

@@ -1,35 +1,10 @@
-// [mcp-local harness] feature: abertura-dia-frontend | plano: c2315bde | 2026-09-04 15:21:50
-// Adiciona item Abertura do Dia no sidebar com ícone Sunrise, módulo fechamento
+// [mcp-local harness] feature: fechamento-dia | plano: e9667526 | 2026-09-04 15:44:49
+// Adiciona Fechamento do Dia no sidebar com ícone Moon
 /**
  * AppSidebar — menu lateral dinâmico por módulo/role.
  *
- * Itens fixos (sempre visíveis para usuários autenticados):
- *   - Dashboard
- *
- * Itens controlados por módulo (visíveis se can_read, salvo os que
- * declaram "action" diferente -- ver campo `action` em MODULE_ITEMS):
- *   - Vendas              → módulo "vendas"
- *   - Recebimento de Vale → módulo "vendas"
- *   - Livro de Vendas     → módulo "livro_vendas"
- *   - Inadimplentes       → módulo "inadimplencia"
- *   - Mapa                → módulo "mapa"
- *   - Chamado             → módulo "delegacao"
- *   - Chamados Ativos     → módulo "delegacao", action "can_delete"
- *   - Abertura do Dia     → módulo "fechamento", action "can_read"
- *   - Produtos            → módulo "produtos"
- *   - Preços              → módulo "produtos"
- *   - Clientes            → módulo "clientes"
- *   - Bloco de Vale       → módulo "vales"
- *   - Usuários            → módulo "usuarios"
- *   - Configurações       → módulo "configuracoes"
- *
- * Itens exclusivos de superuser:
- *   - Admin
- *   - Permissões
- *
- * Plano futuro (quando fechamento do dia estiver pronto):
- *   Agrupar "Abertura do Dia" e "Fechamento do Dia" sob o grupo
- *   "Operação Diária" no sidebar.
+ * Plano futuro: agrupar "Abertura do Dia" e "Fechamento do Dia"
+ * sob o grupo "Operação Diária" no sidebar.
  */
 
 import {
@@ -41,6 +16,7 @@ import {
   Home,
   ListChecks,
   MapPin,
+  Moon,
   Package,
   PhoneCall,
   Settings,
@@ -108,6 +84,12 @@ const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> 
     icon: Sunrise,
     title: "Abertura do Dia",
     path: "/abertura-dia",
+  },
+  {
+    module: "fechamento",
+    icon: Moon,
+    title: "Fechamento do Dia",
+    path: "/fechamento-dia",
   },
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
