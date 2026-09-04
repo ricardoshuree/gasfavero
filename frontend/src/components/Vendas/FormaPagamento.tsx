@@ -1,7 +1,9 @@
-// [mcp-local harness] feature: cartao-debito-credito | plano: 85b9b898 | 2026-09-04 13:51:32
-// Adiciona botão cartao_credito ao lado de cartao_debito, mantendo o ícone CreditCard para os dois
+// [mcp-local harness] feature: vale-data-checkbox | plano: 09ddcd30 | 2026-09-04 14:15:50
+// Checkbox 5º dia útil do mês seguinte substitui o texto explicativo — marcado oculta o campo de data, desmarcado mostra para edição manual
+import { useState } from "react"
 import { Banknote, CreditCard, QrCode, Receipt } from "lucide-react"
 
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
@@ -42,6 +44,19 @@ export function FormaPagamento({
   dataPagamentoVale,
   onDataPagamentoValeChange,
 }: FormaPagamentoProps) {
+  // Marcado por padrão: o comportamento mais comum é usar o 5º dia útil.
+  // Quando o usuário desmarca, o campo de data aparece para edição manual.
+  // Quando marcado, a data é limpa — o backend calcula automaticamente.
+  const [quintoUtil, setQuintoUtil] = useState(true)
+
+  const handleQuintoUtilChange = (checked: boolean) => {
+    setQuintoUtil(checked)
+    if (checked) {
+      // Limpa a data para o backend calcular o 5º dia útil
+      onDataPagamentoValeChange("")
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium">Forma de Pagamento</p>
@@ -69,30 +84,47 @@ export function FormaPagamento({
       </div>
 
       {value === "vale" && (
-        <div className="grid grid-cols-2 gap-4 rounded-lg border p-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="vale-numero">Número do vale</Label>
-            <Input
-              id="vale-numero"
-              type="number"
-              inputMode="numeric"
-              value={valeNumero}
-              onChange={(e) => onValeNumeroChange(e.target.value)}
-              placeholder="Ex: 123"
-            />
+        <div className="flex flex-col gap-4 rounded-lg border p-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="vale-numero">Número do vale</Label>
+              <Input
+                id="vale-numero"
+                type="number"
+                inputMode="numeric"
+                value={valeNumero}
+                onChange={(e) => onValeNumeroChange(e.target.value)}
+                placeholder="Ex: 123"
+              />
+            </div>
+
+            {!quintoUtil && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="data-pagamento-vale">Data a ser pago</Label>
+                <Input
+                  id="data-pagamento-vale"
+                  type="date"
+                  value={dataPagamentoVale}
+                  onChange={(e) => onDataPagamentoValeChange(e.target.value)}
+                />
+              </div>
+            )}
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="data-pagamento-vale">Data a ser pago</Label>
-            <Input
-              id="data-pagamento-vale"
-              type="date"
-              value={dataPagamentoVale}
-              onChange={(e) => onDataPagamentoValeChange(e.target.value)}
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="quinto-util"
+              checked={quintoUtil}
+              onCheckedChange={(checked) =>
+                handleQuintoUtilChange(checked === true)
+              }
             />
-            <p className="text-xs text-muted-foreground">
-              Se deixar em branco, calcula o 5º dia útil do mês seguinte
-              automaticamente.
-            </p>
+            <label
+              htmlFor="quinto-util"
+              className="text-sm text-muted-foreground cursor-pointer select-none"
+            >
+              5º dia útil do mês seguinte
+            </label>
           </div>
         </div>
       )}
