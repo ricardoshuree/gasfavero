@@ -470,7 +470,7 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
         "total_credito, total_fiado, contagem_especie, total_contado, total_esperado, "
         "diferenca, justificativa, fechado_por_id, created_at) "
         "VALUES (:id, :abertura_id, :motorista_id, :data, :td, :tp, :tdb, :tcr, :tf, "
-        ":contagem::json, :total_contado, :total_esperado, :diferenca, :justificativa, :fechado_por_id, NOW())"
+        "CAST(:contagem AS json), :total_contado, :total_esperado, :diferenca, :justificativa, :fechado_por_id, NOW())"
     ), {
         "id": fechamento_id,
         "abertura_id": abertura_id,
