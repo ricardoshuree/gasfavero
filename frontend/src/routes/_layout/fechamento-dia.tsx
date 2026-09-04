@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fechamento-dia | plano: e9667526 | 2026-09-04 15:44:26
-// Tela de fechamento do dia com 4 abas: resumo, vendas, conferência de espécie e diferenças
+// [mcp-local harness] feature: carga-produtos-abertura-fechamento | plano: b7702599 | 2026-09-04 18:22:27
+// Adiciona aba Produtos no modal de fechamento com retorno de botijões — informativo, não bloqueia
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
@@ -7,6 +7,7 @@ import {
   Banknote,
   CheckCircle,
   CreditCard,
+  Package,
   QrCode,
   Receipt,
   XCircle,
@@ -79,6 +80,12 @@ interface StatusMotorista {
   fundo_troco: number | null
 }
 
+interface CargaProduto {
+  produto_id: string
+  produto_nome: string
+  carregado: number
+}
+
 interface Resumo {
   abertura_id: string
   fundo_troco: number
@@ -90,6 +97,7 @@ interface Resumo {
   total_esperado: number
   total_geral: number
   ja_fechado: boolean
+  carga_produtos: CargaProduto[]
   vendas: { id: string; cliente_nome: string; forma_pagamento: string; valor_pago: number }[]
 }
 
@@ -107,8 +115,9 @@ function ModalFechamento({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [aba, setAba] = useState<"resumo" | "vendas" | "especie" | "diferenca">("resumo")
+  const [aba, setAba] = useState<"resumo" | "vendas" | "produtos" | "especie" | "diferenca">("resumo")
   const [contagem, setContagem] = useState<Record<number, number>>({})
+  const [retorno, setRetorno] = useState<Record<string, number>>({})
   const [justificativa, setJustificativa] = useState("")
   const [loading, setLoading] = useState(false)
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -119,6 +128,7 @@ function ModalFechamento({
   )
   const diferenca = totalContado - resumo.total_esperado
   const temDiferenca = Math.abs(diferenca) >= 0.01
+  const temCarga = resumo.carga_produtos?.length > 0
 
   const handleFechar = async () => {
     if (temDiferenca && !justificativa.trim()) {
@@ -126,6 +136,9 @@ function ModalFechamento({
     }
     setLoading(true)
     try {
+      const retornoPayload = Object.entries(retorno)
+        .map(([produto_id, quantidade_retorno]) => ({ produto_id, quantidade_retorno }))
+
       await apiFetch("/fechamento/fechar", {
         method: "POST",
         body: JSON.stringify({
@@ -135,6 +148,7 @@ function ModalFechamento({
           contagem_especie: contagem,
           total_contado: totalContado,
           justificativa: justificativa || null,
+          retorno_produtos: retornoPayload,
         }),
       })
       showSuccessToast(`Fechamento de ${motorista.motorista_nome} confirmado`)
@@ -147,10 +161,15 @@ function ModalFechamento({
     }
   }
 
-  const abas = ["resumo", "vendas", "especie", "diferenca"] as const
-  const labelAba: Record<typeof abas[number], string> = {
+  type AbaType = "resumo" | "vendas" | "produtos" | "especie" | "diferenca"
+  const abas: AbaType[] = temCarga
+    ? ["resumo", "vendas", "produtos", "especie", "diferenca"]
+    : ["resumo", "vendas", "especie", "diferenca"]
+
+  const labelAba: Record<AbaType, string> = {
     resumo: "Resumo",
     vendas: `Vendas (${resumo.vendas.length})`,
+    produtos: "Produtos",
     especie: "Conferência",
     diferenca: "Diferenças",
   }
@@ -171,7 +190,7 @@ function ModalFechamento({
         </DialogHeader>
 
         {/* Abas */}
-        <div className="flex gap-1 border-b">
+        <div className="flex gap-1 border-b overflow-x-auto">
           {abas.map((a) => (
             <button
               key={a}
@@ -250,6 +269,62 @@ function ModalFechamento({
                 </tbody>
               </table>
             )}
+          </div>
+        )}
+
+        {/* Aba Produtos */}
+        {aba === "produtos" && (
+          <div className="grid gap-3">
+            <p className="text-xs text-muted-foreground">
+              Informe quantos botijões de cada produto voltaram no caminhão. O sistema calcula o vendido automaticamente.
+            </p>
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-xs text-muted-foreground bg-muted/30">
+                    <th className="px-3 py-2 text-left font-medium">Produto</th>
+                    <th className="px-3 py-2 text-center font-medium">Saiu</th>
+                    <th className="px-3 py-2 text-center font-medium">Retornou</th>
+                    <th className="px-3 py-2 text-center font-medium">Vendido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumo.carga_produtos.map((c) => {
+                    const ret = retorno[c.produto_id] ?? 0
+                    const vendido = Math.max(0, c.carregado - ret)
+                    return (
+                      <tr key={c.produto_id} className="border-b last:border-0">
+                        <td className="px-3 py-2 font-medium">{c.produto_nome}</td>
+                        <td className="px-3 py-2 text-center">{c.carregado}</td>
+                        <td className="px-3 py-2 text-center">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={c.carregado}
+                            value={retorno[c.produto_id] ?? ""}
+                            placeholder="0"
+                            onChange={(e) =>
+                              setRetorno((prev) => ({
+                                ...prev,
+                                [c.produto_id]: Number(e.target.value) || 0,
+                              }))
+                            }
+                            className="w-20 h-7 text-center mx-auto"
+                          />
+                        </td>
+                        <td className={`px-3 py-2 text-center font-semibold ${vendido > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                          {vendido}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Package className="h-3 w-3" />
+              Informativo — não bloqueia o fechamento
+            </p>
           </div>
         )}
 
@@ -412,7 +487,6 @@ function FechamentoDia() {
         </p>
       </div>
 
-      {/* Cards de resumo */}
       <div className="flex gap-4 flex-wrap">
         <div className="rounded-lg border p-4 min-w-[160px]">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Data</p>
@@ -426,7 +500,6 @@ function FechamentoDia() {
         </div>
       </div>
 
-      {/* Lista de motoristas */}
       {isLoading ? (
         <div className="grid gap-3">
           {[1, 2, 3].map((i) => (
@@ -492,4 +565,3 @@ function FechamentoDia() {
     </div>
   )
 }
-

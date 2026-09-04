@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: abertura-enter | plano: 08383e98 | 2026-09-04 15:58:42
-// Adiciona onKeyDown Enter no input de fundo de troco e nos campos de email/senha/novo fundo da edição
+// [mcp-local harness] feature: carga-produtos-abertura-fechamento | plano: b7702599 | 2026-09-04 18:20:56
+// Adiciona grid de produtos no modal de abertura do dia
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
@@ -68,6 +68,11 @@ interface StatusMotorista {
   aberto_em: string | null
 }
 
+interface Produto {
+  id: string
+  title: string
+}
+
 // ---------------------------------------------------------------------------
 // Modal de abertura
 // ---------------------------------------------------------------------------
@@ -81,20 +86,33 @@ function ModalAbertura({
   onSuccess: () => void
 }) {
   const [fundo, setFundo] = useState("")
+  const [quantidades, setQuantidades] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
   const { showSuccessToast, showErrorToast } = useCustomToast()
+
+  // Busca lista de produtos
+  const { data: produtosData } = useQuery({
+    queryKey: ["precos"],
+    queryFn: () => apiFetch("/precos/"),
+  })
+  const produtos: Produto[] = produtosData?.data ?? []
 
   const handleConfirmar = async () => {
     const valor = parseFloat(fundo.replace(",", "."))
     if (!valor || valor <= 0) return showErrorToast("Informe um valor válido")
     setLoading(true)
     try {
+      const produtosPayload = Object.entries(quantidades)
+        .filter(([, qtd]) => qtd > 0)
+        .map(([produto_id, quantidade]) => ({ produto_id, quantidade }))
+
       await apiFetch("/fechamento/abertura", {
         method: "POST",
         body: JSON.stringify({
           motorista_id: motorista.motorista_id,
           fundo_troco: valor,
           data: hojeISO(),
+          produtos: produtosPayload,
         }),
       })
       showSuccessToast(`Abertura de ${motorista.motorista_nome} confirmada`)
@@ -109,22 +127,53 @@ function ModalAbertura({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Abertura do dia — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-3 py-2">
-          <Label htmlFor="fundo">Fundo de troco (R$)</Label>
-          <Input
-            id="fundo"
-            type="text"
-            inputMode="decimal"
-            placeholder="Ex: 200,00"
-            value={fundo}
-            onChange={(e) => setFundo(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleConfirmar()}
-            autoFocus
-          />
+        <div className="grid gap-4 py-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="fundo">Fundo de troco (R$)</Label>
+            <Input
+              id="fundo"
+              type="text"
+              inputMode="decimal"
+              placeholder="Ex: 200,00"
+              value={fundo}
+              onChange={(e) => setFundo(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleConfirmar()}
+              autoFocus
+            />
+          </div>
+
+          {produtos.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Carga de produtos (opcional)</Label>
+              <div className="rounded-lg border divide-y">
+                {produtos.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm">{p.title}</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={quantidades[p.id] || ""}
+                      placeholder="0"
+                      onChange={(e) =>
+                        setQuantidades((prev) => ({
+                          ...prev,
+                          [p.id]: Number(e.target.value) || 0,
+                        }))
+                      }
+                      className="w-20 h-7 text-right"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Informe a quantidade de cada produto carregado no caminhão.
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading}>
@@ -299,7 +348,7 @@ function AberturaDia() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Abertura do Dia</h1>
         <p className="text-muted-foreground">
-          Despache os motoristas e registre o fundo de troco de cada um.
+          Despache os motoristas e registre o fundo de troco e a carga de produtos.
         </p>
       </div>
 

@@ -207,6 +207,16 @@ def criar_abertura(*, session: SessionDep, current_user: CurrentUser, body: dict
         credito_id=conta_motorista_id, abertura_id=abertura_id,
         criado_por_id=str(current_user.id))
 
+    # Salva carga de produtos (informativo)
+    produtos = body.get("produtos", [])  # [{produto_id, quantidade}]
+    for p in produtos:
+        if p.get("quantidade", 0) > 0:
+            conn.execute(sa.text(
+                "INSERT INTO abertura_dia_produto (id, abertura_id, produto_id, quantidade) "
+                "VALUES (:id, :abertura_id, :produto_id, :quantidade) ON CONFLICT DO NOTHING"
+            ), {"id": str(__import__("uuid").uuid4()), "abertura_id": abertura_id,
+                "produto_id": p["produto_id"], "quantidade": p["quantidade"]})
+
     session.commit()
     return {"abertura_id": abertura_id, "conta_motorista_id": conta_motorista_id}
 
@@ -348,8 +358,20 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
         "ORDER BY v.created_at"
     ), {"mid": motorista_id, "data": data}).fetchall()
 
+    # Carga de produtos da abertura
+    carga = conn.execute(sa.text(
+        "SELECT adp.produto_id, i.title, adp.quantidade "
+        "FROM abertura_dia_produto adp "
+        "JOIN item i ON i.id = adp.produto_id "
+        "WHERE adp.abertura_id = :abertura_id"
+    ), {"abertura_id": str(abertura[0])}).fetchall()
+
     return {
         "abertura_id": str(abertura[0]),
+        "carga_produtos": [
+            {"produto_id": str(c[0]), "produto_nome": c[1], "carregado": c[2]}
+            for c in carga
+        ],
         "fundo_troco": float(fundo_troco),
         "total_dinheiro": float(total_dinheiro),
         "total_pix": float(total_pix),
@@ -514,6 +536,16 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
                 valor=diferenca,
                 debito_id=conta_motorista_id, credito_id=CONTA_SOBRA_ID,
                 abertura_id=abertura_id, criado_por_id=str(current_user.id))
+
+    # Salva retorno de produtos (informativo)
+    retornos = body.get("retorno_produtos", [])  # [{produto_id, quantidade_retorno}]
+    for r in retornos:
+        if r.get("quantidade_retorno", 0) >= 0:
+            conn.execute(sa.text(
+                "INSERT INTO fechamento_dia_produto (id, fechamento_id, produto_id, quantidade_retorno) "
+                "VALUES (:id, :fechamento_id, :produto_id, :quantidade_retorno) ON CONFLICT DO NOTHING"
+            ), {"id": str(__import__("uuid").uuid4()), "fechamento_id": fechamento_id,
+                "produto_id": r["produto_id"], "quantidade_retorno": r["quantidade_retorno"]})
 
     session.commit()
     return {
