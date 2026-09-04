@@ -391,7 +391,7 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
     abertura_id = body.get("abertura_id")
     contagem = body.get("contagem_especie", {})
     total_contado = Decimal(str(body.get("total_contado", 0)))
-    justificativa = body.get("justificativa", "").strip()
+    justificativa = (body.get("justificativa") or "").strip()
 
     if not all([motorista_id, data_str, abertura_id]):
         raise HTTPException(status_code=400, detail="motorista_id, data e abertura_id sao obrigatorios")
