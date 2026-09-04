@@ -25,6 +25,7 @@ Regras:
   - Fechamento atrasado e permitido
 """
 import uuid
+import json
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -406,8 +407,6 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
         raise HTTPException(status_code=400, detail="Este dia ja foi fechado para este motorista")
 
     # Busca abertura e totais
-    resumo = read_resumo_fechamento.__wrapped__ if hasattr(read_resumo_fechamento, "__wrapped__") else None
-
     abertura = conn.execute(sa.text(
         "SELECT id, fundo_troco FROM abertura_dia WHERE id = :id AND motorista_id = :mid AND data = :data"
     ), {"id": abertura_id, "mid": motorista_id, "data": data_fechamento}).fetchone()
@@ -460,7 +459,7 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
         "tdb": t["cartao_debito"],
         "tcr": t["cartao_credito"],
         "tf": t["vale"],
-        "contagem": str(contagem).replace("'", '"'),
+        "contagem": json.dumps({str(k): v for k, v in contagem.items()}),
         "total_contado": total_contado,
         "total_esperado": total_esperado,
         "diferenca": diferenca,
@@ -523,3 +522,4 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
         "total_contado": float(total_contado),
         "diferenca": float(diferenca),
     }
+
