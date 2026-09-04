@@ -209,7 +209,7 @@ function ModalFechamento({
           ))}
         </div>
 
-        {/* Aba Resumo */}
+        <div className="min-h-[360px]">
         {aba === "resumo" && (
           <div className="grid gap-3">
             <div className="grid grid-cols-2 gap-3">
@@ -429,6 +429,7 @@ function ModalFechamento({
           </div>
         )}
 
+        </div>
         <DialogFooter className="mt-2">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
@@ -565,3 +566,4 @@ function FechamentoDia() {
     </div>
   )
 }
+
