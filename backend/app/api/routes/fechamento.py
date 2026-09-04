@@ -1,32 +1,11 @@
-# [mcp-local harness] feature: fechamento-dia | plano: e9667526 | 2026-09-04 15:43:14
-# Adiciona endpoints de resumo e fechamento do dia com lançamentos contábeis completos
+# [mcp-local harness] feature: dashboard-saldos | plano: b1e65fff | 2026-09-04 18:55:42
+# Arquivo fechamento.py completo e limpo com endpoint dashboard de saldos
 """
-Rotas de Fechamento Diario (abertura e fechamento do dia por motorista).
-
-Fluxo da abertura:
-  1. Gerente seleciona motorista e informa fundo de troco
-  2. Backend cria AberturaDia + conta de Caixa em Transito do motorista
-     (se ainda nao existir) + lancamento contabil:
-     D: Conta Mestre (1000) / C: Caixa em Transito do motorista (110x)
-  3. Edicao posterior (com senha do gerente): lancamento de ajuste
-
-Fluxo do fechamento:
-  1. GET /fechamento/resumo/{motorista_id}/{data} -- calcula totais das vendas
-  2. Gerente informa contagem fisica de cedulas/moedas
-  3. POST /fechamento/fechar -- confirma, gera lancamentos contabeis
-     - D Cx Transito / C Conta Mestre (dinheiro + pix)
-     - D Cx Transito / C Maquininha (debito + credito)
-     - Quebra ou Sobra se houver diferenca
-
-Regras:
-  - Uma abertura e um fechamento por motorista por dia
-  - Fechamento exige abertura do dia
-  - Somente gerente (modulo 'fechamento', can_create)
-  - Fechamento atrasado e permitido
+Rotas de Fechamento Diario (abertura, fechamento e dashboard de saldos).
 """
 import uuid
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -40,12 +19,23 @@ router = APIRouter(prefix="/fechamento", tags=["fechamento"])
 
 MODULE = "fechamento"
 
-CONTA_MESTRE_ID    = "10000000-0000-0000-0000-000000000001"
-CONTA_TRANSITO_ID  = "11000000-0000-0000-0000-000000000001"
-CONTA_FIADO_ID     = "12000000-0000-0000-0000-000000000001"
+CONTA_MESTRE_ID     = "10000000-0000-0000-0000-000000000001"
+CONTA_TRANSITO_ID   = "11000000-0000-0000-0000-000000000001"
+CONTA_FIADO_ID      = "12000000-0000-0000-0000-000000000001"
 CONTA_MAQUININHA_ID = "13000000-0000-0000-0000-000000000001"
-CONTA_QUEBRA_ID    = "31000000-0000-0000-0000-000000000001"
-CONTA_SOBRA_ID     = "32000000-0000-0000-0000-000000000001"
+CONTA_QUEBRA_ID     = "31000000-0000-0000-0000-000000000001"
+CONTA_SOBRA_ID      = "32000000-0000-0000-0000-000000000001"
+
+SQL_MOTORISTAS = (
+    'SELECT u.id, u.full_name, u.email '
+    'FROM "user" u '
+    'JOIN user_role ur ON ur.user_id = u.id '
+    'JOIN role r ON r.id = ur.role_id '
+    "WHERE LOWER(r.name) = 'motorista' AND u.is_active = true "
+    'ORDER BY u.full_name'
+)
+
+SQL_USER_BY_ID = 'SELECT full_name, email FROM "user" WHERE id = :uid'
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +60,7 @@ def _get_or_create_conta_motorista(session: SessionDep, motorista_id: str) -> st
     ).scalar()
     proximo_numero = str((max_num or 1100) + 1)
 
-    motorista = conn.execute(
-        sa.text("SELECT full_name, email FROM \"user\" WHERE id = :uid"),
-        {"uid": motorista_id}
-    ).fetchone()
+    motorista = conn.execute(sa.text(SQL_USER_BY_ID), {"uid": motorista_id}).fetchone()
     nome = motorista[0] or motorista[1] if motorista else "Motorista"
 
     nova_conta_id = str(uuid.uuid4())
@@ -123,8 +110,19 @@ def _criar_lancamento(
     )
 
 
+def _saldo_conta(conn: Any, conta_id: str, inicio: date, fim: date) -> float:
+    row = conn.execute(sa.text(
+        "SELECT "
+        "  COALESCE(SUM(CASE WHEN credito_id = :cid THEN valor ELSE 0 END), 0) - "
+        "  COALESCE(SUM(CASE WHEN debito_id = :cid THEN valor ELSE 0 END), 0) "
+        "FROM lancamento_contabil WHERE data >= :inicio AND data <= :fim "
+        "AND (credito_id = :cid OR debito_id = :cid)"
+    ), {"cid": conta_id, "inicio": inicio, "fim": fim}).scalar()
+    return float(row or 0)
+
+
 # ---------------------------------------------------------------------------
-# Endpoints de status / abertura
+# Status / Abertura
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -132,16 +130,8 @@ def _criar_lancamento(
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def read_status_abertura(session: SessionDep, data: date) -> Any:
-    """Status de abertura e fechamento de cada motorista na data."""
     conn = session.connection()
-    motoristas = conn.execute(sa.text(
-        "SELECT u.id, u.full_name, u.email "
-        "FROM \"user\" u "
-        "JOIN user_role ur ON ur.user_id = u.id "
-        "JOIN role r ON r.id = ur.role_id "
-        "WHERE LOWER(r.name) = 'motorista' AND u.is_active = true "
-        "ORDER BY u.full_name"
-    )).fetchall()
+    motoristas = conn.execute(sa.text(SQL_MOTORISTAS)).fetchall()
 
     resultado = []
     for m in motoristas:
@@ -154,8 +144,7 @@ def read_status_abertura(session: SessionDep, data: date) -> Any:
         ), {"mid": motorista_id, "data": data}).fetchone()
 
         fechamento = conn.execute(sa.text(
-            "SELECT id FROM fechamento_dia "
-            "WHERE motorista_id = :mid AND data = :data"
+            "SELECT id FROM fechamento_dia WHERE motorista_id = :mid AND data = :data"
         ), {"mid": motorista_id, "data": data}).fetchone() if abertura else None
 
         resultado.append({
@@ -207,14 +196,13 @@ def criar_abertura(*, session: SessionDep, current_user: CurrentUser, body: dict
         credito_id=conta_motorista_id, abertura_id=abertura_id,
         criado_por_id=str(current_user.id))
 
-    # Salva carga de produtos (informativo)
-    produtos = body.get("produtos", [])  # [{produto_id, quantidade}]
+    produtos = body.get("produtos", [])
     for p in produtos:
         if p.get("quantidade", 0) > 0:
             conn.execute(sa.text(
                 "INSERT INTO abertura_dia_produto (id, abertura_id, produto_id, quantidade) "
                 "VALUES (:id, :abertura_id, :produto_id, :quantidade) ON CONFLICT DO NOTHING"
-            ), {"id": str(__import__("uuid").uuid4()), "abertura_id": abertura_id,
+            ), {"id": str(uuid.uuid4()), "abertura_id": abertura_id,
                 "produto_id": p["produto_id"], "quantidade": p["quantidade"]})
 
     session.commit()
@@ -277,13 +265,14 @@ def verificar_senha_gerente(*, session: SessionDep, body: dict) -> Any:
         raise HTTPException(status_code=400, detail="Email e senha sao obrigatorios")
 
     conn = session.connection()
-    gerente = conn.execute(sa.text(
-        "SELECT u.id, u.hashed_password, u.is_active "
-        "FROM \"user\" u "
-        "JOIN user_role ur ON ur.user_id = u.id "
-        "JOIN role r ON r.id = ur.role_id "
+    sql_gerente = (
+        'SELECT u.id, u.hashed_password, u.is_active '
+        'FROM "user" u '
+        'JOIN user_role ur ON ur.user_id = u.id '
+        'JOIN role r ON r.id = ur.role_id '
         "WHERE LOWER(u.email) = :email AND LOWER(r.name) IN ('gerente', 'admin') LIMIT 1"
-    ), {"email": email}).fetchone()
+    )
+    gerente = conn.execute(sa.text(sql_gerente), {"email": email}).fetchone()
 
     if not gerente:
         raise HTTPException(status_code=403, detail="Usuario nao encontrado ou sem permissao de gerente")
@@ -296,7 +285,7 @@ def verificar_senha_gerente(*, session: SessionDep, body: dict) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Endpoints de fechamento
+# Resumo e Fechamento
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -304,27 +293,21 @@ def verificar_senha_gerente(*, session: SessionDep, body: dict) -> Any:
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -> Any:
-    """Calcula os totais das vendas do motorista no dia para exibir na tela de fechamento."""
     conn = session.connection()
 
-    # Verifica abertura
     abertura = conn.execute(sa.text(
         "SELECT id, fundo_troco FROM abertura_dia WHERE motorista_id = :mid AND data = :data"
     ), {"mid": motorista_id, "data": data}).fetchone()
     if not abertura:
         raise HTTPException(status_code=400, detail="Nao ha abertura registrada para este motorista nesta data")
 
-    # Verifica se ja foi fechado
     fechado = conn.execute(sa.text(
         "SELECT id FROM fechamento_dia WHERE motorista_id = :mid AND data = :data"
     ), {"mid": motorista_id, "data": data}).fetchone()
 
-    # Totais por forma de pagamento
     totais = conn.execute(sa.text(
-        "SELECT forma_pagamento, SUM(valor_pago) "
-        "FROM venda "
-        "WHERE motorista_id = :mid AND data_venda = :data "
-        "GROUP BY forma_pagamento"
+        "SELECT forma_pagamento, SUM(valor_pago) FROM venda "
+        "WHERE motorista_id = :mid AND data_venda = :data GROUP BY forma_pagamento"
     ), {"mid": motorista_id, "data": data}).fetchall()
 
     total_dinheiro = Decimal("0")
@@ -349,20 +332,15 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
     fundo_troco = Decimal(str(abertura[1]))
     total_esperado = fundo_troco + total_dinheiro
 
-    # Vendas detalhadas do dia
     vendas = conn.execute(sa.text(
         "SELECT v.id, c.nome, v.forma_pagamento, v.valor_pago, v.data_venda "
-        "FROM venda v "
-        "JOIN cliente c ON c.id = v.cliente_id "
-        "WHERE v.motorista_id = :mid AND v.data_venda = :data "
-        "ORDER BY v.created_at"
+        "FROM venda v JOIN cliente c ON c.id = v.cliente_id "
+        "WHERE v.motorista_id = :mid AND v.data_venda = :data ORDER BY v.created_at"
     ), {"mid": motorista_id, "data": data}).fetchall()
 
-    # Carga de produtos da abertura
     carga = conn.execute(sa.text(
         "SELECT adp.produto_id, i.title, adp.quantidade "
-        "FROM abertura_dia_produto adp "
-        "JOIN item i ON i.id = adp.produto_id "
+        "FROM abertura_dia_produto adp JOIN item i ON i.id = adp.produto_id "
         "WHERE adp.abertura_id = :abertura_id"
     ), {"abertura_id": str(abertura[0])}).fetchall()
 
@@ -399,15 +377,6 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
     dependencies=[Depends(require_module_permission(MODULE, action="create"))],
 )
 def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) -> Any:
-    """Confirma o fechamento do dia para um motorista.
-    Body: {
-        motorista_id, data, abertura_id,
-        contagem_especie: {100: 2, 50: 1, ...},
-        total_contado,
-        justificativa?  (obrigatoria se houver diferenca)
-    }
-    Gera lancamentos contabeis e registra o fechamento.
-    """
     motorista_id = body.get("motorista_id")
     data_str = body.get("data")
     abertura_id = body.get("abertura_id")
@@ -421,21 +390,18 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
     data_fechamento = date.fromisoformat(data_str)
     conn = session.connection()
 
-    # Verifica se ja foi fechado
     ja_fechado = conn.execute(sa.text(
         "SELECT id FROM fechamento_dia WHERE motorista_id = :mid AND data = :data"
     ), {"mid": motorista_id, "data": data_fechamento}).fetchone()
     if ja_fechado:
         raise HTTPException(status_code=400, detail="Este dia ja foi fechado para este motorista")
 
-    # Busca abertura e totais
     abertura = conn.execute(sa.text(
         "SELECT id, fundo_troco FROM abertura_dia WHERE id = :id AND motorista_id = :mid AND data = :data"
     ), {"id": abertura_id, "mid": motorista_id, "data": data_fechamento}).fetchone()
     if not abertura:
         raise HTTPException(status_code=404, detail="Abertura nao encontrada")
 
-    # Recalcula totais das vendas
     totais = conn.execute(sa.text(
         "SELECT forma_pagamento, SUM(valor_pago) FROM venda "
         "WHERE motorista_id = :mid AND data_venda = :data GROUP BY forma_pagamento"
@@ -454,15 +420,13 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
     if abs(diferenca) >= Decimal("0.01") and not justificativa:
         raise HTTPException(status_code=400, detail="Justificativa obrigatoria quando ha diferenca de caixa")
 
-    # Busca conta do motorista
     conta_motorista = conn.execute(sa.text(
         "SELECT id FROM conta WHERE motorista_id = :mid"
     ), {"mid": motorista_id}).fetchone()
     if not conta_motorista:
-        raise HTTPException(status_code=400, detail="Conta do motorista nao encontrada. Verifique se a abertura foi feita corretamente.")
+        raise HTTPException(status_code=400, detail="Conta do motorista nao encontrada")
     conta_motorista_id = str(conta_motorista[0])
 
-    # Registra fechamento
     fechamento_id = str(uuid.uuid4())
     conn.execute(sa.text(
         "INSERT INTO fechamento_dia "
@@ -472,79 +436,60 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
         "VALUES (:id, :abertura_id, :motorista_id, :data, :td, :tp, :tdb, :tcr, :tf, "
         "CAST(:contagem AS json), :total_contado, :total_esperado, :diferenca, :justificativa, :fechado_por_id, NOW())"
     ), {
-        "id": fechamento_id,
-        "abertura_id": abertura_id,
-        "motorista_id": motorista_id,
-        "data": data_fechamento,
-        "td": t["dinheiro"],
-        "tp": t["pix"],
-        "tdb": t["cartao_debito"],
-        "tcr": t["cartao_credito"],
-        "tf": t["vale"],
+        "id": fechamento_id, "abertura_id": abertura_id, "motorista_id": motorista_id,
+        "data": data_fechamento, "td": t["dinheiro"], "tp": t["pix"],
+        "tdb": t["cartao_debito"], "tcr": t["cartao_credito"], "tf": t["vale"],
         "contagem": json.dumps({str(k): v for k, v in contagem.items()}),
-        "total_contado": total_contado,
-        "total_esperado": total_esperado,
-        "diferenca": diferenca,
-        "justificativa": justificativa or None,
+        "total_contado": total_contado, "total_esperado": total_esperado,
+        "diferenca": diferenca, "justificativa": justificativa or None,
         "fechado_por_id": str(current_user.id),
     })
 
-    # Lancamentos contabeis
-    # 1. Dinheiro + fundo de troco: D Cx Transito / C Conta Mestre
     if total_contado > 0:
         _criar_lancamento(session, data=data_fechamento,
-            descricao="Fechamento - dinheiro fisico entregue",
-            valor=total_contado,
+            descricao="Fechamento - dinheiro fisico entregue", valor=total_contado,
             debito_id=conta_motorista_id, credito_id=CONTA_MESTRE_ID,
             abertura_id=abertura_id, criado_por_id=str(current_user.id))
 
-    # 2. Pix: D Cx Transito / C Conta Mestre
     if t["pix"] > 0:
         _criar_lancamento(session, data=data_fechamento,
-            descricao="Fechamento - Pix recebido",
-            valor=t["pix"],
+            descricao="Fechamento - Pix recebido", valor=t["pix"],
             debito_id=conta_motorista_id, credito_id=CONTA_MESTRE_ID,
             abertura_id=abertura_id, criado_por_id=str(current_user.id))
 
-    # 3. Cartao debito: D Cx Transito / C Maquininha
     if t["cartao_debito"] > 0:
         _criar_lancamento(session, data=data_fechamento,
-            descricao="Fechamento - cartao debito (maquininha)",
-            valor=t["cartao_debito"],
+            descricao="Fechamento - cartao debito (maquininha)", valor=t["cartao_debito"],
             debito_id=conta_motorista_id, credito_id=CONTA_MAQUININHA_ID,
             abertura_id=abertura_id, criado_por_id=str(current_user.id))
 
-    # 4. Cartao credito: D Cx Transito / C Maquininha
     if t["cartao_credito"] > 0:
         _criar_lancamento(session, data=data_fechamento,
-            descricao="Fechamento - cartao credito (maquininha)",
-            valor=t["cartao_credito"],
+            descricao="Fechamento - cartao credito (maquininha)", valor=t["cartao_credito"],
             debito_id=conta_motorista_id, credito_id=CONTA_MAQUININHA_ID,
             abertura_id=abertura_id, criado_por_id=str(current_user.id))
 
-    # 5. Diferenca (quebra ou sobra)
     if abs(diferenca) >= Decimal("0.01"):
-        if diferenca < 0:  # quebra: motorista entregou menos
+        if diferenca < 0:
             _criar_lancamento(session, data=data_fechamento,
-                descricao=f"Quebra de caixa - {justificativa[:100] if justificativa else 'sem justificativa'}",
-                valor=abs(diferenca),
-                debito_id=CONTA_QUEBRA_ID, credito_id=conta_motorista_id,
-                abertura_id=abertura_id, criado_por_id=str(current_user.id))
-        else:  # sobra: motorista entregou mais
+                descricao=f"Quebra de caixa - {justificativa[:100]}",
+                valor=abs(diferenca), debito_id=CONTA_QUEBRA_ID,
+                credito_id=conta_motorista_id, abertura_id=abertura_id,
+                criado_por_id=str(current_user.id))
+        else:
             _criar_lancamento(session, data=data_fechamento,
-                descricao=f"Sobra de caixa - {justificativa[:100] if justificativa else 'sem justificativa'}",
-                valor=diferenca,
-                debito_id=conta_motorista_id, credito_id=CONTA_SOBRA_ID,
-                abertura_id=abertura_id, criado_por_id=str(current_user.id))
+                descricao=f"Sobra de caixa - {justificativa[:100]}",
+                valor=diferenca, debito_id=conta_motorista_id,
+                credito_id=CONTA_SOBRA_ID, abertura_id=abertura_id,
+                criado_por_id=str(current_user.id))
 
-    # Salva retorno de produtos (informativo)
-    retornos = body.get("retorno_produtos", [])  # [{produto_id, quantidade_retorno}]
+    retornos = body.get("retorno_produtos", [])
     for r in retornos:
         if r.get("quantidade_retorno", 0) >= 0:
             conn.execute(sa.text(
                 "INSERT INTO fechamento_dia_produto (id, fechamento_id, produto_id, quantidade_retorno) "
                 "VALUES (:id, :fechamento_id, :produto_id, :quantidade_retorno) ON CONFLICT DO NOTHING"
-            ), {"id": str(__import__("uuid").uuid4()), "fechamento_id": fechamento_id,
+            ), {"id": str(uuid.uuid4()), "fechamento_id": fechamento_id,
                 "produto_id": r["produto_id"], "quantidade_retorno": r["quantidade_retorno"]})
 
     session.commit()
@@ -555,3 +500,122 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
         "diferenca": float(diferenca),
     }
 
+
+# ---------------------------------------------------------------------------
+# Dashboard de saldos (Fase 4)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/dashboard",
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
+    """Dashboard de saldos das contas para o periodo informado.
+    periodo: hoje | semana | mes | ano (sempre o vigente)
+    """
+    hoje = date.today()
+
+    if periodo == "semana":
+        dow = (hoje.weekday() + 1) % 7
+        data_inicio = hoje - timedelta(days=dow)
+    elif periodo == "mes":
+        data_inicio = hoje.replace(day=1)
+    elif periodo == "ano":
+        data_inicio = hoje.replace(month=1, day=1)
+    else:
+        data_inicio = hoje
+
+    conn = session.connection()
+
+    saldo_mestre = _saldo_conta(conn, CONTA_MESTRE_ID, data_inicio, hoje)
+    saldo_fiado = abs(_saldo_conta(conn, CONTA_FIADO_ID, data_inicio, hoje))
+    saldo_maquininha = abs(_saldo_conta(conn, CONTA_MAQUININHA_ID, data_inicio, hoje))
+
+    contas_transito = conn.execute(sa.text(
+        "SELECT id, motorista_id FROM conta WHERE pai_id = :pai AND ativo = true"
+    ), {"pai": CONTA_TRANSITO_ID}).fetchall()
+
+    total_transito = 0.0
+    motoristas_saldo = []
+    ids_com_conta: set = set()
+
+    for ct in contas_transito:
+        s = _saldo_conta(conn, str(ct[0]), data_inicio, hoje)
+        total_transito += s
+        mid = str(ct[1])
+        ids_com_conta.add(mid)
+
+        motorista = conn.execute(sa.text(SQL_USER_BY_ID), {"uid": mid}).fetchone()
+        nome = motorista[0] or motorista[1] if motorista else "Motorista"
+
+        abertura = conn.execute(sa.text(
+            "SELECT id, fundo_troco FROM abertura_dia WHERE motorista_id = :mid AND data = :data"
+        ), {"mid": mid, "data": hoje}).fetchone()
+        fechamento = conn.execute(sa.text(
+            "SELECT id FROM fechamento_dia WHERE motorista_id = :mid AND data = :data"
+        ), {"mid": mid, "data": hoje}).fetchone()
+
+        status = "fechado" if fechamento else ("aberto" if abertura else "sem_abertura")
+        iniciais = "".join(p[0].upper() for p in nome.split()[:2])
+
+        motoristas_saldo.append({
+            "motorista_id": mid,
+            "motorista_nome": nome,
+            "iniciais": iniciais,
+            "status": status,
+            "fundo_troco": float(abertura[1]) if abertura else 0,
+            "saldo_transito": s,
+        })
+
+    todos_motoristas = conn.execute(sa.text(SQL_MOTORISTAS)).fetchall()
+    for tm in todos_motoristas:
+        mid = str(tm[0])
+        if mid in ids_com_conta:
+            continue
+        nome = tm[1] or tm[2]
+        iniciais = "".join(p[0].upper() for p in nome.split()[:2])
+        abertura = conn.execute(sa.text(
+            "SELECT id FROM abertura_dia WHERE motorista_id = :mid AND data = :data"
+        ), {"mid": mid, "data": hoje}).fetchone()
+        motoristas_saldo.append({
+            "motorista_id": mid,
+            "motorista_nome": nome,
+            "iniciais": iniciais,
+            "status": "aberto" if abertura else "sem_abertura",
+            "fundo_troco": 0,
+            "saldo_transito": 0.0,
+        })
+
+    motoristas_saldo.sort(key=lambda m: m["motorista_nome"])
+
+    lancamentos = conn.execute(sa.text(
+        "SELECT lc.descricao, cd.numero, cc.numero, lc.valor, lc.created_at "
+        "FROM lancamento_contabil lc "
+        "JOIN conta cd ON cd.id = lc.debito_id "
+        "JOIN conta cc ON cc.id = lc.credito_id "
+        "WHERE lc.data >= :inicio AND lc.data <= :fim "
+        "ORDER BY lc.created_at DESC LIMIT 15"
+    ), {"inicio": data_inicio, "fim": hoje}).fetchall()
+
+    return {
+        "periodo": periodo,
+        "data_inicio": data_inicio.isoformat(),
+        "data_fim": hoje.isoformat(),
+        "resumo": {
+            "saldo_mestre": saldo_mestre,
+            "total_transito": total_transito,
+            "total_fiado": saldo_fiado,
+            "total_maquininha": saldo_maquininha,
+        },
+        "motoristas": motoristas_saldo,
+        "lancamentos": [
+            {
+                "descricao": l[0],
+                "debito_numero": l[1],
+                "credito_numero": l[2],
+                "valor": float(l[3]),
+                "hora": l[4].strftime("%H:%M"),
+            }
+            for l in lancamentos
+        ],
+    }

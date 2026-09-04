@@ -20,6 +20,7 @@ import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutChamadoRouteImport } from './routes/_layout/chamado'
 import { Route as LayoutChamadosAtivosRouteImport } from './routes/_layout/chamados-ativos'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
+import { Route as LayoutDashboardSaldosRouteImport } from './routes/_layout/dashboard-saldos'
 import { Route as LayoutFechamentoDiaRouteImport } from './routes/_layout/fechamento-dia'
 import { Route as LayoutInadimplentesRouteImport } from './routes/_layout/inadimplentes'
 import { Route as LayoutLivroVendasRouteImport } from './routes/_layout/livro-vendas'
@@ -84,6 +85,11 @@ const LayoutChamadosAtivosRoute = LayoutChamadosAtivosRouteImport.update({
 const LayoutClientesRoute = LayoutClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutDashboardSaldosRoute = LayoutDashboardSaldosRouteImport.update({
+  id: '/dashboard-saldos',
+  path: '/dashboard-saldos',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutFechamentoDiaRoute = LayoutFechamentoDiaRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
+  '/dashboard-saldos': typeof LayoutDashboardSaldosRoute
   '/fechamento-dia': typeof LayoutFechamentoDiaRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
@@ -175,6 +182,7 @@ export interface FileRoutesByTo {
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
+  '/dashboard-saldos': typeof LayoutDashboardSaldosRoute
   '/fechamento-dia': typeof LayoutFechamentoDiaRoute
   '/inadimplentes': typeof LayoutInadimplentesRoute
   '/livro-vendas': typeof LayoutLivroVendasRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/_layout/chamado': typeof LayoutChamadoRoute
   '/_layout/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/_layout/clientes': typeof LayoutClientesRoute
+  '/_layout/dashboard-saldos': typeof LayoutDashboardSaldosRoute
   '/_layout/fechamento-dia': typeof LayoutFechamentoDiaRoute
   '/_layout/inadimplentes': typeof LayoutInadimplentesRoute
   '/_layout/livro-vendas': typeof LayoutLivroVendasRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/chamado'
     | '/chamados-ativos'
     | '/clientes'
+    | '/dashboard-saldos'
     | '/fechamento-dia'
     | '/inadimplentes'
     | '/livro-vendas'
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/chamado'
     | '/chamados-ativos'
     | '/clientes'
+    | '/dashboard-saldos'
     | '/fechamento-dia'
     | '/inadimplentes'
     | '/livro-vendas'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/_layout/chamado'
     | '/_layout/chamados-ativos'
     | '/_layout/clientes'
+    | '/_layout/dashboard-saldos'
     | '/_layout/fechamento-dia'
     | '/_layout/inadimplentes'
     | '/_layout/livro-vendas'
@@ -373,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutClientesRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/dashboard-saldos': {
+      id: '/_layout/dashboard-saldos'
+      path: '/dashboard-saldos'
+      fullPath: '/dashboard-saldos'
+      preLoaderRoute: typeof LayoutDashboardSaldosRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/fechamento-dia': {
       id: '/_layout/fechamento-dia'
       path: '/fechamento-dia'
@@ -459,6 +478,7 @@ interface LayoutRouteChildren {
   LayoutChamadoRoute: typeof LayoutChamadoRoute
   LayoutChamadosAtivosRoute: typeof LayoutChamadosAtivosRoute
   LayoutClientesRoute: typeof LayoutClientesRoute
+  LayoutDashboardSaldosRoute: typeof LayoutDashboardSaldosRoute
   LayoutFechamentoDiaRoute: typeof LayoutFechamentoDiaRoute
   LayoutInadimplentesRoute: typeof LayoutInadimplentesRoute
   LayoutLivroVendasRoute: typeof LayoutLivroVendasRoute
@@ -479,6 +499,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutChamadoRoute: LayoutChamadoRoute,
   LayoutChamadosAtivosRoute: LayoutChamadosAtivosRoute,
   LayoutClientesRoute: LayoutClientesRoute,
+  LayoutDashboardSaldosRoute: LayoutDashboardSaldosRoute,
   LayoutFechamentoDiaRoute: LayoutFechamentoDiaRoute,
   LayoutInadimplentesRoute: LayoutInadimplentesRoute,
   LayoutLivroVendasRoute: LayoutLivroVendasRoute,
