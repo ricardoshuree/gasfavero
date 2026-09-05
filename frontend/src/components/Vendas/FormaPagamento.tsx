@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: vale-data-checkbox | plano: 09ddcd30 | 2026-09-04 14:15:50
+﻿// [mcp-local harness] feature: vale-data-checkbox | plano: 09ddcd30 | 2026-09-04 14:15:50
 // Checkbox 5º dia útil do mês seguinte substitui o texto explicativo — marcado oculta o campo de data, desmarcado mostra para edição manual
 import { useState } from "react"
 import { Banknote, CreditCard, QrCode, Receipt } from "lucide-react"
@@ -24,7 +24,7 @@ const OPCOES: {
   { value: "cartao_credito", label: "Crédito", icon: CreditCard },
   { value: "pix", label: "Pix", icon: QrCode },
   { value: "dinheiro", label: "Dinheiro", icon: Banknote },
-  { value: "vale", label: "Vale", icon: Receipt },
+  { value: "vale", label: "Fiado", icon: Receipt },
 ]
 
 interface FormaPagamentoProps {
@@ -87,7 +87,7 @@ export function FormaPagamento({
         <div className="flex flex-col gap-4 rounded-lg border p-3">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="vale-numero">Número do vale</Label>
+              <Label htmlFor="vale-numero">Número do fiado</Label>
               <Input
                 id="vale-numero"
                 type="number"

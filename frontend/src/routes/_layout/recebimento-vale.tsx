@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:36:49
+﻿// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:36:49
 // status default 'todos'; link de volta atualizado pra 'ver todos'
 // [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835
 // status default agora e "todos" (junta aberto+atrasado+aguardando_baixa);
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_layout/recebimento-vale")({
   head: () => ({
     meta: [
       {
-        title: "Recebimento de Vale - FastAPI Template",
+        title: "Recebimento de Fiado - FastAPI Template",
       },
     ],
   }),
@@ -67,10 +67,10 @@ function RecebimentoVale() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Recebimento de Vale
+          Recebimento de Fiado
         </h1>
         <p className="text-muted-foreground">
-          Consulta e baixa das vendas em vale -- separado da venda em si, essa
+          Consulta e baixa das vendas em fiado -- separado da venda em si, essa
           tela é só pra controlar o que já foi (ou ainda precisa ser) recebido.
         </p>
       </div>
@@ -81,7 +81,7 @@ function RecebimentoVale() {
         <div className="relative max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Consulta número do vale..."
+            placeholder="Consulta número do fiado..."
             className="pl-8"
             type="number"
             value={buscaTexto}

@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:55:10
+﻿// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:55:10
 // Adiciona o 4o card 'Vales pagos: Mes Ano' ao dashboard de Recebimento de Vale
 // [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128
 // Card novo: "Vales pagos: {Mes Ano}" (soma pagos_mes_qtd/valor do resumo)
@@ -73,7 +73,7 @@ function ResumoCard({ titulo, qtd, valor, destaque }: ResumoCardProps) {
               {formatMoney(valor)}
             </span>
             <span className="text-xs text-muted-foreground">
-              {qtd === 1 ? "vale" : "vales"}
+              {qtd === 1 ? "fiado" : "fiados"}
             </span>
           </div>
         </div>
@@ -106,7 +106,7 @@ export function ResumoCards({ onVerPagos }: ResumoCardsProps) {
   return (
     <div className="flex flex-wrap items-stretch gap-4">
       <ResumoCard
-        titulo="Vales em aberto"
+        titulo="Fiados em aberto"
         qtd={data.em_aberto_qtd}
         valor={data.em_aberto_valor}
       />

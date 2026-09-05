@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: cartao-debito-credito | plano: 40efe8ed | 2026-09-04 13:55:06
+﻿// [mcp-local harness] feature: cartao-debito-credito | plano: 40efe8ed | 2026-09-04 13:55:06
 // Labels cartao_debito e cartao_credito, mantendo cartao como fallback legado
 // Quadros informativos do Livro de Vendas -- "Em caixa" (vendas já
 // pagas, com detalhamento por forma de pagamento logo abaixo) e "Em
@@ -12,7 +12,7 @@ const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
   cartao: "Cartão",  // legado -- registros anteriores à migration m8n9o0p1q2r3
   pix: "Pix",
   dinheiro: "Dinheiro",
-  vale: "Vale",
+  vale: "Fiado",
 }
 
 function formatMoney(valor: string | number): string {

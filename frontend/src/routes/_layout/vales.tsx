@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_layout/vales")({
   head: () => ({
     meta: [
       {
-        title: "Bloco de Vale - FastAPI Template",
+        title: "Bloco de Fiado - FastAPI Template",
       },
     ],
   }),
@@ -48,7 +48,7 @@ function BlocosValeTableContent() {
   if (blocos.data.length === 0) {
     return (
       <p className="text-muted-foreground py-8 text-center">
-        Nenhum bloco de vale cadastrado ainda
+        Nenhum bloco de fiado cadastrado ainda
       </p>
     )
   }
@@ -63,7 +63,7 @@ function Vales() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Bloco de Vale</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Bloco de Fiado</h1>
           <p className="text-muted-foreground">
             Cadastre o intervalo de folhas do bloco -- o motorista já é
             atribuído no mesmo formulário e fica fixo depois de criado.

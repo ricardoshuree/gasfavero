@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: recebimento-vale-coluna-motorista | plano: fdeef474 | 2026-08-06 13:34:12
+﻿// [mcp-local harness] feature: recebimento-vale-coluna-motorista | plano: fdeef474 | 2026-08-06 13:34:12
 // Adiciona coluna Motorista (venda.motorista_nome) entre Endereco e Vale no, ajusta colSpan do estado vazio de 6 para 7
 // [mcp-local harness] feature: recebimento-vale-coluna-motorista
 // Adiciona coluna Motorista (venda.motorista_nome, ja vinha na API)
@@ -175,7 +175,7 @@ export function ValesTable({
               </TableHead>
               <TableHead>Endereço</TableHead>
               <TableHead>Motorista</TableHead>
-              <TableHead>Vale nº</TableHead>
+              <TableHead>Fiado nº</TableHead>
               <TableHead
                 className="cursor-pointer select-none"
                 onClick={() => toggleSort("data_venda")}
@@ -200,7 +200,7 @@ export function ValesTable({
                   colSpan={7}
                   className="h-32 text-center text-muted-foreground"
                 >
-                  {isFetching ? "Carregando..." : "Nenhum vale encontrado"}
+                  {isFetching ? "Carregando..." : "Nenhum fiado encontrado"}
                 </TableCell>
               </TableRow>
             ) : (
@@ -238,7 +238,7 @@ export function ValesTable({
       {totalPaginas > 1 && (
         <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
           <span>
-            Página {page + 1} de {totalPaginas} · {count} vales
+            Página {page + 1} de {totalPaginas} · {count} fiados
           </span>
           <div className="flex items-center gap-1">
             <Button

@@ -92,7 +92,7 @@ const AddBlocoVale = () => {
     mutationFn: (data: BlocoValeCreate) =>
       ValesService.createBlocoVale({ requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Bloco de vale criado com sucesso")
+      showSuccessToast("Bloco de fiado criado com sucesso")
       form.reset()
       setIsOpen(false)
     },
@@ -115,14 +115,14 @@ const AddBlocoVale = () => {
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2" />
-          Novo Bloco de Vale
+          Novo Bloco de Fiado
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Novo Bloco de Vale</DialogTitle>
+          <DialogTitle>Novo Bloco de Fiado</DialogTitle>
           <DialogDescription>
-            Informe a primeira e a última folha do bloco -- um vale é gerado pra
+            Informe a primeira e a última folha do bloco -- um fiado é gerado pra
             cada número da sequência. O motorista escolhido aqui fica fixo: não
             é possível reatribuir o bloco depois.
           </DialogDescription>

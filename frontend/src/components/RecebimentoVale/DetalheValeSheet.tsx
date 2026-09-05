@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba | 2026-08-05 22:18:36
+﻿// [mcp-local harness] feature: fix-complemento-e-trava-pago | plano: d4d7e0ba | 2026-08-05 22:18:36
 // Trava valor pago e botao Pago apos marcar (so pode marcar uma vez); campo desabilitado mantendo os registros atuais
 // Painel (Sheet) da tela /recebimento-vale. Fluxo:
 //   1) campo "valor pago" editavel (pre-preenchido com o ja registrado)
@@ -8,7 +8,7 @@
 //      (so pode marcar como pago uma unica vez -- pra corrigir o valor
 //      seria preciso a distribuidora dar baixa e o motorista/operador
 //      relancar, nao editar o registro ja feito)
-//   3) botao "Baixa do vale" (azul) -> abre um Dialog de confirmacao
+//   3) botao "Baixa do fiado" (azul) -> abre um Dialog de confirmacao
 //      -- ao confirmar, chama baixar-vale, que SEMPRE fecha a venda
 //      (pago_em), nao importa o valor. Se o valor for menor que o
 //      total, a diferenca e tratada como desconto -- nunca deixa a
@@ -112,7 +112,7 @@ export function DetalheValeSheet({
     onSuccess: () => {
       invalidarListas()
       setConfirmBaixaOpen(false)
-      showSuccessToast("Vale baixado -- venda encerrada")
+      showSuccessToast("Fiado baixado -- venda encerrada")
       onOpenChange(false)
     },
     onError: handleError.bind(showErrorToast),
@@ -140,7 +140,7 @@ export function DetalheValeSheet({
       <Sheet open={!!vendaId} onOpenChange={onOpenChange}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Vale nº {venda.vale_numero ?? "—"}</SheetTitle>
+            <SheetTitle>Fiado nº {venda.vale_numero ?? "—"}</SheetTitle>
             <SheetDescription>
               {venda.cliente_nome} · Venda em {formatDate(venda.data_venda)}
             </SheetDescription>
@@ -218,7 +218,7 @@ export function DetalheValeSheet({
                 disabled={!podeBaixar}
                 onClick={() => setConfirmBaixaOpen(true)}
               >
-                Baixa do vale
+                Baixa do fiado
               </LoadingButton>
               {!podeBaixar && (
                 <p className="text-xs text-muted-foreground">
@@ -236,8 +236,8 @@ export function DetalheValeSheet({
             <DialogTitle>Confirmar baixa</DialogTitle>
             <DialogDescription>
               {baixaEhTotal
-                ? `Confirma a baixa de ${formatMoney(valorPago)} para este vale? Essa ação encerra a venda e não pode ser desfeita.`
-                : `Confirma a baixa de ${formatMoney(valorPago)} para este vale? A diferença de ${formatMoney(Number(venda.valor_total) - Number(valorPago))} será tratada como desconto -- a venda será encerrada e não ficará mais pendente de recebimento.`}
+                ? `Confirma a baixa de ${formatMoney(valorPago)} para este fiado? Essa ação encerra a venda e não pode ser desfeita.`
+                : `Confirma a baixa de ${formatMoney(valorPago)} para este fiado? A diferença de ${formatMoney(Number(venda.valor_total) - Number(valorPago))} será tratada como desconto -- a venda será encerrada e não ficará mais pendente de recebimento.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

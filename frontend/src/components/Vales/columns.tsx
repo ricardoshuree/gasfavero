@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:35:13
+﻿// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:35:13
 // Colunas da tabela de Blocos de Vale (sem acoes -- bloco e imutavel apos criado, decisao confirmada)
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -24,7 +24,7 @@ export const blocoValeColumns: ColumnDef<BlocoValePublic>[] = [
   },
   {
     accessorKey: "total_vales",
-    header: "Total de vales",
+    header: "Total de fiados",
     cell: ({ row }) => (
       <Badge variant="secondary">{row.original.total_vales}</Badge>
     ),
