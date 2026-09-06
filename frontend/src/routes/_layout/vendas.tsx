@@ -1,23 +1,5 @@
-// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128 | 2026-08-05 21:55:56
-// Data a ser pago do vale pre-preenchida com hoje+30 dias
-// [mcp-local harness] feature: ajustes-endereco-card-mes-data-vale | plano: 15362128
-// "Data a ser pago" do vale pre-preenchida com hoje+30 dias (so preenche
-// se ainda estiver vazio, nao sobrescreve edicao manual) -- se o usuario
-// limpar o campo, mantem a regra existente: backend calcula o 5o dia
-// util do mes seguinte automaticamente.
-// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9 | 2026-08-05 11:34:03
-// Sugere automaticamente o proximo numero de vale do bloco do motorista selecionado
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52
-// Pagina /vendas -- dashboard de venda de balcao da distribuidora (item 7
-// da lista de requisitos). Gate via modulo 'vendas'.
-//
-// [mcp-local harness] fix: onError tipado explicitamente como ApiError
-// (em vez de cast `as never`) -- mais limpo e consistente com o
-// restante do projeto.
-//
-// [mcp-local harness] feature: ajustes-cosmeticos-vendas | plano: 8c042ce9
-// Ao selecionar "Vale", sugere automaticamente o proximo numero livre
-// do bloco do motorista selecionado (continua editavel)
+// [mcp-local harness] feature: venda-vale-gas | plano: 5e65e659 | 2026-09-05 21:39:08
+// Adiciona estado valeGasNumero e valeGasBlocoId, passa para FormaPagamento, inclui no VendaCreate e na validacao podeFinalizar
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -58,7 +40,6 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-/** ISO (yyyy-mm-dd) + N dias corridos, também em ISO. */
 function somarDiasISO(isoDate: string, dias: number): string {
   const d = new Date(`${isoDate}T00:00:00`)
   d.setDate(d.getDate() + dias)
@@ -89,10 +70,14 @@ function Vendas() {
   const [cliente, setCliente] = useState<ClientePublic | null>(null)
   const [endereco, setEndereco] = useState<EnderecoPublic | null>(null)
   const [motoristaId, setMotoristaId] = useState("")
-  const [formaPagamento, setFormaPagamento] =
-    useState<FormaPagamentoValue | null>(null)
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoValue | null>(null)
+  // Fiado
   const [valeNumero, setValeNumero] = useState("")
   const [dataPagamentoVale, setDataPagamentoVale] = useState("")
+  // Vale Gas
+  const [valeGasNumero, setValeGasNumero] = useState("")
+  const [valeGasBlocoId, setValeGasBlocoId] = useState<string | null>(null)
+  // Pagamento
   const [valorPago, setValorPago] = useState("")
   const [valorPagoManual, setValorPagoManual] = useState(false)
   const [dataVenda, setDataVenda] = useState(hojeISO())
@@ -109,18 +94,14 @@ function Vendas() {
     queryFn: () => UsersService.readUsers({ limit: 100 }),
   })
 
-  // Default do combo de motorista = "Distribuidora Gás Favero"
+  // Default motorista = Distribuidora Gás Favero
   useEffect(() => {
     if (motoristaId || !users) return
-    const distribuidora = users.data.find(
-      (u) => u.full_name === NOME_DISTRIBUIDORA,
-    )
+    const distribuidora = users.data.find((u) => u.full_name === NOME_DISTRIBUIDORA)
     if (distribuidora) setMotoristaId(distribuidora.id)
   }, [users, motoristaId])
 
-  // Ao escolher "Vale", sugere o próximo número livre do bloco do
-  // motorista selecionado -- só preenche se o campo ainda estiver
-  // vazio (não sobrescreve o que o usuário já digitou).
+  // Ao escolher "Fiado", sugere próximo número livre do bloco do motorista
   useEffect(() => {
     if (formaPagamento !== "vale" || !motoristaId) return
     VendasService.readProximoNumeroVale({ motoristaId })
@@ -131,15 +112,10 @@ function Vendas() {
       .catch(() => {})
   }, [formaPagamento, motoristaId])
 
-  // Ao escolher "Vale", pré-preenche "Data a ser pago" com hoje + 30
-  // dias -- só se o campo ainda estiver vazio (não sobrescreve edição
-  // manual). Se o usuário limpar o campo de propósito, o backend
-  // continua calculando o 5º dia útil do mês seguinte automaticamente.
+  // Ao escolher "Fiado", pré-preenche data com hoje+30 dias
   useEffect(() => {
     if (formaPagamento !== "vale") return
-    setDataPagamentoVale((atual) =>
-      atual ? atual : somarDiasISO(hojeISO(), 30),
-    )
+    setDataPagamentoVale((atual) => atual ? atual : somarDiasISO(hojeISO(), 30))
   }, [formaPagamento])
 
   const total = sacola.reduce(
@@ -147,7 +123,6 @@ function Vendas() {
     0,
   )
 
-  // Valor pago acompanha o total até o usuário editar manualmente
   useEffect(() => {
     if (!valorPagoManual) setValorPago(total > 0 ? total.toFixed(2) : "")
   }, [total, valorPagoManual])
@@ -162,38 +137,22 @@ function Vendas() {
       const existente = prev.find((i) => i.produtoId === produto.id)
       if (existente) {
         return prev.map((i) =>
-          i.produtoId === produto.id
-            ? { ...i, quantidade: i.quantidade + 1 }
-            : i,
+          i.produtoId === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i,
         )
       }
-      return [
-        ...prev,
-        {
-          produtoId: produto.id,
-          title: produto.title,
-          precoUnitario: produto.preco_atual as string,
-          quantidade: 1,
-        },
-      ]
+      return [...prev, { produtoId: produto.id, title: produto.title, precoUnitario: produto.preco_atual as string, quantidade: 1 }]
     })
   }
 
   const handleIncrementar = (produtoId: string) =>
-    setSacola((prev) =>
-      prev.map((i) =>
-        i.produtoId === produtoId ? { ...i, quantidade: i.quantidade + 1 } : i,
-      ),
-    )
+    setSacola((prev) => prev.map((i) => i.produtoId === produtoId ? { ...i, quantidade: i.quantidade + 1 } : i))
 
   const handleDecrementar = (produtoId: string) =>
-    setSacola((prev) =>
-      prev.flatMap((i) => {
-        if (i.produtoId !== produtoId) return [i]
-        if (i.quantidade <= 1) return []
-        return [{ ...i, quantidade: i.quantidade - 1 }]
-      }),
-    )
+    setSacola((prev) => prev.flatMap((i) => {
+      if (i.produtoId !== produtoId) return [i]
+      if (i.quantidade <= 1) return []
+      return [{ ...i, quantidade: i.quantidade - 1 }]
+    }))
 
   const handleRemover = (produtoId: string) =>
     setSacola((prev) => prev.filter((i) => i.produtoId !== produtoId))
@@ -205,11 +164,11 @@ function Vendas() {
     setFormaPagamento(null)
     setValeNumero("")
     setDataPagamentoVale("")
+    setValeGasNumero("")
+    setValeGasBlocoId(null)
     setValorPago("")
     setValorPagoManual(false)
     setDataVenda(hojeISO())
-    // motoristaId mantém o valor atual (geralmente a Distribuidora),
-    // pronto pra próxima venda
   }
 
   const mutation = useMutation({
@@ -220,21 +179,16 @@ function Vendas() {
           endereco_id: endereco?.id,
           motorista_id: motoristaId,
           forma_pagamento: formaPagamento as
-            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale",
-          vale_numero:
-            formaPagamento === "vale" && valeNumero
-              ? Number(valeNumero)
-              : undefined,
-          data_pagamento_vale:
-            formaPagamento === "vale" && dataPagamentoVale
-              ? dataPagamentoVale
-              : undefined,
+            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale" | "vale_gas",
+          // Fiado
+          vale_numero: formaPagamento === "vale" && valeNumero ? Number(valeNumero) : undefined,
+          data_pagamento_vale: formaPagamento === "vale" && dataPagamentoVale ? dataPagamentoVale : undefined,
+          // Vale Gas
+          vale_gas_numero: formaPagamento === "vale_gas" && valeGasNumero ? Number(valeGasNumero) : undefined,
+          vale_gas_bloco_id: formaPagamento === "vale_gas" ? (valeGasBlocoId ?? undefined) : undefined,
           valor_pago: valorPago,
           data_venda: dataVenda,
-          itens: sacola.map((i) => ({
-            produto_id: i.produtoId,
-            quantidade: i.quantidade,
-          })),
+          itens: sacola.map((i) => ({ produto_id: i.produtoId, quantidade: i.quantidade })),
         },
       }),
     onSuccess: () => {
@@ -257,30 +211,29 @@ function Vendas() {
     sacola.length > 0 &&
     !!motoristaId &&
     !!formaPagamento &&
-    (formaPagamento !== "vale" || valeNumero.trim().length > 0)
+    (formaPagamento !== "vale" || valeNumero.trim().length > 0) &&
+    // Vale Gas: exige numero valido (bloco_id preenchido pelo validador)
+    (formaPagamento !== "vale_gas" || (valeGasNumero.trim().length > 0 && !!valeGasBlocoId))
 
   const handleAbrirResumo = () => {
     if (!cliente) return showErrorToast("Selecione ou cadastre um cliente")
-    if (sacola.length === 0)
-      return showErrorToast("Adicione ao menos 1 produto na sacola")
+    if (sacola.length === 0) return showErrorToast("Adicione ao menos 1 produto na sacola")
     if (!formaPagamento) return showErrorToast("Selecione a forma de pagamento")
-    if (formaPagamento === "vale" && !valeNumero.trim())
-      return showErrorToast("Informe o número do vale")
+    if (formaPagamento === "vale" && !valeNumero.trim()) return showErrorToast("Informe o número do fiado")
+    if (formaPagamento === "vale_gas" && !valeGasNumero.trim()) return showErrorToast("Informe o número do vale gás")
+    if (formaPagamento === "vale_gas" && !valeGasBlocoId) return showErrorToast("Número de vale gás inválido — verifique o estabelecimento")
     setShowResumo(true)
   }
 
   const motoristaNome =
     users?.data.find((u) => u.id === motoristaId)?.full_name ||
-    users?.data.find((u) => u.id === motoristaId)?.email ||
-    ""
+    users?.data.find((u) => u.id === motoristaId)?.email || ""
 
   return (
     <div className="flex flex-col gap-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Vendas</h1>
-        <p className="text-muted-foreground">
-          Venda de balcão da distribuidora
-        </p>
+        <p className="text-muted-foreground">Venda de balcão da distribuidora</p>
       </div>
 
       <div className="grid gap-1.5 max-w-sm">
@@ -293,9 +246,7 @@ function Vendas() {
             {users?.data.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.full_name || u.email}
-                {u.roles && u.roles.length > 0
-                  ? ` (${u.roles.join(", ")})`
-                  : ""}
+                {u.roles && u.roles.length > 0 ? ` (${u.roles.join(", ")})` : ""}
               </SelectItem>
             ))}
           </SelectContent>
@@ -340,6 +291,9 @@ function Vendas() {
             onValeNumeroChange={setValeNumero}
             dataPagamentoVale={dataPagamentoVale}
             onDataPagamentoValeChange={setDataPagamentoVale}
+            valeGasNumero={valeGasNumero}
+            onValeGasNumeroChange={setValeGasNumero}
+            onValeGasBlocoIdChange={setValeGasBlocoId}
           />
         </div>
       </div>
@@ -393,4 +347,3 @@ function Vendas() {
     </div>
   )
 }
-

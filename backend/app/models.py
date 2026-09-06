@@ -1,9 +1,9 @@
+# [mcp-local harness] feature: venda-vale-gas | plano: 9a811f03 | 2026-09-05 21:34:58
+# Adiciona vale_gas_numero e vale_gas_bloco_id em Venda, vale_gas no Literal de VendaCreate, e campos correspondentes em VendaPublic
 # [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09 14:20:01
 # Adiciona User.fcm_token e MotoristaFcmTokenUpdate
-# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09
-# Adiciona User.fcm_token + MotoristaFcmTokenUpdate (push notification real via FCM)
 # [mcp-local harness] feature: fase1-modelos-disponibilidade-cancelamento | plano: fb2e15ac | 2026-08-08 11:04:25
-# User.disponivel + novos modelos MotoristaDisponibilidade* e DemandaVendaReatribuirRequest + docstrings atualizadas (ciclo de vida com cancelada, finalizada_em generico, sem mais recusar mudando banco)
+# User.disponivel + novos modelos MotoristaDisponibilidade* e DemandaVendaReatribuirRequest + docstrings atualizadas
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -26,93 +26,39 @@ class Role(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, max_length=100)
     description: str | None = Field(default=None, max_length=255)
+    user_roles: list["UserRole"] = Relationship(back_populates="role", cascade_delete=True)
+    permissions: list["RolePermission"] = Relationship(back_populates="role", cascade_delete=True)
 
-    # cascade_delete=True -- sem isso, o SQLAlchemy tenta zerar a FK das
-    # linhas filhas (role_permission.role_id / user_role.role_id) antes
-    # de apagar a Role, e como essa FK é parte da chave primária (NOT
-    # NULL), a operação quebra com IntegrityError sempre que a role tem
-    # ao menos uma permissão ou usuário vinculado (bug encontrado em
-    # teste real: DELETE /roles/{id} retornava 503 para roles com
-    # RolePermission cadastrado, mas funcionava para roles "vazias").
-    user_roles: list["UserRole"] = Relationship(
-        back_populates="role", cascade_delete=True
-    )
-    permissions: list["RolePermission"] = Relationship(
-        back_populates="role", cascade_delete=True
-    )
-
-
-# ---------------------------------------------------------------------------
-# RBAC — Module
-# ---------------------------------------------------------------------------
 
 class Module(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, max_length=100)
     description: str | None = Field(default=None, max_length=255)
-    # Nome de exibição, 100% cosmético -- separado de `name` de
-    # propósito. `name` é o slug técnico usado literalmente em
-    # require_module_permission("delegacao") no código das rotas;
-    # editar isso quebraria qualquer rota que já referencie a string.
-    # `label` pode ser editado livremente a qualquer momento (ex:
-    # trocar "Delegacao" por "Delegação" com acento) sem esse risco.
     label: str | None = Field(default=None, max_length=255)
+    permissions: list["RolePermission"] = Relationship(back_populates="module", cascade_delete=True)
 
-    permissions: list["RolePermission"] = Relationship(
-        back_populates="module", cascade_delete=True
-    )
-
-
-# ---------------------------------------------------------------------------
-# RBAC — RolePermission (matriz role x module x ação)
-#
-# 4 ações CRUD independentes -- ex: uma role pode criar/editar mas não
-# apagar (o exemplo clássico de "Gerente"), o que não era possível
-# expressar com o antigo can_read/can_edit único.
-# ---------------------------------------------------------------------------
 
 class RolePermission(SQLModel, table=True):
     __tablename__ = "role_permission"
-
-    role_id: uuid.UUID = Field(
-        foreign_key="role.id", primary_key=True, ondelete="CASCADE"
-    )
-    module_id: uuid.UUID = Field(
-        foreign_key="module.id", primary_key=True, ondelete="CASCADE"
-    )
+    role_id: uuid.UUID = Field(foreign_key="role.id", primary_key=True, ondelete="CASCADE")
+    module_id: uuid.UUID = Field(foreign_key="module.id", primary_key=True, ondelete="CASCADE")
     can_create: bool = Field(default=False)
     can_read: bool = Field(default=False)
     can_update: bool = Field(default=False)
     can_delete: bool = Field(default=False)
-
     role: Role = Relationship(back_populates="permissions")
     module: Module = Relationship(back_populates="permissions")
 
 
-# ---------------------------------------------------------------------------
-# RBAC — UserRole (liga User ao Role)
-# ---------------------------------------------------------------------------
-
 class UserRole(SQLModel, table=True):
     __tablename__ = "user_role"
-
-    user_id: uuid.UUID = Field(
-        foreign_key="user.id", primary_key=True, ondelete="CASCADE"
-    )
-    role_id: uuid.UUID = Field(
-        foreign_key="role.id", primary_key=True, ondelete="CASCADE"
-    )
-
+    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
+    role_id: uuid.UUID = Field(foreign_key="role.id", primary_key=True, ondelete="CASCADE")
     user: "User" = Relationship(back_populates="roles")
     role: Role = Relationship(back_populates="user_roles")
 
 
-# ---------------------------------------------------------------------------
-# RBAC — Response models (usados pelo endpoint /users/me/permissions)
-# ---------------------------------------------------------------------------
-
 class ModulePermission(SQLModel):
-    """Permissão efetiva de um usuário em um módulo específico (CRUD)."""
     module: str
     description: str | None = None
     can_create: bool
@@ -122,26 +68,12 @@ class ModulePermission(SQLModel):
 
 
 class UserPermissions(SQLModel):
-    """Resposta completa de permissões do usuário logado."""
     is_superuser: bool
     roles: list[str]
     permissions: list[ModulePermission]
 
 
-# ---------------------------------------------------------------------------
-# RBAC — Response models (usados pela tela de administração de Usuários,
-# gestão de roles: listar roles disponíveis e atribuir a um usuário)
-# ---------------------------------------------------------------------------
-
 class RolePublic(SQLModel):
-    """Role RBAC exposta pra UI (não confundir com is_superuser).
-
-    user_count vem sempre calculado pelo endpoint (não é uma coluna do
-    banco) -- usado pela tela "Gerenciar Roles" pra avisar o superuser
-    quantos usuários seriam desvinculados antes de confirmar um DELETE
-    (a FK UserRole.role_id tem ondelete=CASCADE, então apagar a role
-    desvincula silenciosamente se a UI não avisar antes).
-    """
     id: uuid.UUID
     name: str
     description: str | None = None
@@ -149,16 +81,11 @@ class RolePublic(SQLModel):
 
 
 class RoleCreate(SQLModel):
-    """Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
-    'motorista'). Nome deve ser único (validado no endpoint)."""
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=255)
 
 
 class RoleUpdate(SQLModel):
-    """Corpo de PATCH /roles/{role_id} -- edição parcial (nome e/ou
-    descrição). Renomear uma role não quebra nada além do óbvio: as
-    permissões e vínculos de usuário são por role_id, não por nome."""
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=255)
 
@@ -168,16 +95,8 @@ class RolesPublic(SQLModel):
 
 
 class UserRolesUpdate(SQLModel):
-    """Corpo de PUT /users/{user_id}/roles -- substitui o conjunto
-    inteiro de roles do usuário pelos ids informados (lista vazia
-    remove todas as roles)."""
     role_ids: list[uuid.UUID]
 
-
-# ---------------------------------------------------------------------------
-# RBAC — Response models (tela de administração da matriz de
-# permissões: Módulo x Role x Ação CRUD)
-# ---------------------------------------------------------------------------
 
 class ModulePublic(SQLModel):
     id: uuid.UUID
@@ -191,16 +110,11 @@ class ModulesPublic(SQLModel):
 
 
 class ModuleUpdate(SQLModel):
-    """Corpo de PATCH /modules/{module_id} -- edita SÓ label e/ou
-    description (campos cosméticos). `name` (o slug técnico) nunca é
-    editável por aqui de propósito -- ver comentário na classe Module."""
     label: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=255)
 
 
 class RolePermissionEntry(SQLModel):
-    """Uma linha da matriz: o que uma role específica pode fazer no
-    módulo (zerado se ainda não houver RolePermission cadastrado)."""
     role_id: uuid.UUID
     role_name: str
     can_create: bool
@@ -223,8 +137,6 @@ class RolePermissionUpdate(SQLModel):
 
 
 class ModulePermissionMatrixUpdate(SQLModel):
-    """Corpo de PUT /modules/{module_id}/permissions -- grava a
-    matriz inteira do módulo de uma vez (upsert por role)."""
     entries: list[RolePermissionUpdate]
 
 
@@ -274,25 +186,7 @@ class User(UserBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
-    # Disponibilidade (Fase 4, app do motorista) -- "esse usuário está
-    # disponível pra receber chamado AGORA". Só tem sentido de verdade
-    # pra quem tem role Motorista, mas fica em User (não numa tabela
-    # motorista-specific) porque precisa ter um valor desde sempre,
-    # inclusive pra quem nunca abriu o app -- ver comentário completo
-    # na migration k6l7m8n9o0p1. DEFAULT TRUE de propósito: filtrar o
-    # combo de despacho por "só disponíveis" não pode começar
-    # excluindo todo mundo no dia em que essa feature for pro ar.
     disponivel: bool = Field(default=True)
-    # Token FCM (Fase 4, push notification real -- sessão 09/08) --
-    # identifica O APARELHO ATUAL do motorista pro Firebase Cloud
-    # Messaging entregar push. NULL até o app registrar um token pela
-    # primeira vez (login, ou renovação automática do token pelo
-    # Firebase). Igual a `disponivel`, fica em User (não numa tabela
-    # separada) porque é 1:1 com o usuário -- cada motorista tem no
-    # máximo 1 aparelho ativo por vez neste app (reinstalar/trocar de
-    # aparelho simplesmente sobrescreve o token antigo, não temos
-    # multi-device). Nunca exposto em nenhum *Public -- é um detalhe
-    # de entrega, não informação de negócio.
     fcm_token: str | None = Field(default=None, max_length=255)
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
     roles: list["UserRole"] = Relationship(back_populates="user", cascade_delete=True)
@@ -309,9 +203,6 @@ class UsersPublic(SQLModel):
 
 
 class UserPublicWithRoles(UserPublic):
-    """UserPublic + nomes das roles RBAC atribuídas -- usado pela
-    tabela de Usuários na tela de admin, que mostra e permite editar
-    as roles de cada um."""
     roles: list[str] = []
 
 
@@ -321,10 +212,7 @@ class UsersPublicWithRoles(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# Item (mantido do template original -- endpoint/tabela seguem se
-# chamando "item"/"items" internamente, mas no gasfavero representam
-# o catálogo de Produtos; nome técnico e nome de negócio divergem de
-# propósito, ver frontend/src/routes/_layout/produtos.tsx)
+# Item
 # ---------------------------------------------------------------------------
 
 class ItemBase(SQLModel):
@@ -347,9 +235,7 @@ class Item(ItemBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
-    owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, ondelete="CASCADE"
-    )
+    owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
     owner: User | None = Relationship(back_populates="items")
 
 
@@ -365,21 +251,7 @@ class ItemsPublic(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Geografia (Cidade > Bairro > Rua > Endereço)
-#
-# Bairro fica direto embaixo de Cidade, não de uma "Região" -- a praça
-# de entrega do Giovani é organizada por bairro mesmo (sem polígono
-# desenhado), então uma camada extra de Região só complicaria sem
-# necessidade real hoje. Se um dia precisar de área desenhada à mão
-# (não é o caso combinado), isso entra como tabela própria depois,
-# sem exigir mudar essa hierarquia.
-#
-# IMPORTANTE: nenhuma dessas classes declara Relationship() SQLModel
-# bidirecional (back_populates) de propósito -- são só FK simples.
-# Isso evita reproduzir o mesmo bug já corrigido em Role (SQLAlchemy
-# tentando anular FK de filhos carregados em memória antes do delete,
-# em vez de deixar o ON DELETE do Postgres agir). Sem Relationship()
-# carregada na sessão, não há esse comportamento por trás das costas.
+# Geografia
 # ---------------------------------------------------------------------------
 
 class Cidade(SQLModel, table=True):
@@ -388,47 +260,21 @@ class Cidade(SQLModel, table=True):
 
 
 class Bairro(SQLModel, table=True):
-    __table_args__ = (
-        UniqueConstraint("cidade_id", "nome", name="uq_bairro_cidade_nome"),
-    )
-
+    __table_args__ = (UniqueConstraint("cidade_id", "nome", name="uq_bairro_cidade_nome"),)
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cidade_id: uuid.UUID = Field(foreign_key="cidade.id", ondelete="CASCADE")
     nome: str = Field(max_length=255)
 
 
 class Rua(SQLModel, table=True):
-    __table_args__ = (
-        UniqueConstraint("bairro_id", "nome", name="uq_rua_bairro_nome"),
-    )
-
+    __table_args__ = (UniqueConstraint("bairro_id", "nome", name="uq_rua_bairro_nome"),)
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     bairro_id: uuid.UUID = Field(foreign_key="bairro.id", ondelete="CASCADE")
-    # "cresce por uso": além do seed inicial, uma rua nova é criada na
-    # hora que alguém cadastra o primeiro endereço nela -- ninguém
-    # conhece as ruas de Veranópolis melhor que quem mora/trabalha lá.
     nome: str = Field(max_length=255)
 
 
-# LogradouroReferencia -- catálogo de nomes de rua conhecidos da
-# cidade (fonte: lista pública de logradouros de Veranópolis),
-# DELIBERADAMENTE sem vínculo a bairro. Tentamos descobrir a
-# associação rua↔bairro via Google Maps e Correios (busca CEP) e
-# nenhuma das duas fontes é confiável pra Veranópolis -- Correios só
-# tem CEP individual pra meia dúzia de logradouros centrais (o resto
-# cai no CEP genérico do município), e o Maps não devolve isso de
-# forma estruturada. Decisão confirmada com o Ricardo: cadastrar só
-# os NOMES por enquanto (sem bairro) e usar como fonte extra de
-# sugestão no autocomplete de endereço -- a associação com bairro
-# fica pra depois, feita manualmente por quem conhece a cidade.
-#
-# Continua sem afetar em nada o "cresce por uso" da tabela Rua
-# (bairro-scoped) -- as duas tabelas convivem: Rua é o que já foi
-# efetivamente usado num endereço real; LogradouroReferencia é só
-# uma lista de nomes prováveis pra sugerir.
 class LogradouroReferencia(SQLModel, table=True):
     __tablename__ = "logradouro_referencia"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     nome: str = Field(unique=True, max_length=255)
 
@@ -436,31 +282,12 @@ class LogradouroReferencia(SQLModel, table=True):
 class Endereco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     rua_id: uuid.UUID = Field(foreign_key="rua.id", ondelete="RESTRICT")
-    # string, não int -- endereço brasileiro às vezes é "s/n", "123A"
-    # etc, não vale a pena forçar numérico puro
     numero: str = Field(max_length=20)
     complemento: str | None = Field(default=None, max_length=255)
-    # Preenchidos por geocodificação (Fase 2 da Delegação de Venda --
-    # ver app/core/geocoding.py). NULL até o Google conseguir
-    # localizar o endereço, ou se a geocodificação nunca rodou (ex:
-    # endereços cadastrados antes desta feature existir, ou a API
-    # falhou/estava sem cota no momento da criação). Uma vez
-    # preenchidos, ficam CACHEADOS pra sempre -- endereço não muda de
-    # lugar, então nunca são re-consultados automaticamente depois.
-    # Retry manual disponível via POST /enderecos/{id}/geocodificar
-    # (geografia.py), pra cobrir endereços antigos ou falhas passadas.
-    latitude: Decimal | None = Field(
-        default=None, sa_column=Column(Numeric(9, 6), nullable=True)
-    )
-    longitude: Decimal | None = Field(
-        default=None, sa_column=Column(Numeric(9, 6), nullable=True)
-    )
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    latitude: Decimal | None = Field(default=None, sa_column=Column(Numeric(9, 6), nullable=True))
+    longitude: Decimal | None = Field(default=None, sa_column=Column(Numeric(9, 6), nullable=True))
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
-
-# ---- Response/Create models de geografia (endpoints em geografia.py) ----
 
 class BairroPublic(SQLModel):
     id: uuid.UUID
@@ -486,22 +313,10 @@ class LogradouroReferenciaPublic(SQLModel):
 
 
 class LogradourosReferenciaPublic(SQLModel):
-    """Resposta de GET /bairros/logradouros-referencia -- a lista
-    inteira (hoje ~239 nomes), sem paginação nem busca no servidor,
-    já que o volume é pequeno. Usado no frontend como fonte extra de
-    sugestão no RuaAutocomplete, mesclado com as ruas já cadastradas
-    no bairro selecionado (ver comentário em LogradouroReferencia)."""
     data: list[LogradouroReferenciaPublic]
 
 
 class EnderecoCreate(SQLModel):
-    """Corpo usado para criar (ou trocar) o endereço de um cliente.
-
-    rua_nome é sempre texto livre, nunca um rua_id -- o endpoint
-    resolve pra uma Rua existente (case-insensitive, mesmo bairro) ou
-    cria uma nova na hora ("cresce por uso"). Isso evita o frontend
-    precisar gerenciar o caso "rua não existe ainda no catálogo".
-    """
     bairro_id: uuid.UUID
     rua_nome: str = Field(min_length=1, max_length=255)
     numero: str = Field(min_length=1, max_length=20)
@@ -515,23 +330,12 @@ class EnderecoPublic(SQLModel):
     rua_nome: str
     bairro_nome: str
     cidade_nome: str
-    # NULL enquanto não geocodificado -- ver comentário na classe
-    # Endereco. Frontend deve tratar ausência (mapa da Fase 3 simplesmente
-    # não plota um marcador pra esse endereço até isso ser preenchido).
     latitude: Decimal | None = None
     longitude: Decimal | None = None
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Cliente + histórico de endereço
-#
-# Cliente e Endereço são entidades distintas (pessoas mudam de casa) --
-# ClienteEndereco é o histórico: valid_to NULL = endereço vigente
-# agora. Nunca dar UPDATE num endereço vigente pra trocar de casa;
-# sempre fechar o registro antigo (valid_to = agora) e abrir um novo.
-# Um índice único parcial (na migration) garante que só existe 1 linha
-# vigente por cliente ao mesmo tempo -- histórico linear, sem endereços
-# simultâneos (decisão confirmada com o Ricardo).
+# Cliente
 # ---------------------------------------------------------------------------
 
 class Cliente(SQLModel, table=True):
@@ -539,36 +343,19 @@ class Cliente(SQLModel, table=True):
     nome: str = Field(max_length=255)
     cpf: str = Field(unique=True, max_length=14, index=True)
     telefone: str | None = Field(default=None, max_length=20)
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class ClienteEndereco(SQLModel, table=True):
     __tablename__ = "cliente_endereco"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="CASCADE")
     endereco_id: uuid.UUID = Field(foreign_key="endereco.id", ondelete="RESTRICT")
-    valid_from: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
-    # NULL = vigente agora. Fechar (setar valid_to) ao trocar de
-    # endereço, nunca apagar a linha antiga -- é o histórico.
+    valid_from: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
     valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
-# ---- Response/Create models de Cliente (endpoints em clientes.py) ----
-
 class ClienteCreate(SQLModel):
-    """Corpo de POST /clientes/ -- cria cliente (+ endereço, se
-    informado) numa única chamada.
-
-    endereco é OPCIONAL no backend de propósito: a tela /clientes
-    exige endereço (validação no frontend daquela tela), mas a tela de
-    Venda (cadastro rápido de cliente no balcão) não -- o cliente pode
-    ser cadastrado só com nome/cpf/telefone e ganhar um endereço depois.
-    """
     nome: str = Field(min_length=1, max_length=255)
     cpf: str = Field(min_length=11, max_length=14)
     telefone: str | None = Field(default=None, max_length=20)
@@ -576,10 +363,6 @@ class ClienteCreate(SQLModel):
 
 
 class ClienteUpdate(SQLModel):
-    """Edição só dos dados do próprio cliente (nome/cpf/telefone).
-    Trocar de endereço é um endpoint separado (POST
-    /clientes/{id}/endereco), porque isso precisa fechar o histórico,
-    não é um UPDATE simples."""
     nome: str | None = Field(default=None, min_length=1, max_length=255)
     cpf: str | None = Field(default=None, min_length=11, max_length=14)
     telefone: str | None = Field(default=None, max_length=20)
@@ -600,32 +383,18 @@ class ClientesPublic(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Preço (histórico de vigência)
-#
-# Preço tem vigência por data (não é um valor único sobrescrito) --
-# quando o gerente cadastra um preço novo pra um produto, fecha o
-# registro vigente anterior (valid_to = agora) e abre um novo. A Venda
-# referencia o preco_id vigente no momento pra "congelar" o valor
-# praticado -- cada linha de Preco é IMUTÁVEL depois de criada, então
-# reajustar o preço no futuro nunca altera vendas já feitas (elas
-# continuam apontando pra linha antiga e intacta).
+# Preco
 # ---------------------------------------------------------------------------
 
 class Preco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    valid_from: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    valid_from: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
     valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
-# ---- Response/Create models de Preço (endpoints em precos.py) ----
-
 class PrecoCreate(SQLModel):
-    """Corpo de POST /produtos/{produto_id}/preco -- cadastra um novo
-    preço vigente pro produto (fecha o anterior automaticamente)."""
     valor: Decimal = Field(gt=0, decimal_places=2)
 
 
@@ -636,8 +405,6 @@ class PrecoPublic(SQLModel):
 
 
 class ProdutoComPrecoPublic(SQLModel):
-    """Produto + preço vigente -- usado pela tela 'Cadastro de
-    Preços', que é 'parecida com Produto' só que atribuindo preço."""
     id: uuid.UUID
     title: str
     description: str | None = None
@@ -650,27 +417,16 @@ class ProdutosComPrecoPublic(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Bloco de Vale + Vale
-#
-# BlocoVale.motorista_id é fixo desde a criação (decisão confirmada) --
-# se atribuir errado, a correção é apagar e recriar o bloco, não editar
-# o motorista responsável.
-#
-# Vale.numero é único em TODO o sistema (decisão confirmada), não só
-# dentro do bloco -- por isso é uma constraint unique de banco, não só
-# validação de aplicação.
+# Bloco de Vale (fiado dos motoristas)
 # ---------------------------------------------------------------------------
 
 class BlocoVale(SQLModel, table=True):
     __tablename__ = "bloco_vale"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     motorista_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     primeira_folha: int
     ultima_folha: int
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class Vale(SQLModel, table=True):
@@ -679,14 +435,7 @@ class Vale(SQLModel, table=True):
     bloco_id: uuid.UUID = Field(foreign_key="bloco_vale.id", ondelete="CASCADE")
 
 
-# ---- Response/Create models de Bloco de Vale (endpoints em vales.py) ----
-
 class BlocoValeCreate(SQLModel):
-    """Corpo de POST /blocos-vale/ -- cria o bloco E já atribui o
-    motorista na mesma chamada (motorista é fixo desde a criação,
-    decisão confirmada -- não existe endpoint pra reatribuir depois).
-    Gera automaticamente uma linha Vale pra cada número entre
-    primeira_folha e ultima_folha (inclusive)."""
     motorista_id: uuid.UUID
     primeira_folha: int = Field(gt=0)
     ultima_folha: int = Field(gt=0)
@@ -707,79 +456,34 @@ class BlocosValePublic(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Venda (venda de balcão da distribuidora) + VendaItem
-#
-# Uma Venda é o cabeçalho da transação; VendaItem é cada linha da
-# "sacola" (produto + quantidade + preço daquele momento). O preço
-# gravado em cada VendaItem vem de uma linha IMUTÁVEL de Preco (ver
-# comentário na classe Preco) -- reajustar preços no futuro não afeta
-# vendas passadas.
-#
-# motorista_id é sempre obrigatório: pra venda de balcão (sem entrega
-# por um motorista de verdade), aponta pro usuário-sistema
-# "Distribuidora Gás Favero" (ver seed na migration + proteção contra
-# DELETE em users.py). Isso evita ter uma FK nullable só pra
-# representar "ninguém" -- sempre tem alguém "dono" da venda pra fins
-# de relatório.
-#
-# forma_pagamento fica como string livre (não Enum de banco) pra não
-# precisar de migration toda vez que uma forma nova aparecer -- a
-# validação de quais valores são aceitos (cartao/pix/dinheiro/vale)
-# mora no Pydantic (Literal) da camada de API, não no schema do banco.
-#
-# --- Recebimento de Vale: recebido_em vs pago_em -----------------------
-# Uma venda em vale passa por até 3 estados:
-#   1) Em aberto        -- recebido_em IS NULL, pago_em IS NULL
-#   2) Aguardando baixa -- recebido_em IS NOT NULL, pago_em IS NULL
-#      (alguém já confirmou o recebimento -- hoje só o operador na
-#      distribuidora, no futuro também o motorista em campo -- mas
-#      só a distribuidora pode dar a baixa oficial)
-#   3) Baixada          -- pago_em IS NOT NULL (fechada de vez)
-#
-# IMPORTANTE (decisão do Ricardo, revista depois de ver o fluxo
-# funcionando): a baixa SEMPRE fecha a venda (estado 3), não importa
-# o valor. Se o valor pago na baixa for menor que valor_total, a
-# diferença é tratada como DESCONTO -- não vira um "saldo residual"
-# que mantém a venda em aberto. Ou seja, não existe "baixa parcial
-# que reabre o vale": uma vez que se deu baixa, aquele vale não está
-# mais passível de recebimento, ponto final. `valor_pago` registra o
-# que foi de fato recebido (podendo ser menor que valor_total por
-# desconto), mas isso nunca faz a venda voltar pro estado (1).
-# -------------------------------------------------------------------
+# Venda
 # ---------------------------------------------------------------------------
 
 class Venda(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
-    endereco_id: uuid.UUID | None = Field(
-        default=None, foreign_key="endereco.id", ondelete="SET NULL"
-    )
+    endereco_id: uuid.UUID | None = Field(default=None, foreign_key="endereco.id", ondelete="SET NULL")
     motorista_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     forma_pagamento: str = Field(max_length=20)
-    vale_id: uuid.UUID | None = Field(
-        default=None, foreign_key="vale.id", ondelete="RESTRICT"
-    )
+    vale_id: uuid.UUID | None = Field(default=None, foreign_key="vale.id", ondelete="RESTRICT")
     data_pagamento_vale: date | None = Field(default=None)
+    # Campos para Vale Gas (migration s4t5u6v7w8x9)
+    vale_gas_numero: int | None = Field(default=None)
+    vale_gas_bloco_id: uuid.UUID | None = Field(
+        default=None, foreign_key="bloco_vale_gas.id", ondelete="RESTRICT"
+    )
     valor_total: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     valor_pago: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     data_venda: date = Field(default_factory=lambda: datetime.now(UTC).date())
     pago_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
-    # ver bloco de comentário "Recebimento de Vale" acima da classe
-    recebido_em: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)
-    )
-    recebido_por_id: uuid.UUID | None = Field(
-        default=None, foreign_key="user.id", ondelete="SET NULL"
-    )
+    recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    recebido_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class VendaItem(SQLModel, table=True):
     __tablename__ = "venda_item"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="RESTRICT")
@@ -788,29 +492,21 @@ class VendaItem(SQLModel, table=True):
     subtotal: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
 
 
-# ---- Response/Create models de Venda (endpoints em vendas.py) ----
-
 class VendaItemCreate(SQLModel):
     produto_id: uuid.UUID
     quantidade: int = Field(gt=0)
 
 
 class VendaCreate(SQLModel):
-    """Corpo de POST /vendas/ -- cria a venda inteira (cabeçalho +
-    itens da sacola) numa única transação.
-
-    vale_numero é o número físico da folha do vale (não o vale_id) --
-    o endpoint resolve pra um Vale existente e valida que ainda não foi
-    usado em outra venda. data_pagamento_vale, se não informado e a
-    forma for 'vale', é calculado automaticamente como o 5º dia útil
-    do mês seguinte (decisão do Ricardo: dá previsibilidade ao cliente
-    alinhada com o pagamento do salário)."""
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID | None = None
     motorista_id: uuid.UUID
-    forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale"]
+    forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas"]
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
+    # Campos para Vale Gas
+    vale_gas_numero: int | None = None
+    vale_gas_bloco_id: uuid.UUID | None = None
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
     data_venda: date | None = None
     itens: list[VendaItemCreate] = Field(min_length=1)
@@ -835,6 +531,8 @@ class VendaPublic(SQLModel):
     forma_pagamento: str
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
+    vale_gas_numero: int | None = None
+    vale_gas_estabelecimento: str | None = None
     valor_total: Decimal
     valor_pago: Decimal
     data_venda: date
@@ -852,56 +550,18 @@ class VendasPublic(SQLModel):
 
 
 class ProximoValeNumeroPublic(SQLModel):
-    """Resposta de GET /vendas/proximo-numero-vale/{motorista_id} --
-    sugestão do próximo número de vale livre dentro do(s) bloco(s)
-    atribuído(s) a esse motorista (null se não houver nenhum livre ou
-    nenhum bloco atribuído). É só uma sugestão pro campo "número do
-    vale" na tela de venda -- continua editável, não é obrigatório
-    usar exatamente esse número."""
     numero: int | None = None
 
 
-# ---- Recebimento de Vale (endpoints em vendas.py) ----
-
 class VendaMarcarPagoRequest(SQLModel):
-    """Corpo de PATCH /vendas/{id}/marcar-pago -- registra que o
-    valor foi recebido (hoje: por um operador na tela de Recebimento
-    de Vale; no futuro: por um motorista numa interface própria em
-    campo). NÃO fecha a venda -- só a baixa (endpoint separado, só
-    na distribuidora) faz isso."""
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
 
 
 class VendaBaixarValeRequest(SQLModel):
-    """Corpo de PATCH /vendas/{id}/baixar-vale -- confirma
-    oficialmente o recebimento na distribuidora (sempre feito ali,
-    nunca em campo) e FECHA a venda de vez (pago_em), não importa o
-    valor. valor_pago é opcional: se omitido, usa o valor já
-    registrado por marcar-pago. Se for menor que valor_total, a
-    diferença é um desconto -- não deixa a venda em aberto de novo
-    (ver comentário em Venda, models.py)."""
     valor_pago: Decimal | None = Field(default=None, gt=0, decimal_places=2)
 
 
 class ResumoRecebimentoValePublic(SQLModel):
-    """Resposta de GET /vendas/vales-recebimento/resumo -- os 4 cards
-    da tela de Recebimento de Vale.
-
-    em_aberto_valor / atraso_valor: soma do valor_total das vendas
-    naquele grupo (não desconta nada -- são vendas que ainda não
-    tiveram nenhum recebimento registrado).
-
-    aguardando_baixa_valor: soma do valor_pago (o que foi de fato
-    registrado como recebido, ainda não conferido/baixado na
-    distribuidora) -- não o valor_total, porque o que importa aqui pro
-    operador é quanto ele deve esperar receber/conferir em mãos.
-
-    pagos_mes_qtd / pagos_mes_valor: vendas em vale já BAIXADAS
-    (pago_em não nulo) cujo pago_em cai dentro do mês vigente (do dia
-    1 ao último dia do mês corrente) -- não é sobre quando a venda foi
-    feita, é sobre quando foi dada a baixa. pagos_mes_valor soma
-    valor_pago (o que de fato entrou no caixa naqueles vales).
-    """
     em_aberto_qtd: int
     em_aberto_valor: Decimal
     atraso_qtd: int
@@ -912,58 +572,17 @@ class ResumoRecebimentoValePublic(SQLModel):
     pagos_mes_valor: Decimal
 
 
-# ---- Livro de Vendas (endpoints em vendas.py) ----
-#
-# Tela geral de todas as vendas (qualquer forma de pagamento --
-# diferente do Recebimento de Vale, que é só vale). Tem um menu
-# interativo de 3 linhas (Ano / Mês / Semana) que dirige a
-# granularidade do gráfico e o período usado pelos 2 cards; a tabela
-# de baixo é independente disso (tem seu próprio filtro de intervalo
-# de datas). Ver docstring de read_livro_resumo em vendas.py para a
-# lógica completa de drill-down.
-
 class LivroVendasBucket(SQLModel):
-    """Um ponto (barra) do gráfico -- label já formatado pro eixo X
-    (ex: 'Jan', '2025', 'Domingo', '01/08–02/08', dependendo da
-    granularidade ativa) e o valor em caixa (soma de valor_pago das
-    vendas já pagas) somado dentro daquele bucket de tempo."""
     label: str
     valor: Decimal
 
 
 class LivroVendasFormaPagamentoValor(SQLModel):
-    """Uma linha do detalhamento de 'Em caixa' por forma de pagamento
-    -- forma_pagamento é o slug técnico (cartao/pix/dinheiro/vale, o
-    mesmo valor gravado em Venda.forma_pagamento); o label de exibição
-    é responsabilidade do frontend. valor é a soma de valor_pago das
-    vendas JÁ PAGAS daquela forma, dentro do período ativo."""
     forma_pagamento: str
     valor: Decimal
 
 
 class LivroVendasResumoPublic(SQLModel):
-    """Resposta de GET /vendas/livro/resumo -- os 2 cards ('Em caixa'
-    e 'Em aberto') + o período textual + os pontos do gráfico, tudo
-    já filtrado pelo escopo ativo do menu interativo (ano/mês/semana).
-
-    em_caixa: vendas já pagas (pago_em preenchido) com data_venda
-    dentro do período -- qtd e soma de valor_pago (o que de fato
-    entrou no caixa).
-
-    em_caixa_por_forma_pagamento: o mesmo total de em_caixa_valor,
-    detalhado por forma de pagamento (cartao/pix/dinheiro/vale) --
-    sempre as 4 formas presentes na lista, mesmo com valor 0, nessa
-    ordem fixa (pedido do Ricardo). A soma dos 4 valores sempre bate
-    com em_caixa_valor.
-
-    em_aberto: vendas ainda não pagas (pago_em nulo -- sempre vale em
-    aberto ou em atraso) com data_venda dentro do período -- qtd e
-    soma de valor_total (o que falta receber).
-
-    periodo_inicio/periodo_fim: limites do período correspondente ao
-    escopo ativo, pro frontend montar o label '(dd/mm/aaaa -
-    dd/mm/aaaa)'.
-    """
     em_caixa_qtd: int
     em_caixa_valor: Decimal
     em_caixa_por_forma_pagamento: list[LivroVendasFormaPagamentoValor]
@@ -975,38 +594,15 @@ class LivroVendasResumoPublic(SQLModel):
 
 
 class AnosDisponiveisPublic(SQLModel):
-    """Resposta de GET /vendas/livro/anos-disponiveis -- até os 5 anos
-    mais recentes com ao menos 1 venda (data_venda), em ordem
-    decrescente. Usado pra montar os botões da linha 'Ano' do menu
-    interativo -- se houver um 6º ano de histórico ele simplesmente
-    não aparece aqui (mas continua acessível via escopo 'todos_anos',
-    que não depende desta lista).
-
-    Reaproveitado tal e qual por GET /vendas/inadimplentes/anos-
-    disponiveis (mesma forma: só uma lista de anos)."""
     anos: list[int]
 
 
 class LivroVendasListPublic(SQLModel):
-    """Resposta de GET /vendas/livro (a tabela) -- diferente de
-    VendasPublic genérico porque inclui soma_preco/soma_valor_pago:
-    o total das colunas 'Preço' (valor_total) e 'Valor pago'
-    (valor_pago) de TODAS as vendas que batem com o filtro de data
-    ativo (data_inicio/data_fim), não só as da página atual -- é o
-    valor exibido na linha de totais no rodapé da tabela, que muda
-    dinamicamente junto com o filtro 'Consulta vendas data'.
-
-    Reaproveitado tal e qual por GET /vendas/inadimplentes (mesma
-    forma: data + count + soma_preco + soma_valor_pago) -- não faz
-    sentido duplicar o model só porque o nome da tela é outro."""
     data: list[VendaPublic]
     count: int
     soma_preco: Decimal
     soma_valor_pago: Decimal
 
-
-# ---- Ranking da Semana (endpoints em vendas.py -- usado no painel
-# lateral da tela Mapa) ----
 
 class RankingMotoristaPublic(SQLModel):
     motorista_id: uuid.UUID
@@ -1015,45 +611,12 @@ class RankingMotoristaPublic(SQLModel):
 
 
 class RankingSemanaPublic(SQLModel):
-    """Resposta de GET /vendas/ranking-semana -- top 3 motoristas por
-    QUANTIDADE de vendas na semana corrente (domingo-sábado, mesmo
-    corte de semana usado no Livro de Vendas -- ver _semana_atual em
-    vendas.py). Conta TODAS as vendas independente de forma de
-    pagamento ou status de pagamento -- é volume de atendimento, não
-    faturamento."""
     periodo_inicio: date
     periodo_fim: date
     motoristas: list[RankingMotoristaPublic]
 
 
-# ---- Inadimplentes (endpoints em vendas.py) ----
-#
-# Tela dedicada a vendas em vale que "estiveram em atraso" em algum
-# momento -- não é só "o que está em aberto agora" (isso já existe no
-# card 'Em aberto' do Livro de Vendas). Aqui entra qualquer venda que:
-#   - já foi paga, mas levou mais de DIAS_ATRASO_VALE dias entre
-#     data_venda e pago_em (esteve atrasada antes de quitar), OU
-#   - continua em aberto e já passou de DIAS_ATRASO_VALE dias desde
-#     data_venda (atraso ainda em curso, mesma regra do resto do
-#     sistema)
-# Ver _esteve_em_atraso() em vendas.py pra o cálculo exato -- não
-# depende de nenhuma coluna nova, é 100% derivado de data_venda/
-# pago_em já existentes (decisão confirmada com o Ricardo: não vale a
-# pena um snapshot histórico à parte).
-#
-# O agrupamento por período (menu Ano/Mês, sem linha de Semana) usa
-# data_pagamento_vale (quando o vale VENCEU), não data_venda -- outra
-# decisão confirmada.
-
 class InadimplentesResumoPublic(SQLModel):
-    """Resposta de GET /vendas/inadimplentes/resumo -- o único card
-    da tela ('Atraso maior que 30 dias') + o período textual + os
-    pontos do gráfico, filtrados pelo escopo ativo do menu
-    (todos_anos/ano/mes, agrupado por data_pagamento_vale).
-
-    valor soma valor_total (o que ficou em aberto na época; para
-    quem já pagou depois, valor_total continua sendo o total original
-    da venda, não é afetado pelo pagamento)."""
     qtd: int
     valor: Decimal
     periodo_inicio: date
@@ -1067,156 +630,42 @@ class InadimplentesMotoristaPublic(SQLModel):
 
 
 class InadimplentesMotoristasPublic(SQLModel):
-    """Resposta de GET /vendas/inadimplentes/motoristas -- só os
-    motoristas que aparecem em ao menos 1 venda 'esteve em atraso'
-    (não a lista de usuários inteira), pra montar o dropdown "Nome
-    Motorista" -- "Todos Motoristas" (primeira opção) é sintético,
-    montado só no frontend, não vem daqui."""
     data: list[InadimplentesMotoristaPublic]
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Chamado (nome de exibição; classe/tabela continuam se
-# chamando DemandaVenda/demanda_venda internamente -- mesmo padrão de
-# divergência técnico/negócio já usado em Item/Produto, ver
-# comentário na classe Item)
-#
-# Um Chamado representa um pedido telefônico de entrega -- o
-# atendente vê o cliente + endereço no mapa e decide despachar pra um
-# motorista específico OU deixar aberto pra qualquer motorista
-# disponível aceitar (motorista_id NULL = aberto). Quando um
-# motorista aceita um chamado aberto, ele "assume" o chamado
-# (motorista_id passa a ser o dele) -- ver POST .../aceitar em
-# delegacao.py.
-#
-# endereco_id é sempre um Endereco REAL vinculado (nunca texto livre)
-# -- sem isso não dá pra plotar no mapa; observações soltas (ex:
-# "portão azul", "em frente à Rádio Veranense") cabem em
-# `observacao`, mas NUNCA substituem o endereço estruturado.
-#
-# Ciclo de vida (status, string livre validada via Literal no
-# Pydantic -- mesmo padrão de Venda.forma_pagamento):
-#   pendente  -> aceita     (motorista aceita; se estava aberto, assume)
-#   pendente  -> cancelada  (SÓ o atendente cancela -- ver
-#                           /demandas-venda/{id}/cancelar em
-#                           delegacao.py, gateado pela ação "Apagar"
-#                           do módulo delegacao, que o Motorista não
-#                           tem. Funciona de qualquer estado ATIVO
-#                           (pendente ou aceita), não só pendente --
-#                           decisão do Ricardo: o atendente não
-#                           precisa saber em que estado o chamado
-#                           está, só tem a intenção de interromper um
-#                           trabalho que seria em vão)
-#   aceita    -> cancelada  (idem acima)
-#   aceita    -> concluida  (motorista marca "cheguei ao destino" --
-#                           ENCERRA o chamado: some do mapa e da lista
-#                           do motorista. A venda em si acontece
-#                           depois, separadamente, na tela de Vendas)
-#
-# NÃO EXISTE MAIS "recusar" pelo motorista como ação que muda o banco
-# (decisão tomada numa sessão de mapeamento de cenários com o
-# Ricardo): pra chamado ABERTO, "recusar" no app do motorista é 100%
-# local -- só fecha o alerta pra aquele aparelho, sem chamar API
-# nenhuma (o chamado continua pendente/aberto pra qualquer outro). Pra
-# CONVITE DIRETO, não existe opção de recusar em lugar nenhum -- o
-# motorista só aceita ou ignora; quem decide reatribuir ou cancelar é
-# sempre o atendente (ver /reatribuir e /cancelar). Isso existe pra
-# eliminar o cenário de "chamado em limbo" -- se um chamado morresse
-# (`recusada`) sem ninguém saber, ninguém tomaria a próxima ação.
-#
-# /demandas-venda/{id}/reatribuir -- troca motorista_id (pra outro
-# motorista específico, ou de volta pra None = reabre como chamado
-# aberto), MANTÉM O MESMO REGISTRO (não cria um novo -- decisão do
-# Ricardo). Só funciona a partir de status 'pendente' por enquanto
-# (reatribuir um chamado já 'aceita' significaria tirar de um
-# motorista que talvez já esteja a caminho -- fora de escopo por
-# agora, avaliar depois se vira necessidade real). Volta status pra
-# 'pendente' (o novo motorista precisa aceitar de novo, reaproveita o
-# fluxo de convite direto que já existe). Mesma proteção de permissão
-# de /cancelar (ação "Apagar" do módulo delegacao).
-#
-# finalizada_em: o nome do campo ficou (evita migration só por
-# cosmética), mas o SIGNIFICADO agora é mais genérico: "data/hora em
-# que o chamado foi ENCERRADO" -- por conclusão de verdade (status
-# concluida) OU por cancelamento do atendente (status cancelada). O
-# `status` é quem diz qual dos dois motivos foi.
-#
-# MotoristaLocalizacao é upsert puro: 1 LINHA POR MOTORISTA (PK =
-# motorista_id), sobrescrita a cada ping. Decisão confirmada com o
-# Ricardo: não guardamos histórico de localização -- não interessa
-# pro negócio e evita crescimento de tabela sem necessidade (custo
-# Supabase). Sem Relationship() bidirecional, mesmo motivo já
-# documentado no bloco de Geografia acima (evita o bug de FK do Role).
+# Chamado (DemandaVenda)
 # ---------------------------------------------------------------------------
 
 class DemandaVenda(SQLModel, table=True):
     __tablename__ = "demanda_venda"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
     endereco_id: uuid.UUID = Field(foreign_key="endereco.id", ondelete="RESTRICT")
-    # NULL = chamado ABERTO, disponível pra qualquer motorista aceitar
-    # (decisão confirmada com o Ricardo -- sem conceito de motorista
-    # "online/disponível" ainda, então "pra todos" vira literalmente
-    # "sem dono até alguém aceitar"). Preenchido desde a criação
-    # quando o atendente despacha pra um motorista específico.
-    motorista_id: uuid.UUID | None = Field(
-        default=None, foreign_key="user.id", ondelete="RESTRICT"
-    )
+    motorista_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="RESTRICT")
     observacao: str | None = Field(default=None, max_length=500)
-    # pendente | aceita | cancelada | concluida -- "recusada" não é
-    # mais produzida por nenhum fluxo novo (ver bloco de comentário
-    # acima da classe), mas o valor pode existir em registros
-    # antigos do banco -- ver Literal em delegacao.py. String livre
-    # no banco (mesmo padrão de Venda.forma_pagamento), validação
-    # mora no Pydantic da camada de API.
     status: str = Field(default="pendente", max_length=20)
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
-    # preenchido quando o motorista aceita (NULL = pendente). Não é
-    # mais preenchido por recusa (não existe mais recusa que muda o
-    # banco, ver comentário acima).
-    respondida_em: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)
-    )
-    # data/hora de ENCERRAMENTO -- ver comentário completo acima da
-    # classe (cobre tanto "concluida" quanto "cancelada" agora).
-    finalizada_em: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+    respondida_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    finalizada_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
 class DemandaVendaItem(SQLModel, table=True):
     __tablename__ = "demanda_venda_item"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    demanda_id: uuid.UUID = Field(
-        foreign_key="demanda_venda.id", ondelete="CASCADE"
-    )
+    demanda_id: uuid.UUID = Field(foreign_key="demanda_venda.id", ondelete="CASCADE")
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="RESTRICT")
     quantidade: int
-    # SEM preco_id de propósito -- diferente de VendaItem, o Chamado
-    # não fixa preço (a venda em si, com preço vigente no momento,
-    # acontece depois na tela de Vendas). Isso aqui é só "o que o
-    # motorista precisa levar".
 
 
 class MotoristaLocalizacao(SQLModel, table=True):
     __tablename__ = "motorista_localizacao"
-
-    motorista_id: uuid.UUID = Field(
-        foreign_key="user.id", primary_key=True, ondelete="CASCADE"
-    )
+    motorista_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
     latitude: Decimal = Field(sa_column=Column(Numeric(9, 6), nullable=False))
     longitude: Decimal = Field(sa_column=Column(Numeric(9, 6), nullable=False))
-    atualizado_em: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    atualizado_em: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
-
-# ---- Response/Create models de Chamado (endpoints em delegacao.py) ----
 
 class DemandaVendaItemCreate(SQLModel):
     produto_id: uuid.UUID
@@ -1231,13 +680,6 @@ class DemandaVendaItemPublic(SQLModel):
 
 
 class DemandaVendaCreate(SQLModel):
-    """Corpo de POST /demandas-venda/ -- despacha um chamado.
-    endereco_id é obrigatório e precisa apontar pra um Endereco já
-    cadastrado (do cliente ou outro) -- nunca texto livre.
-    motorista_id é opcional: se omitido, o chamado nasce ABERTO (pra
-    qualquer motorista aceitar); se informado, nasce já direcionado
-    pra aquele motorista específico. itens é opcional (pode ser um
-    chamado só com observação, ex: "cliente quer saber se tem gás")."""
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID
     motorista_id: uuid.UUID | None = None
@@ -1246,22 +688,10 @@ class DemandaVendaCreate(SQLModel):
 
 
 class DemandaVendaAceitarRequest(SQLModel):
-    """Corpo de PATCH /demandas-venda/{id}/aceitar -- só precisa de
-    motorista_id quando o chamado está ABERTO (sem dono ainda); nesse
-    caso é obrigatório, é quem está "assumindo" o chamado. Se o
-    chamado já tinha um motorista definido na criação, motorista_id
-    aqui é ignorado (o dono já é fixo)."""
     motorista_id: uuid.UUID | None = None
 
 
 class DemandaVendaReatribuirRequest(SQLModel):
-    """Corpo de PATCH /demandas-venda/{id}/reatribuir -- SÓ o
-    atendente pode chamar (ação "Apagar" do módulo delegacao, ver
-    comentário de ciclo de vida acima da classe DemandaVenda).
-    motorista_id novo dono do chamado; None reabre como chamado
-    ABERTO (equivalente a "não era pra fulano, era pra qualquer um").
-    Só funciona a partir de status 'pendente' -- ver comentário
-    completo acima."""
     motorista_id: uuid.UUID | None = None
 
 
@@ -1270,7 +700,6 @@ class DemandaVendaPublic(SQLModel):
     cliente_id: uuid.UUID
     cliente_nome: str
     endereco: EnderecoPublic
-    # NULL = chamado ainda aberto, ninguém assumiu
     motorista_id: uuid.UUID | None = None
     motorista_nome: str | None = None
     observacao: str | None = None
@@ -1287,8 +716,6 @@ class DemandasVendaPublic(SQLModel):
 
 
 class MotoristaLocalizacaoUpdate(SQLModel):
-    """Corpo de PUT /motoristas/{motorista_id}/localizacao -- upsert
-    de ping de localização (sobrescreve sempre, sem histórico)."""
     latitude: Decimal = Field(ge=-90, le=90, decimal_places=6)
     longitude: Decimal = Field(ge=-180, le=180, decimal_places=6)
 
@@ -1305,18 +732,7 @@ class MotoristasLocalizacaoPublic(SQLModel):
     data: list[MotoristaLocalizacaoPublic]
 
 
-# ---- Disponibilidade do motorista (endpoints em delegacao.py) ----
-#
-# "Disponível" = pode receber chamado agora. Persistido em
-# User.disponivel (ver comentário na classe User e na migration
-# k6l7m8n9o0p1) -- diferente de MotoristaLocalizacao, que só existe
-# depois do primeiro ping de GPS, disponibilidade tem valor desde
-# sempre pra qualquer usuário.
-
 class MotoristaDisponibilidadeUpdate(SQLModel):
-    """Corpo de PUT /motoristas/{motorista_id}/disponibilidade --
-    chamado tanto pelo próprio motorista (toggle no app) quanto por
-    um gerente/atendente numa tela gerencial futura."""
     disponivel: bool
 
 
@@ -1327,25 +743,10 @@ class MotoristaDisponibilidadePublic(SQLModel):
 
 
 class MotoristasDisponibilidadePublic(SQLModel):
-    """Resposta de GET /motoristas/disponibilidade -- todos os
-    usuários com role Motorista + seu status atual. Usado pra filtrar
-    o combo de despacho em /chamado (só disponíveis) e por uma futura
-    tela gerencial de disponibilidade."""
     data: list[MotoristaDisponibilidadePublic]
 
 
-# ---- Token FCM do motorista (endpoints em delegacao.py) ----
-#
-# Push notification real (Fase 4, sessão 09/08) -- ver
-# app/core/firebase_push.py pro envio propriamente dito.
-
 class MotoristaFcmTokenUpdate(SQLModel):
-    """Corpo de PUT /motoristas/{motorista_id}/fcm-token -- chamado
-    pelo app do motorista ao logar e sempre que o Firebase renovar o
-    token automaticamente (tokens FCM não são permanentes, o SDK
-    client-side avisa quando muda). Sobrescreve sempre -- não faz
-    sentido guardar histórico de tokens antigos, só o atual importa
-    pra entregar push."""
     fcm_token: str = Field(min_length=1, max_length=255)
 
 
@@ -1371,62 +772,34 @@ class NewPassword(SQLModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
-
 # ---------------------------------------------------------------------------
-# gasfavero — Plano de Contas + Lançamento Contábil
-# (Fase 1 do fechamento diário -- sessão 2026-09-04)
-#
-# Plano de contas fixo seguindo o padrão contábil brasileiro:
-#   1xxx Ativo   (Conta Mestre, Caixa em Trânsito por motorista,
-#                 Contas a Receber, Maquininha)
-#   2xxx Receita (Vendas à Vista, Vendas no Fiado)
-#   3xxx Despesa (Quebra de Caixa, Sobra de Caixa, Taxas de Cartão)
-#
-# Contas sintéticas agrupam; contas analíticas recebem lançamentos.
-# Contas de Caixa em Trânsito por motorista (1101, 1102, …) são
-# criadas dinamicamente na abertura do dia -- não fazem parte do seed.
-#
-# LancamentoContabil usa partidas dobradas simples: cada lançamento
-# tem uma conta de débito e uma de crédito. Referências opcionais a
-# venda_id e abertura_id permitem rastreabilidade completa.
+# Plano de Contas + Lancamento Contabil
 # ---------------------------------------------------------------------------
 
 class Conta(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     numero: str = Field(unique=True, max_length=10)
     nome: str = Field(max_length=255)
-    # sintetica = agrupadora (não recebe lançamentos diretos)
-    # analitica = recebe lançamentos
     tipo: str = Field(max_length=20)
     pai_id: uuid.UUID | None = Field(default=None, foreign_key="conta.id", ondelete="RESTRICT")
-    # NULL = conta da distribuidora; preenchido = conta do motorista
-    # (Caixa em Trânsito individuais criados na abertura do dia)
     motorista_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="RESTRICT")
     ativo: bool = Field(default=True)
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class LancamentoContabil(SQLModel, table=True):
     __tablename__ = "lancamento_contabil"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     data: date = Field()
     descricao: str = Field(max_length=500)
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     debito_id: uuid.UUID = Field(foreign_key="conta.id", ondelete="RESTRICT")
     credito_id: uuid.UUID = Field(foreign_key="conta.id", ondelete="RESTRICT")
-    # rastreabilidade opcional
     venda_id: uuid.UUID | None = Field(default=None, foreign_key="venda.id", ondelete="SET NULL")
-    abertura_id: uuid.UUID | None = Field(default=None)  # FK adicionada na Fase 2
+    abertura_id: uuid.UUID | None = Field(default=None)
     criado_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="RESTRICT")
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
-
-# ---- Response models de Conta (endpoints em fechamento.py -- Fase 2) ----
 
 class ContaPublic(SQLModel):
     id: uuid.UUID
@@ -1437,7 +810,6 @@ class ContaPublic(SQLModel):
     motorista_id: uuid.UUID | None = None
     motorista_nome: str | None = None
     ativo: bool
-    # saldo calculado dinamicamente pelo endpoint (não é coluna do banco)
     saldo: Decimal = Decimal("0")
 
 
@@ -1460,27 +832,17 @@ class LancamentoContabilPublic(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# gasfavero — Bloco de Vale Gas
-#
-# Talao impresso por grafica, associado a um estabelecimento comercial (PJ).
-# Um cliente so pode ter um bloco ativo (unique cliente_id -- decisao
-# confirmada: se precisar de novo bloco, encerra o antigo primeiro).
-# Numeracao propria, separada dos blocos de fiado dos motoristas.
+# Bloco de Vale Gas
 # ---------------------------------------------------------------------------
 
 class BlocoValeGas(SQLModel, table=True):
     __tablename__ = "bloco_vale_gas"
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    # unique=True: um estabelecimento, um bloco ativo
     cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT", unique=True)
     primeira_folha: int
     ultima_folha: int
-    # data de circulacao -- quando o talao entrou em uso (informativo)
     data: date
-    created_at: datetime = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
-    )
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class BlocoValeGasCreate(SQLModel):

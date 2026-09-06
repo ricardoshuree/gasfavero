@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: vale-gas-busca-por-nome | plano: 44d20142 | 2026-09-05 21:22:38
-# Busca de cliente por nome OU CNPJ/CPF no endpoint de Vale Gas
+# [mcp-local harness] feature: venda-vale-gas | plano: 9a811f03 | 2026-09-05 21:33:12
+# Adiciona endpoint GET /vale-gas/validar-numero para validar numero de folha em tempo real no frontend
 """
 Rotas de Bloco de Vale Gas. Controle de acesso via modulo RBAC "vale_gas".
 
@@ -64,15 +64,9 @@ def read_blocos_vale_gas(session: SessionDep) -> Any:
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def buscar_cliente_vale_gas(q: str, session: SessionDep) -> Any:
-    """Busca cliente por nome OU CPF/CNPJ (parcial, case-insensitive).
-    Parametro 'q' aceita qualquer um dos dois -- o backend decide
-    automaticamente se parece com documento (so digitos) ou nome (texto)
-    e aplica o filtro adequado; na duvida busca nos dois campos."""
+    """Busca cliente por nome OU CPF/CNPJ (parcial, case-insensitive)."""
     termo = q.strip()
     termo_doc = termo.replace(".", "").replace("-", "").replace("/", "")
-
-    # Busca por nome (ilike) OU por CPF/CNPJ (contains nos digitos limpos)
-    # ilike e case-insensitive no Postgres; contains usa LIKE internamente
     clientes = session.exec(
         select(Cliente)
         .where(
@@ -85,6 +79,43 @@ def buscar_cliente_vale_gas(q: str, session: SessionDep) -> Any:
         .limit(10)
     ).all()
     return [{"id": str(c.id), "nome": c.nome, "cpf": c.cpf} for c in clientes]
+
+
+@router.get(
+    "/validar-numero/{numero}",
+    response_model=dict,
+    dependencies=[Depends(require_module_permission("vendas", action="read"))],
+)
+def validar_numero_vale_gas(numero: int, session: SessionDep) -> Any:
+    """Valida se um numero de folha pertence a algum bloco de vale gas
+    e retorna o nome do estabelecimento associado.
+
+    Usado pelo frontend da tela de Vendas para feedback em tempo real
+    quando o operador digita o numero do vale gas.
+
+    Retorna:
+        valido: bool
+        estabelecimento_nome: str | None
+        estabelecimento_cpf: str | None
+        bloco_id: str | None
+    """
+    bloco = session.exec(
+        select(BlocoValeGas).where(
+            BlocoValeGas.primeira_folha <= numero,
+            BlocoValeGas.ultima_folha >= numero,
+        )
+    ).first()
+
+    if not bloco:
+        return {"valido": False, "estabelecimento_nome": None, "estabelecimento_cpf": None, "bloco_id": None}
+
+    cliente = session.get(Cliente, bloco.cliente_id)
+    return {
+        "valido": True,
+        "estabelecimento_nome": cliente.nome if cliente else "(removido)",
+        "estabelecimento_cpf": cliente.cpf if cliente else "",
+        "bloco_id": str(bloco.id),
+    }
 
 
 @router.post(
