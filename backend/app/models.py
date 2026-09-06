@@ -1457,3 +1457,50 @@ class LancamentoContabilPublic(SQLModel):
     venda_id: uuid.UUID | None = None
     abertura_id: uuid.UUID | None = None
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# gasfavero — Bloco de Vale Gas
+#
+# Talao impresso por grafica, associado a um estabelecimento comercial (PJ).
+# Um cliente so pode ter um bloco ativo (unique cliente_id -- decisao
+# confirmada: se precisar de novo bloco, encerra o antigo primeiro).
+# Numeracao propria, separada dos blocos de fiado dos motoristas.
+# ---------------------------------------------------------------------------
+
+class BlocoValeGas(SQLModel, table=True):
+    __tablename__ = "bloco_vale_gas"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    # unique=True: um estabelecimento, um bloco ativo
+    cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT", unique=True)
+    primeira_folha: int
+    ultima_folha: int
+    # data de circulacao -- quando o talao entrou em uso (informativo)
+    data: date
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)
+    )
+
+
+class BlocoValeGasCreate(SQLModel):
+    cliente_id: uuid.UUID
+    primeira_folha: int = Field(gt=0)
+    ultima_folha: int = Field(gt=0)
+    data: date
+
+
+class BlocoValeGasPublic(SQLModel):
+    id: uuid.UUID
+    cliente_id: uuid.UUID
+    cliente_nome: str
+    cliente_cpf: str
+    primeira_folha: int
+    ultima_folha: int
+    total_folhas: int
+    data: date
+    created_at: datetime
+
+
+class BlocosValeGasPublic(SQLModel):
+    data: list[BlocoValeGasPublic]

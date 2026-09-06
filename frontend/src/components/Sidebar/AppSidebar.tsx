@@ -1,4 +1,4 @@
-﻿// [mcp-local harness] feature: dashboard-saldos | plano: b1e65fff | 2026-09-04 18:56:40
+// [mcp-local harness] feature: dashboard-saldos | plano: b1e65fff | 2026-09-04 18:56:40
 // Adiciona Dashboard de Saldos no sidebar com ícone LayoutDashboard
 import {
   AlertTriangle,
@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   Sunrise,
   Ticket,
+  Flame,
   Users,
   UsersRound,
 } from "lucide-react"

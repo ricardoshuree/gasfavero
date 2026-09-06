@@ -30,6 +30,7 @@ import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
 import { Route as LayoutRecebimentoValeRouteImport } from './routes/_layout/recebimento-vale'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
+import { Route as LayoutValeGasRouteImport } from './routes/_layout/vale-gas'
 import { Route as LayoutValesRouteImport } from './routes/_layout/vales'
 import { Route as LayoutVendasRouteImport } from './routes/_layout/vendas'
 
@@ -137,6 +138,11 @@ const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutValeGasRoute = LayoutValeGasRouteImport.update({
+  id: '/vale-gas',
+  path: '/vale-gas',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutValesRoute = LayoutValesRouteImport.update({
   id: '/vales',
   path: '/vales',
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/produtos': typeof LayoutProdutosRoute
   '/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/settings': typeof LayoutSettingsRoute
+  '/vale-gas': typeof LayoutValeGasRoute
   '/vales': typeof LayoutValesRoute
   '/vendas': typeof LayoutVendasRoute
 }
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   '/produtos': typeof LayoutProdutosRoute
   '/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/settings': typeof LayoutSettingsRoute
+  '/vale-gas': typeof LayoutValeGasRoute
   '/vales': typeof LayoutValesRoute
   '/vendas': typeof LayoutVendasRoute
   '/': typeof LayoutIndexRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   '/_layout/produtos': typeof LayoutProdutosRoute
   '/_layout/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/_layout/settings': typeof LayoutSettingsRoute
+  '/_layout/vale-gas': typeof LayoutValeGasRoute
   '/_layout/vales': typeof LayoutValesRoute
   '/_layout/vendas': typeof LayoutVendasRoute
   '/_layout/': typeof LayoutIndexRoute
@@ -245,6 +254,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/recebimento-vale'
     | '/settings'
+    | '/vale-gas'
     | '/vales'
     | '/vendas'
   fileRoutesByTo: FileRoutesByTo
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/recebimento-vale'
     | '/settings'
+    | '/vale-gas'
     | '/vales'
     | '/vendas'
     | '/'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/_layout/produtos'
     | '/_layout/recebimento-vale'
     | '/_layout/settings'
+    | '/_layout/vale-gas'
     | '/_layout/vales'
     | '/_layout/vendas'
     | '/_layout/'
@@ -455,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutSettingsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/vale-gas': {
+      id: '/_layout/vale-gas'
+      path: '/vale-gas'
+      fullPath: '/vale-gas'
+      preLoaderRoute: typeof LayoutValeGasRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/vales': {
       id: '/_layout/vales'
       path: '/vales'
@@ -488,6 +507,7 @@ interface LayoutRouteChildren {
   LayoutProdutosRoute: typeof LayoutProdutosRoute
   LayoutRecebimentoValeRoute: typeof LayoutRecebimentoValeRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
+  LayoutValeGasRoute: typeof LayoutValeGasRoute
   LayoutValesRoute: typeof LayoutValesRoute
   LayoutVendasRoute: typeof LayoutVendasRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
@@ -509,6 +529,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutProdutosRoute: LayoutProdutosRoute,
   LayoutRecebimentoValeRoute: LayoutRecebimentoValeRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
+  LayoutValeGasRoute: LayoutValeGasRoute,
   LayoutValesRoute: LayoutValesRoute,
   LayoutVendasRoute: LayoutVendasRoute,
   LayoutIndexRoute: LayoutIndexRoute,

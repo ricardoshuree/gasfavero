@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     clientes,
+    vale_gas,
     delegacao,
     fechamento,
     geografia,
@@ -35,6 +36,7 @@ api_router.include_router(vales.router)
 api_router.include_router(vendas.router)
 api_router.include_router(delegacao.router)
 api_router.include_router(fechamento.router)
+api_router.include_router(vale_gas.router)
 
 
 if settings.ENVIRONMENT == "local":
