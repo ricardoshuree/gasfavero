@@ -1,10 +1,11 @@
-# [mcp-local harness] feature: abertura-dia | plano: 8346bf80 | 2026-09-04 15:11:40
-# Registra fechamento.router no api_router
+# [mcp-local harness] feature: gas-povo | plano: 91907a1a | 2026-09-06 00:07:12
+# Registra gas_povo.router
 from fastapi import APIRouter
 
 from app.api.routes import (
     clientes,
     vale_gas,
+    gas_povo,
     delegacao,
     fechamento,
     geografia,
@@ -37,6 +38,7 @@ api_router.include_router(vendas.router)
 api_router.include_router(delegacao.router)
 api_router.include_router(fechamento.router)
 api_router.include_router(vale_gas.router)
+api_router.include_router(gas_povo.router)
 
 
 if settings.ENVIRONMENT == "local":

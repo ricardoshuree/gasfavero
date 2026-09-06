@@ -1,9 +1,5 @@
-# [mcp-local harness] feature: venda-vale-gas | plano: 9a811f03 | 2026-09-05 21:34:58
-# Adiciona vale_gas_numero e vale_gas_bloco_id em Venda, vale_gas no Literal de VendaCreate, e campos correspondentes em VendaPublic
-# [mcp-local harness] feature: fcm-backend | plano: 82950fd0 | 2026-08-09 14:20:01
-# Adiciona User.fcm_token e MotoristaFcmTokenUpdate
-# [mcp-local harness] feature: fase1-modelos-disponibilidade-cancelamento | plano: fb2e15ac | 2026-08-08 11:04:25
-# User.disponivel + novos modelos MotoristaDisponibilidade* e DemandaVendaReatribuirRequest + docstrings atualizadas
+# [mcp-local harness] feature: gas-povo | plano: 8ec9cbb7 | 2026-09-06 00:03:46
+# Adiciona campos gas_povo_frete e gas_povo_frete_recebido_em em Venda/VendaCreate/VendaPublic; adiciona gas_povo no Literal; adiciona modelos GasPovoRecebimentoPublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -472,6 +468,12 @@ class Venda(SQLModel, table=True):
     vale_gas_bloco_id: uuid.UUID | None = Field(
         default=None, foreign_key="bloco_vale_gas.id", ondelete="RESTRICT"
     )
+    # Campos para Gas do Povo (migration u6v7w8x9y0z1)
+    # gas_povo_frete: frete cobrado do cliente no ato da entrega (pago imediatamente)
+    # gas_povo_frete_recebido_em: preenchido automaticamente na criacao da venda
+    # pago_em (existente): preenchido quando o governo pagar o valor principal
+    gas_povo_frete: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
+    gas_povo_frete_recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     valor_total: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     valor_pago: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     data_venda: date = Field(default_factory=lambda: datetime.now(UTC).date())
@@ -501,12 +503,14 @@ class VendaCreate(SQLModel):
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID | None = None
     motorista_id: uuid.UUID
-    forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas"]
+    forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
     # Campos para Vale Gas
     vale_gas_numero: int | None = None
     vale_gas_bloco_id: uuid.UUID | None = None
+    # Campos para Gas do Povo
+    gas_povo_frete: Decimal | None = Field(default=None, gt=0, decimal_places=2)
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
     data_venda: date | None = None
     itens: list[VendaItemCreate] = Field(min_length=1)
@@ -533,6 +537,9 @@ class VendaPublic(SQLModel):
     data_pagamento_vale: date | None = None
     vale_gas_numero: int | None = None
     vale_gas_estabelecimento: str | None = None
+    # Gas do Povo
+    gas_povo_frete: Decimal | None = None
+    gas_povo_frete_recebido_em: datetime | None = None
     valor_total: Decimal
     valor_pago: Decimal
     data_venda: date
@@ -866,3 +873,29 @@ class BlocoValeGasPublic(SQLModel):
 
 class BlocosValeGasPublic(SQLModel):
     data: list[BlocoValeGasPublic]
+
+
+# ---------------------------------------------------------------------------
+# Gas do Povo — Recebimento
+# ---------------------------------------------------------------------------
+
+class GasPovoVendaPublic(SQLModel):
+    """Venda Gas do Povo com dados relevantes para o painel de recebimento."""
+    id: uuid.UUID
+    cliente_id: uuid.UUID
+    cliente_nome: str
+    motorista_nome: str
+    valor_total: Decimal
+    gas_povo_frete: Decimal
+    gas_povo_frete_recebido_em: datetime
+    data_venda: date
+    pago_em: datetime | None = None
+    dias_em_aberto: int
+
+
+class GasPovoRecebimentoPublic(SQLModel):
+    pendentes: list[GasPovoVendaPublic]
+    pendentes_qtd: int
+    pendentes_valor: Decimal
+    recebidos_mes_qtd: int
+    recebidos_mes_valor: Decimal

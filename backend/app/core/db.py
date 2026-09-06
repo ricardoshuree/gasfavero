@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: rbac-crud-permission-matrix | plano: 3c4333ee | 2026-08-04 13:42:39
-# Seed atualizado para o modelo CRUD de 4 acoes -- editor ganha create/read/update mas nao delete
+# [mcp-local harness] feature: gas-povo | plano: 91907a1a | 2026-09-06 00:07:38
+# Adiciona modulo gas_povo no seed com CRUD para gerente e motorista
 import uuid
 
 from sqlmodel import Session, create_engine, select
@@ -17,14 +17,24 @@ engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 # ---------------------------------------------------------------------------
 
 DEFAULT_ROLES = [
-    {"name": "admin",  "description": "Acesso irrestrito a todos os módulos"},
-    {"name": "editor", "description": "Cria e edita nos módulos permitidos, mas não apaga"},
-    {"name": "viewer", "description": "Somente leitura nos módulos permitidos"},
+    {"name": "admin",     "description": "Acesso irrestrito a todos os módulos"},
+    {"name": "editor",    "description": "Cria e edita nos módulos permitidos, mas não apaga"},
+    {"name": "viewer",    "description": "Somente leitura nos módulos permitidos"},
 ]
 
 DEFAULT_MODULES = [
     {"name": "usuarios",       "description": "Gestão de usuários e permissões"},
     {"name": "configuracoes",  "description": "Configurações gerais do sistema"},
+]
+
+# ---------------------------------------------------------------------------
+# Módulos e permissões específicos do erp-gasfavero
+# gas_povo: gerentes (editor) e motoristas (motorista) têm CRUD completo
+#   -- motoristas registram as vendas em campo; gerente dá baixa do governo
+# ---------------------------------------------------------------------------
+
+GASFAVERO_EXTRA_MODULES = [
+    {"name": "gas_povo", "description": "Programa Gás do Povo — vendas e recebimento"},
 ]
 
 
@@ -132,5 +142,31 @@ def init_db(session: Session) -> None:
     # 4. Atribui role admin ao superuser
     # ------------------------------------------------------------------
     _ensure_user_role(session, user, roles["admin"])
+
+    # ------------------------------------------------------------------
+    # 5. Módulos extras do erp-gasfavero
+    # ------------------------------------------------------------------
+    role_gerente = session.exec(select(Role).where(Role.name == "gerente")).first()
+    role_motorista = session.exec(select(Role).where(Role.name == "motorista")).first()
+
+    for m in GASFAVERO_EXTRA_MODULES:
+        mod = _get_or_create_module(session, m["name"], m["description"])
+        # admin: CRUD completo (herdado implicitamente via superuser, mas garantimos aqui)
+        _ensure_role_permission(
+            session, roles["admin"], mod,
+            can_create=True, can_read=True, can_update=True, can_delete=True,
+        )
+        # gerente: CRUD completo
+        if role_gerente:
+            _ensure_role_permission(
+                session, role_gerente, mod,
+                can_create=True, can_read=True, can_update=True, can_delete=True,
+            )
+        # motorista: CRUD completo (registra vendas em campo)
+        if role_motorista:
+            _ensure_role_permission(
+                session, role_motorista, mod,
+                can_create=True, can_read=True, can_update=True, can_delete=True,
+            )
 
     session.commit()

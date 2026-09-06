@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: venda-vale-gas | plano: 9a811f03 | 2026-09-05 21:37:59
-# Adiciona suporte a vale_gas no create_venda e vale_gas_estabelecimento no _to_venda_public
+# [mcp-local harness] feature: gas-povo | plano: 8ec9cbb7 | 2026-09-06 00:06:18
+# Adiciona gas_povo no Literal FORMAS_PAGAMENTO_ORDEM, _to_venda_public com gas_povo_frete, e bloco gas_povo em create_venda
 """
 Rotas de Venda (venda de balcao da distribuidora). Controle de acesso
 via modulo RBAC "vendas".
@@ -11,6 +11,12 @@ vale invalido, etc.) nada e gravado.
 Preco de cada item vem da linha vigente de Preco no momento da venda
 -- essa linha e imutavel (ver comentario em Preco, models.py), entao
 reajustes futuros de preco nunca afetam vendas ja registradas.
+
+Gas do Povo: forma_pagamento="gas_povo". O valor_total e o frete sao
+informados manualmente (programa governamental, preco tabelado variavel).
+O frete e pago pelo cliente no ato (gas_povo_frete_recebido_em preenchido
+na criacao). O valor principal e liquidado pelo governo posteriormente
+via tela "Recebimento Gas do Povo" (pago_em preenchido na baixa).
 """
 import calendar
 import uuid
@@ -68,7 +74,7 @@ MODULE = "vendas"
 MODULE_LIVRO = "livro_vendas"
 MODULE_INADIMPLENCIA = "inadimplencia"
 DIAS_ATRASO_VALE = 30
-FORMAS_PAGAMENTO_ORDEM = ["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas"]
+FORMAS_PAGAMENTO_ORDEM = ["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +174,8 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
         data_pagamento_vale=venda.data_pagamento_vale,
         vale_gas_numero=venda.vale_gas_numero,
         vale_gas_estabelecimento=vale_gas_estabelecimento,
+        gas_povo_frete=venda.gas_povo_frete,
+        gas_povo_frete_recebido_em=venda.gas_povo_frete_recebido_em,
         valor_total=venda.valor_total,
         valor_pago=venda.valor_pago,
         data_venda=venda.data_venda,
@@ -641,6 +649,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
     vale = None
     data_pagamento_vale = venda_in.data_pagamento_vale
     vale_gas_bloco_id: uuid.UUID | None = None
+    gas_povo_frete_recebido_em = None
     pago_em: Any = get_datetime_utc()
 
     # --- Fiado ---
@@ -663,7 +672,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
 
     # --- Vale Gas ---
     elif venda_in.forma_pagamento == "vale_gas":
-        pago_em = None  # Vale Gas tambem e a prazo -- liquidado no Recebimento de Vale Gas
+        pago_em = None
         if venda_in.vale_gas_numero is None:
             raise HTTPException(status_code=400, detail="Informe o numero do vale gas")
         if venda_in.vale_gas_bloco_id is None:
@@ -674,7 +683,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
         num = venda_in.vale_gas_numero
         if not (bloco_gas.primeira_folha <= num <= bloco_gas.ultima_folha):
             raise HTTPException(status_code=400, detail=f"Numero {num} fora do intervalo do bloco ({bloco_gas.primeira_folha}-{bloco_gas.ultima_folha})")
-        # Verifica duplicata: mesmo numero ja usado
         ja_usado = session.exec(
             select(Venda).where(Venda.forma_pagamento == "vale_gas").where(Venda.vale_gas_numero == num)
         ).first()
@@ -682,21 +690,49 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             raise HTTPException(status_code=400, detail=f"O vale gas numero {num} ja foi usado em outra venda")
         vale_gas_bloco_id = bloco_gas.id
 
+    # --- Gas do Povo ---
+    elif venda_in.forma_pagamento == "gas_povo":
+        # valor_total informado manualmente via valor_pago (o frontend envia valor_total como valor_pago)
+        # pago_em = None: governo paga depois (liquidado via Recebimento Gas do Povo)
+        # gas_povo_frete: frete cobrado do cliente no ato, registrado imediatamente
+        pago_em = None
+        if venda_in.gas_povo_frete is None:
+            raise HTTPException(status_code=400, detail="Informe o valor do frete para vendas Gas do Povo")
+        gas_povo_frete_recebido_em = get_datetime_utc()
+
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 
     itens_resolvidos = []
-    valor_total = Decimal("0")
-    for item_in in venda_in.itens:
-        produto = session.get(Item, item_in.produto_id)
-        if not produto:
-            raise HTTPException(status_code=404, detail=f"Produto {item_in.produto_id} nao encontrado")
-        preco = _preco_vigente(session, item_in.produto_id)
-        if not preco:
-            raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
-        subtotal = preco.valor * item_in.quantidade
-        valor_total += subtotal
-        itens_resolvidos.append((item_in, preco, subtotal))
+    # Gas do Povo: valor_total vem do frontend (preco tabelado pelo governo, nao pelo catalogo)
+    # Para as demais formas, valor_total e calculado pelos precos do catalogo
+    if venda_in.forma_pagamento == "gas_povo":
+        # valor_pago ja carrega o valor_total do programa (informado manualmente)
+        # O frontend envia: valor_pago = valor_total_governo
+        # valor_total gravado no banco = valor_pago (o que o governo deve pagar)
+        valor_total = venda_in.valor_pago
+        for item_in in venda_in.itens:
+            produto = session.get(Item, item_in.produto_id)
+            if not produto:
+                raise HTTPException(status_code=404, detail=f"Produto {item_in.produto_id} nao encontrado")
+            preco = _preco_vigente(session, item_in.produto_id)
+            if not preco:
+                raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
+            # subtotal usa preco do catalogo apenas para referencia no venda_item
+            subtotal = preco.valor * item_in.quantidade
+            itens_resolvidos.append((item_in, preco, subtotal))
+    else:
+        for item_in in venda_in.itens:
+            produto = session.get(Item, item_in.produto_id)
+            if not produto:
+                raise HTTPException(status_code=404, detail=f"Produto {item_in.produto_id} nao encontrado")
+            preco = _preco_vigente(session, item_in.produto_id)
+            if not preco:
+                raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
+            subtotal = preco.valor * item_in.quantidade
+            valor_total = Decimal("0")
+            itens_resolvidos.append((item_in, preco, subtotal))
+        valor_total = sum(subtotal for _, _, subtotal in itens_resolvidos)
 
     venda = Venda(
         cliente_id=venda_in.cliente_id,
@@ -707,6 +743,8 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
         data_pagamento_vale=data_pagamento_vale,
         vale_gas_numero=venda_in.vale_gas_numero if venda_in.forma_pagamento == "vale_gas" else None,
         vale_gas_bloco_id=vale_gas_bloco_id,
+        gas_povo_frete=venda_in.gas_povo_frete if venda_in.forma_pagamento == "gas_povo" else None,
+        gas_povo_frete_recebido_em=gas_povo_frete_recebido_em,
         valor_total=valor_total,
         valor_pago=venda_in.valor_pago,
         data_venda=venda_in.data_venda or date.today(),
