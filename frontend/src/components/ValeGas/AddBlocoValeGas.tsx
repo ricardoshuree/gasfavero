@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: vale-gas-busca-por-nome | plano: 44d20142 | 2026-09-05 21:23:14
+// Busca por nome ou CNPJ/CPF no formulario de Bloco de Vale Gas
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Search } from "lucide-react"
@@ -57,7 +59,7 @@ interface ClienteResult {
 
 const AddBlocoValeGas = () => {
   const [isOpen, setIsOpen] = useState(false)
-  const [buscaCpf, setBuscaCpf] = useState("")
+  const [busca, setBusca] = useState("")
   const [resultados, setResultados] = useState<ClienteResult[]>([])
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteResult | null>(null)
   const [buscando, setBuscando] = useState(false)
@@ -75,13 +77,13 @@ const AddBlocoValeGas = () => {
   })
 
   async function buscarCliente() {
-    if (!buscaCpf.trim()) return
+    if (!busca.trim()) return
     setBuscando(true)
     setResultados([])
     try {
       const token = localStorage.getItem("access_token")
       const res = await fetch(
-        `${API}/api/v1/vale-gas/clientes/busca?cpf=${encodeURIComponent(buscaCpf)}`,
+        `${API}/api/v1/vale-gas/clientes/busca?q=${encodeURIComponent(busca)}`,
         { headers: { Authorization: `Bearer ${token}` } },
       )
       if (!res.ok) throw new Error("Erro na busca")
@@ -126,7 +128,7 @@ const AddBlocoValeGas = () => {
       showSuccessToast("Bloco de Vale Gás criado com sucesso")
       form.reset()
       setClienteSelecionado(null)
-      setBuscaCpf("")
+      setBusca("")
       setIsOpen(false)
       queryClient.invalidateQueries({ queryKey: ["blocosValeGas"] })
     },
@@ -154,9 +156,9 @@ const AddBlocoValeGas = () => {
           <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))}>
             <div className="grid gap-4 py-4">
 
-              {/* Busca de estabelecimento por CNPJ/CPF */}
+              {/* Busca por nome ou CNPJ/CPF */}
               <div className="grid gap-1.5">
-                <FormLabel>Estabelecimento (CNPJ / CPF)</FormLabel>
+                <FormLabel>Estabelecimento</FormLabel>
                 {clienteSelecionado ? (
                   <div className="flex items-center justify-between rounded-md border px-3 py-2">
                     <div>
@@ -178,10 +180,12 @@ const AddBlocoValeGas = () => {
                   <>
                     <div className="flex gap-2">
                       <Input
-                        placeholder="Digite CNPJ ou CPF..."
-                        value={buscaCpf}
-                        onChange={(e) => setBuscaCpf(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), buscarCliente())}
+                        placeholder="Nome, CNPJ ou CPF do estabelecimento..."
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && (e.preventDefault(), buscarCliente())
+                        }
                       />
                       <Button
                         type="button"
@@ -208,7 +212,7 @@ const AddBlocoValeGas = () => {
                         ))}
                       </div>
                     )}
-                    {resultados.length === 0 && buscaCpf && !buscando && (
+                    {resultados.length === 0 && busca && !buscando && (
                       <p className="text-xs text-muted-foreground">
                         Nenhum resultado — cadastre o estabelecimento em Clientes primeiro.
                       </p>
@@ -225,7 +229,9 @@ const AddBlocoValeGas = () => {
                   name="primeira_folha"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Primeira folha <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>
+                        Primeira folha <span className="text-destructive">*</span>
+                      </FormLabel>
                       <FormControl>
                         <Input type="number" min={1} inputMode="numeric" {...field} />
                       </FormControl>
@@ -238,7 +244,9 @@ const AddBlocoValeGas = () => {
                   name="ultima_folha"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Última folha <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>
+                        Última folha <span className="text-destructive">*</span>
+                      </FormLabel>
                       <FormControl>
                         <Input type="number" min={1} inputMode="numeric" {...field} />
                       </FormControl>
@@ -254,7 +262,9 @@ const AddBlocoValeGas = () => {
                 name="data"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Data de circulação <span className="text-destructive">*</span></FormLabel>
+                    <FormLabel>
+                      Data de circulação <span className="text-destructive">*</span>
+                    </FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -266,9 +276,13 @@ const AddBlocoValeGas = () => {
 
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline" disabled={mutation.isPending}>Cancelar</Button>
+                <Button variant="outline" disabled={mutation.isPending}>
+                  Cancelar
+                </Button>
               </DialogClose>
-              <LoadingButton type="submit" loading={mutation.isPending}>Salvar</LoadingButton>
+              <LoadingButton type="submit" loading={mutation.isPending}>
+                Salvar
+              </LoadingButton>
             </DialogFooter>
           </form>
         </Form>

@@ -1,3 +1,5 @@
+# [mcp-local harness] feature: vale-gas-busca-por-nome | plano: 44d20142 | 2026-09-05 21:22:38
+# Busca de cliente por nome OU CNPJ/CPF no endpoint de Vale Gas
 """
 Rotas de Bloco de Vale Gas. Controle de acesso via modulo RBAC "vale_gas".
 
@@ -9,11 +11,10 @@ distribuidora para retirar gas.
 Um cliente so pode ter um bloco ativo (unique cliente_id). A numeracao
 e propria (separada dos blocos de fiado dos motoristas).
 """
-from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import col, select
+from sqlmodel import col, or_, select
 
 from app.api.deps import SessionDep, require_module_permission
 from app.models import BlocoValeGas, BlocoValeGasCreate, BlocoValeGasPublic, BlocosValeGasPublic, Cliente
@@ -62,13 +63,25 @@ def read_blocos_vale_gas(session: SessionDep) -> Any:
     response_model=list[dict],
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
-def buscar_cliente_vale_gas(cpf: str, session: SessionDep) -> Any:
-    """Busca cliente por CPF/CNPJ (parcial, case-insensitive) para o
-    formulario de criacao de Bloco de Vale Gas."""
-    termo = cpf.strip().replace(".", "").replace("-", "").replace("/", "")
+def buscar_cliente_vale_gas(q: str, session: SessionDep) -> Any:
+    """Busca cliente por nome OU CPF/CNPJ (parcial, case-insensitive).
+    Parametro 'q' aceita qualquer um dos dois -- o backend decide
+    automaticamente se parece com documento (so digitos) ou nome (texto)
+    e aplica o filtro adequado; na duvida busca nos dois campos."""
+    termo = q.strip()
+    termo_doc = termo.replace(".", "").replace("-", "").replace("/", "")
+
+    # Busca por nome (ilike) OU por CPF/CNPJ (contains nos digitos limpos)
+    # ilike e case-insensitive no Postgres; contains usa LIKE internamente
     clientes = session.exec(
         select(Cliente)
-        .where(col(Cliente.cpf).contains(termo))
+        .where(
+            or_(
+                col(Cliente.nome).ilike(f"%{termo}%"),
+                col(Cliente.cpf).contains(termo_doc),
+            )
+        )
+        .order_by(col(Cliente.nome))
         .limit(10)
     ).all()
     return [{"id": str(c.id), "nome": c.nome, "cpf": c.cpf} for c in clientes]
@@ -98,7 +111,6 @@ def create_bloco_vale_gas(*, session: SessionDep, bloco_in: BlocoValeGasCreate) 
             detail=f"Intervalo grande demais (maximo {MAX_FOLHAS_POR_BLOCO} folhas por bloco)",
         )
 
-    # Um cliente so pode ter um bloco de vale gas
     existente = session.exec(
         select(BlocoValeGas).where(BlocoValeGas.cliente_id == bloco_in.cliente_id)
     ).first()
