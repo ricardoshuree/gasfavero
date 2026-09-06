@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: abertura-editar-produtos | plano: 4fe429bb | 2026-09-05 23:20:45
-// ModalEdicao carrega carga atual de produtos ao abrir e permite editar fundo e quantidades com log por campo
+// [mcp-local harness] feature: abertura-log-motorista | plano: d93f4f6e | 2026-09-05 23:25:37
+// Log de edicoes agrupado por motorista com nome como separador de secao
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { AlertTriangle, CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
@@ -72,6 +72,7 @@ interface LogEdicao {
   valor_novo: string
   editado_em: string
   editado_por: string
+  motorista_nome?: string  // adicionado no flatMap
 }
 
 interface StatusMotorista {
@@ -245,7 +246,6 @@ function ModalEdicao({
   const [loading, setLoading] = useState(false)
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
-  // Carrega carga atual ao abrir
   useEffect(() => {
     if (!motorista.abertura_id) return
     apiFetch(`/fechamento/abertura/${motorista.abertura_id}/produtos`)
@@ -263,7 +263,6 @@ function ModalEdicao({
     const valor = parseFloat(novoFundo.replace(",", "."))
     if (!valor || valor <= 0) return showErrorToast("Informe um valor de troco válido")
 
-    // Monta payload de produtos com nomes para o log
     const produtosPayload = produtos.map((p) => ({
       produto_id: p.produto_id,
       produto_nome: p.produto_nome,
@@ -296,7 +295,6 @@ function ModalEdicao({
           <DialogTitle>Editar abertura — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
 
-        {/* Alerta de rastreabilidade */}
         <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
           <span>
@@ -306,7 +304,6 @@ function ModalEdicao({
         </div>
 
         <div className="grid gap-4 py-2">
-          {/* Fundo de troco */}
           <div className="grid gap-1.5">
             <Label>Fundo de troco (R$)</Label>
             <Input
@@ -321,7 +318,6 @@ function ModalEdicao({
             </p>
           </div>
 
-          {/* Produtos */}
           <div className="grid gap-2">
             <Label>Carga de produtos</Label>
             {loadingProdutos ? (
@@ -364,7 +360,7 @@ function ModalEdicao({
 }
 
 // ---------------------------------------------------------------------------
-// Log de edições
+// Log de edições — agrupado por motorista
 // ---------------------------------------------------------------------------
 function LogEdicoes({ logs }: { logs: LogEdicao[] }) {
   if (logs.length === 0) return null
@@ -375,23 +371,41 @@ function LogEdicoes({ logs }: { logs: LogEdicao[] }) {
     return campo
   }
 
+  // Agrupa por motorista para clareza
+  const porMotorista = logs.reduce<Record<string, LogEdicao[]>>((acc, log) => {
+    const nome = log.motorista_nome ?? "Motorista"
+    if (!acc[nome]) acc[nome] = []
+    acc[nome].push(log)
+    return acc
+  }, {})
+
   return (
     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-      <div className="flex items-center gap-2 mb-2 text-amber-800 font-medium">
+      <div className="flex items-center gap-2 mb-3 text-amber-800 font-medium">
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         <span>Histórico de edições nesta data</span>
       </div>
-      <div className="flex flex-col gap-1.5">
-        {logs.map((log, i) => (
-          <div key={i} className="text-xs text-amber-700">
-            <span className="font-medium">{log.editado_por}</span>
-            {" alterou "}
-            <span className="font-medium">{labelCampo(log.campo)}</span>
-            {" de "}
-            <span className="font-medium">{log.valor_anterior}</span>
-            {" para "}
-            <span className="font-medium">{log.valor_novo}</span>
-            <span className="text-amber-500 ml-2">· {formatDateTime(log.editado_em)}</span>
+      <div className="flex flex-col gap-4">
+        {Object.entries(porMotorista).map(([nomeMotorista, grupoLogs]) => (
+          <div key={nomeMotorista}>
+            {/* Nome do motorista como separador */}
+            <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1.5">
+              {nomeMotorista}
+            </p>
+            <div className="flex flex-col gap-1">
+              {grupoLogs.map((log, i) => (
+                <div key={i} className="text-xs text-amber-700">
+                  <span className="font-medium">{log.editado_por}</span>
+                  {" alterou "}
+                  <span className="font-medium">{labelCampo(log.campo)}</span>
+                  {" de "}
+                  <span className="font-medium">{log.valor_anterior}</span>
+                  {" para "}
+                  <span className="font-medium">{log.valor_novo}</span>
+                  <span className="text-amber-500 ml-2">· {formatDateTime(log.editado_em)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -416,7 +430,11 @@ function AberturaDia() {
 
   const motoristas: StatusMotorista[] = data?.motoristas ?? []
   const totalAbertos = motoristas.filter((m) => m.aberto).length
-  const todosLogs = motoristas.flatMap((m) => m.logs_edicao ?? [])
+
+  // Aplaina os logs preservando o nome do motorista de cada um
+  const todosLogs: LogEdicao[] = motoristas.flatMap((m) =>
+    (m.logs_edicao ?? []).map((l) => ({ ...l, motorista_nome: m.motorista_nome }))
+  )
 
   const invalidar = () =>
     queryClient.invalidateQueries({ queryKey: ["abertura-status"] })
@@ -532,7 +550,7 @@ function AberturaDia() {
         </div>
       )}
 
-      {/* Log de edições do dia */}
+      {/* Log de edições agrupado por motorista */}
       {todosLogs.length > 0 && <LogEdicoes logs={todosLogs} />}
 
       {modalAbrir && (
