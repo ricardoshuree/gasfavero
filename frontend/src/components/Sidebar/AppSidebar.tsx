@@ -54,7 +54,8 @@ const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> 
   { module: "produtos", icon: Box, title: "Produtos", path: "/produtos" },
   { module: "produtos", icon: Banknote, title: "Preços", path: "/precos" },
   { module: "clientes", icon: UsersRound, title: "Clientes", path: "/clientes" },
-  { module: "vales", icon: Ticket, title: "Bloco de Fiado", path: "/vales" },
+  { module: "vales", icon: Ticket, title: "Bloco de Fiados", path: "/vales" },
+  { module: "vale_gas", icon: Flame, title: "Bloco de Vale Gas", path: "/vale-gas" },
   { module: "usuarios", icon: Users, title: "Usuários", path: "/admin" },
   { module: "configuracoes", icon: Settings, title: "Configurações", path: "/settings" },
 ]
