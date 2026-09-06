@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: dashboard-saldos | plano: b1e65fff | 2026-09-04 18:55:42
-# Arquivo fechamento.py completo e limpo com endpoint dashboard de saldos
+# [mcp-local harness] feature: abertura-log-edicao | plano: afb4479e | 2026-09-05 23:06:46
+# Adiciona log de edicao de abertura, remove dependencia de senha do gerente no backend, marca lancamentos de ajuste no dashboard
 """
 Rotas de Fechamento Diario (abertura, fechamento e dashboard de saldos).
 """
@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, HTTPException
 import sqlalchemy as sa
 
 from app.api.deps import CurrentUser, SessionDep, require_module_permission
-from app.core.security import verify_password
 
 router = APIRouter(prefix="/fechamento", tags=["fechamento"])
 
@@ -25,6 +24,10 @@ CONTA_FIADO_ID      = "12000000-0000-0000-0000-000000000001"
 CONTA_MAQUININHA_ID = "13000000-0000-0000-0000-000000000001"
 CONTA_QUEBRA_ID     = "31000000-0000-0000-0000-000000000001"
 CONTA_SOBRA_ID      = "32000000-0000-0000-0000-000000000001"
+
+# Prefixo de descricao dos lancamentos de ajuste de abertura --
+# usado pelo dashboard para identificar e marcar com icone de aviso.
+PREFIXO_AJUSTE_ABERTURA = "Ajuste de abertura"
 
 SQL_MOTORISTAS = (
     'SELECT u.id, u.full_name, u.email '
@@ -110,6 +113,32 @@ def _criar_lancamento(
     )
 
 
+def _gravar_log_edicao(
+    conn: Any,
+    abertura_id: str,
+    campo: str,
+    valor_anterior: str,
+    valor_novo: str,
+    editado_por_id: str,
+) -> None:
+    """Grava uma linha no log de edicoes de abertura."""
+    conn.execute(
+        sa.text(
+            "INSERT INTO abertura_dia_log "
+            "(id, abertura_id, campo, valor_anterior, valor_novo, editado_por_id, editado_em) "
+            "VALUES (:id, :abertura_id, :campo, :valor_anterior, :valor_novo, :editado_por_id, NOW())"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "abertura_id": abertura_id,
+            "campo": campo,
+            "valor_anterior": valor_anterior,
+            "valor_novo": valor_novo,
+            "editado_por_id": editado_por_id,
+        }
+    )
+
+
 def _saldo_conta(conn: Any, conta_id: str, inicio: date, fim: date) -> float:
     row = conn.execute(sa.text(
         "SELECT "
@@ -147,6 +176,26 @@ def read_status_abertura(session: SessionDep, data: date) -> Any:
             "SELECT id FROM fechamento_dia WHERE motorista_id = :mid AND data = :data"
         ), {"mid": motorista_id, "data": data}).fetchone() if abertura else None
 
+        # Log de edicoes desta abertura
+        logs = []
+        if abertura:
+            log_rows = conn.execute(sa.text(
+                'SELECT adl.campo, adl.valor_anterior, adl.valor_novo, '
+                'adl.editado_em, u.full_name, u.email '
+                'FROM abertura_dia_log adl '
+                'LEFT JOIN "user" u ON u.id = adl.editado_por_id '
+                'WHERE adl.abertura_id = :abertura_id '
+                'ORDER BY adl.editado_em DESC'
+            ), {"abertura_id": str(abertura[0])}).fetchall()
+            for lr in log_rows:
+                logs.append({
+                    "campo": lr[0],
+                    "valor_anterior": lr[1],
+                    "valor_novo": lr[2],
+                    "editado_em": lr[3].isoformat(),
+                    "editado_por": lr[4] or lr[5] or "?",
+                })
+
         resultado.append({
             "motorista_id": motorista_id,
             "motorista_nome": nome,
@@ -155,6 +204,7 @@ def read_status_abertura(session: SessionDep, data: date) -> Any:
             "abertura_id": str(abertura[0]) if abertura else None,
             "fundo_troco": float(abertura[1]) if abertura else None,
             "aberto_em": abertura[2].isoformat() if abertura else None,
+            "logs_edicao": logs,
         })
 
     return {"data": data.isoformat(), "motoristas": resultado}
@@ -236,17 +286,29 @@ def editar_abertura(*, session: SessionDep, current_user: CurrentUser, abertura_
     if not conta_motorista:
         raise HTTPException(status_code=400, detail="Conta do motorista nao encontrada")
 
+    # Atualiza fundo de troco
     conn.execute(sa.text(
         "UPDATE abertura_dia SET fundo_troco = :novo, updated_at = NOW(), editado_por_id = :editor WHERE id = :id"
     ), {"novo": novo_fundo, "editor": str(current_user.id), "id": abertura_id})
 
+    # Grava log de edicao
+    _gravar_log_edicao(
+        conn,
+        abertura_id=abertura_id,
+        campo="fundo_troco",
+        valor_anterior=f"R$ {fundo_atual:,.2f}",
+        valor_novo=f"R$ {novo_fundo:,.2f}",
+        editado_por_id=str(current_user.id),
+    )
+
+    # Lancamento contabil de ajuste
     if diferenca > 0:
         debito_id, credito_id = CONTA_MESTRE_ID, str(conta_motorista[0])
-        descricao = "Ajuste de abertura - acrescimo de fundo de troco"
+        descricao = f"{PREFIXO_AJUSTE_ABERTURA} - acrescimo de fundo de troco"
         valor_ajuste = diferenca
     else:
         debito_id, credito_id = str(conta_motorista[0]), CONTA_MESTRE_ID
-        descricao = "Ajuste de abertura - reducao de fundo de troco"
+        descricao = f"{PREFIXO_AJUSTE_ABERTURA} - reducao de fundo de troco"
         valor_ajuste = abs(diferenca)
 
     _criar_lancamento(session, data=abertura[2], descricao=descricao,
@@ -257,13 +319,15 @@ def editar_abertura(*, session: SessionDep, current_user: CurrentUser, abertura_
     return {"abertura_id": abertura_id, "fundo_troco": float(novo_fundo)}
 
 
+# endpoint de verificar-senha-gerente mantido para nao quebrar chamadas existentes
+# mas nao e mais usado pelo frontend de abertura
 @router.post("/verificar-senha-gerente")
 def verificar_senha_gerente(*, session: SessionDep, body: dict) -> Any:
+    from app.core.security import verify_password
     email = body.get("email", "").strip().lower()
     senha = body.get("senha", "")
     if not email or not senha:
         raise HTTPException(status_code=400, detail="Email e senha sao obrigatorios")
-
     conn = session.connection()
     sql_gerente = (
         'SELECT u.id, u.hashed_password, u.is_active '
@@ -273,14 +337,12 @@ def verificar_senha_gerente(*, session: SessionDep, body: dict) -> Any:
         "WHERE LOWER(u.email) = :email AND LOWER(r.name) IN ('gerente', 'admin') LIMIT 1"
     )
     gerente = conn.execute(sa.text(sql_gerente), {"email": email}).fetchone()
-
     if not gerente:
         raise HTTPException(status_code=403, detail="Usuario nao encontrado ou sem permissao de gerente")
     if not gerente[2]:
         raise HTTPException(status_code=403, detail="Usuario inativo")
     if not verify_password(senha, gerente[1]):
         raise HTTPException(status_code=403, detail="Senha incorreta")
-
     return {"autorizado": True, "gerente_id": str(gerente[0])}
 
 
@@ -510,9 +572,6 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
-    """Dashboard de saldos das contas para o periodo informado.
-    periodo: hoje | semana | mes | ano (sempre o vigente)
-    """
     hoje = date.today()
 
     if periodo == "semana":
@@ -615,6 +674,8 @@ def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
                 "credito_numero": l[2],
                 "valor": float(l[3]),
                 "hora": l[4].strftime("%H:%M"),
+                # flag para o frontend exibir icone de aviso
+                "e_ajuste": l[0].startswith(PREFIXO_AJUSTE_ABERTURA),
             }
             for l in lancamentos
         ],

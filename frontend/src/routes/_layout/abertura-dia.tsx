@@ -1,8 +1,8 @@
-// [mcp-local harness] feature: abertura-enter-navegacao | plano: ebc4be87 | 2026-09-04 18:28:26
-// Navegação por Enter entre campos — fundo de troco → produtos em sequência → confirmar abertura via useRef
+// [mcp-local harness] feature: abertura-log-edicao | plano: afb4479e | 2026-09-05 23:07:52
+// Remove senha do gerente, adiciona alerta de rastreabilidade no modal de edicao, exibe log de edicoes abaixo da lista
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
-import { CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
+import { AlertTriangle, CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { UsersService } from "@/client"
@@ -28,6 +28,13 @@ function hojeISO() {
 
 function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  })
 }
 
 async function apiFetch(path: string, options?: RequestInit) {
@@ -59,6 +66,14 @@ export const Route = createFileRoute("/_layout/abertura-dia")({
   head: () => ({ meta: [{ title: "Abertura do Dia - Gasfavero" }] }),
 })
 
+interface LogEdicao {
+  campo: string
+  valor_anterior: string
+  valor_novo: string
+  editado_em: string
+  editado_por: string
+}
+
 interface StatusMotorista {
   motorista_id: string
   motorista_nome: string
@@ -66,6 +81,7 @@ interface StatusMotorista {
   abertura_id: string | null
   fundo_troco: number | null
   aberto_em: string | null
+  logs_edicao: LogEdicao[]
 }
 
 interface Produto {
@@ -106,7 +122,6 @@ function ModalAbertura({
       const produtosPayload = Object.entries(quantidades)
         .filter(([, qtd]) => qtd > 0)
         .map(([produto_id, quantidade]) => ({ produto_id, quantidade }))
-
       await apiFetch("/fechamento/abertura", {
         method: "POST",
         body: JSON.stringify({
@@ -126,27 +141,19 @@ function ModalAbertura({
     }
   }
 
-  // Enter no fundo de troco → foca no primeiro produto (se houver) ou confirma
   const handleFundoKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter") return
     e.preventDefault()
-    if (produtos.length > 0) {
-      produtoRefs.current[0]?.focus()
-    } else {
-      confirmarRef.current?.click()
-    }
+    if (produtos.length > 0) produtoRefs.current[0]?.focus()
+    else confirmarRef.current?.click()
   }
 
-  // Enter num campo de produto → avança para o próximo ou confirma no último
   const handleProdutoKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key !== "Enter") return
     e.preventDefault()
     const proximo = produtoRefs.current[index + 1]
-    if (proximo) {
-      proximo.focus()
-    } else {
-      confirmarRef.current?.click()
-    }
+    if (proximo) proximo.focus()
+    else confirmarRef.current?.click()
   }
 
   return (
@@ -169,7 +176,6 @@ function ModalAbertura({
               autoFocus
             />
           </div>
-
           {produtos.length > 0 && (
             <div className="grid gap-2">
               <Label>Carga de produtos (opcional)</Label>
@@ -202,9 +208,7 @@ function ModalAbertura({
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancelar
-          </Button>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
           <Button ref={confirmarRef} onClick={handleConfirmar} disabled={loading}>
             {loading ? "Confirmando..." : "Confirmar abertura"}
           </Button>
@@ -215,7 +219,7 @@ function ModalAbertura({
 }
 
 // ---------------------------------------------------------------------------
-// Modal de edição com senha do gerente
+// Modal de edição — sem senha, com alerta de rastreabilidade
 // ---------------------------------------------------------------------------
 function ModalEdicao({
   motorista,
@@ -226,30 +230,11 @@ function ModalEdicao({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [etapa, setEtapa] = useState<"senha" | "valor">("senha")
-  const [email, setEmail] = useState("")
-  const [senha, setSenha] = useState("")
   const [novoFundo, setNovoFundo] = useState(
     motorista.fundo_troco?.toFixed(2).replace(".", ",") ?? "",
   )
   const [loading, setLoading] = useState(false)
   const { showSuccessToast, showErrorToast } = useCustomToast()
-
-  const handleVerificarSenha = async () => {
-    if (!email || !senha) return showErrorToast("Preencha email e senha")
-    setLoading(true)
-    try {
-      await apiFetch("/fechamento/verificar-senha-gerente", {
-        method: "POST",
-        body: JSON.stringify({ email, senha }),
-      })
-      setEtapa("valor")
-    } catch (e: any) {
-      showErrorToast(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSalvar = async () => {
     const valor = parseFloat(novoFundo.replace(",", "."))
@@ -274,77 +259,70 @@ function ModalEdicao({
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>
-            {etapa === "senha"
-              ? "Confirmação do gerente"
-              : `Editar abertura — ${motorista.motorista_nome}`}
-          </DialogTitle>
+          <DialogTitle>Editar abertura — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
 
-        {etapa === "senha" ? (
-          <>
-            <p className="text-sm text-muted-foreground">
-              A edição da abertura requer o aval do gerente. Informe as
-              credenciais para continuar.
-            </p>
-            <div className="grid gap-3 py-2">
-              <div className="grid gap-1.5">
-                <Label>Email do gerente</Label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleVerificarSenha()}
-                  autoFocus
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Senha</Label>
-                <Input
-                  type="password"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleVerificarSenha()}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose} disabled={loading}>
-                Cancelar
-              </Button>
-              <Button onClick={handleVerificarSenha} disabled={loading}>
-                {loading ? "Verificando..." : "Confirmar identidade"}
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <div className="grid gap-3 py-2">
-              <Label>Novo fundo de troco (R$)</Label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={novoFundo}
-                onChange={(e) => setNovoFundo(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSalvar()}
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">
-                Um lançamento de ajuste será gerado pela diferença.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose} disabled={loading}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSalvar} disabled={loading}>
-                {loading ? "Salvando..." : "Salvar ajuste"}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+        {/* Alerta de rastreabilidade */}
+        <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+          <span>
+            Toda alteração será registrada com seu usuário, data e hora e ficará
+            visível no histórico desta abertura.
+          </span>
+        </div>
+
+        <div className="grid gap-3 py-2">
+          <Label>Novo fundo de troco (R$)</Label>
+          <Input
+            type="text"
+            inputMode="decimal"
+            value={novoFundo}
+            onChange={(e) => setNovoFundo(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSalvar()}
+            autoFocus
+          />
+          <p className="text-xs text-muted-foreground">
+            Um lançamento de ajuste será gerado pela diferença.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button onClick={handleSalvar} disabled={loading}>
+            {loading ? "Salvando..." : "Salvar ajuste"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Log de edições de uma abertura
+// ---------------------------------------------------------------------------
+function LogEdicoes({ logs }: { logs: LogEdicao[] }) {
+  if (logs.length === 0) return null
+
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+      <div className="flex items-center gap-2 mb-2 text-amber-800 font-medium">
+        <AlertTriangle className="h-4 w-4 text-amber-600" />
+        <span>Histórico de edições nesta data</span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {logs.map((log, i) => (
+          <div key={i} className="text-xs text-amber-700">
+            <span className="font-medium">{log.editado_por}</span>
+            {" alterou "}
+            <span className="font-medium">{log.campo === "fundo_troco" ? "fundo de troco" : log.campo}</span>
+            {" de "}
+            <span className="font-medium">{log.valor_anterior}</span>
+            {" para "}
+            <span className="font-medium">{log.valor_novo}</span>
+            <span className="text-amber-500 ml-2">· {formatDateTime(log.editado_em)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -365,6 +343,11 @@ function AberturaDia() {
 
   const motoristas: StatusMotorista[] = data?.motoristas ?? []
   const totalAbertos = motoristas.filter((m) => m.aberto).length
+
+  // Coleta todos os logs de edições do dia
+  const todosLogs = motoristas.flatMap((m) =>
+    (m.logs_edicao ?? []).map((l) => ({ ...l, motorista_nome: m.motorista_nome }))
+  )
 
   const invalidar = () =>
     queryClient.invalidateQueries({ queryKey: ["abertura-status"] })
@@ -441,6 +424,12 @@ function AberturaDia() {
                           })}
                         </span>
                       )}
+                      {(m.logs_edicao ?? []).length > 0 && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-amber-600 text-xs">
+                          <AlertTriangle className="h-3 w-3" />
+                          {m.logs_edicao.length} edição{m.logs_edicao.length > 1 ? "ões" : ""}
+                        </span>
+                      )}
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground">Aguardando abertura</p>
@@ -473,6 +462,19 @@ function AberturaDia() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Log de edições do dia — aparece só se houver edições */}
+      {todosLogs.length > 0 && (
+        <LogEdicoes
+          logs={todosLogs.map((l) => ({
+            campo: l.campo,
+            valor_anterior: l.valor_anterior,
+            valor_novo: l.valor_novo,
+            editado_em: l.editado_em,
+            editado_por: l.editado_por,
+          }))}
+        />
       )}
 
       {modalAbrir && (

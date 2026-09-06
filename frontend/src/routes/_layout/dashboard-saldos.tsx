@@ -1,8 +1,9 @@
-// [mcp-local harness] feature: dashboard-saldos-fix | plano: c9a01aa4 | 2026-09-04 19:04:10
-// Interface DashboardData tipada corretamente, useQuery com tipo explícito
+// [mcp-local harness] feature: abertura-log-edicao | plano: afb4479e | 2026-09-05 23:08:43
+// Adiciona icone de aviso nos lancamentos de ajuste de abertura no Dashboard de Saldos
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
+  AlertTriangle,
   Banknote,
   Building2,
   CheckCircle,
@@ -45,6 +46,7 @@ interface DashboardData {
     credito_numero: string
     valor: number
     hora: string
+    e_ajuste: boolean
   }[]
 }
 
@@ -221,7 +223,15 @@ function DashboardSaldos() {
                 {lancamentos.map((l, i) => (
                   <div key={i} className="px-3 py-2.5 flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{l.descricao}</p>
+                      <div className="flex items-center gap-1.5">
+                        {l.e_ajuste && (
+                          <AlertTriangle
+                            className="h-3.5 w-3.5 text-amber-500 flex-shrink-0"
+                            title="Lançamento de ajuste de abertura"
+                          />
+                        )}
+                        <p className="text-sm truncate">{l.descricao}</p>
+                      </div>
                       <p className="text-xs text-muted-foreground">{l.debito_numero} → {l.credito_numero}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
