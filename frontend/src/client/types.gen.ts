@@ -746,7 +746,7 @@ export type VendaCreate = {
     cliente_id: string;
     endereco_id?: (string | null);
     motorista_id: string;
-    forma_pagamento: 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale';
+    forma_pagamento: 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale' | 'vale_gas';
     vale_numero?: (number | null);
     data_pagamento_vale?: (string | null);
     valor_pago: (number | string);
