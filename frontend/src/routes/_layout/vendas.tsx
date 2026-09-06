@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: gas-povo | plano: 9b775808 | 2026-09-06 00:11:12
-// Adiciona estados gasPovoValorGov e gasPovoFrete, passa para FormaPagamento, inclui gas_povo no VendaCreate e validacao podeFinalizar
+// [mcp-local harness] feature: vendas-filtro-combo-motorista | plano: fd2ef5e4 | 2026-09-06 01:29:36
+// Filtra combo para exibir apenas Distribuidora, gerentes e motoristas
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -35,6 +35,8 @@ import { handleError } from "@/utils"
 
 const MODULE = "vendas"
 const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
+// Roles permitidas no combo "Atribuir venda a" (além da Distribuidora, que é usuario sistema)
+const ROLES_PERMITIDAS = ["gerente", "motorista"]
 
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -78,10 +80,6 @@ function Vendas() {
   const [valeGasNumero, setValeGasNumero] = useState("")
   const [valeGasBlocoId, setValeGasBlocoId] = useState<string | null>(null)
   // Gas do Povo
-  // gasPovoValorGov: valor tabelado pelo governo (substitui preco do catalogo)
-  // gasPovoFrete: frete cobrado do cliente no ato (pago imediatamente)
-  // valor_pago enviado ao backend = gasPovoValorGov (o governo paga esse valor depois)
-  // gas_povo_frete enviado ao backend = gasPovoFrete
   const [gasPovoValorGov, setGasPovoValorGov] = useState("")
   const [gasPovoFrete, setGasPovoFrete] = useState("")
   // Pagamento
@@ -100,6 +98,12 @@ function Vendas() {
     queryKey: ["users", "vendas"],
     queryFn: () => UsersService.readUsers({ limit: 100 }),
   })
+
+  // Filtra para exibir apenas Distribuidora (usuario sistema), gerentes e motoristas
+  const usuariosCombo = (users?.data ?? []).filter((u) =>
+    u.full_name === NOME_DISTRIBUIDORA ||
+    (u.roles ?? []).some((r) => ROLES_PERMITIDAS.includes(r.toLowerCase()))
+  )
 
   // Default motorista = Distribuidora Gás Favero
   useEffect(() => {
@@ -130,18 +134,14 @@ function Vendas() {
     0,
   )
 
-  // Para Gas do Povo: valor_pago = valor do governo (informado manualmente)
-  // Para demais formas: valor_pago = total da sacola (calculado pelo catalogo)
   useEffect(() => {
     if (formaPagamento === "gas_povo") {
-      // Gas do Povo: valor_pago vem do campo gasPovoValorGov, nao do total da sacola
       setValorPago(gasPovoValorGov)
       return
     }
     if (!valorPagoManual) setValorPago(total > 0 ? total.toFixed(2) : "")
   }, [total, valorPagoManual, formaPagamento, gasPovoValorGov])
 
-  // Reset campos Gas do Povo ao trocar forma de pagamento
   useEffect(() => {
     if (formaPagamento !== "gas_povo") {
       setGasPovoValorGov("")
@@ -204,15 +204,10 @@ function Vendas() {
           motorista_id: motoristaId,
           forma_pagamento: formaPagamento as
             | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale" | "vale_gas" | "gas_povo",
-          // Fiado
           vale_numero: formaPagamento === "vale" && valeNumero ? Number(valeNumero) : undefined,
           data_pagamento_vale: formaPagamento === "vale" && dataPagamentoVale ? dataPagamentoVale : undefined,
-          // Vale Gas
           vale_gas_numero: formaPagamento === "vale_gas" && valeGasNumero ? Number(valeGasNumero) : undefined,
           vale_gas_bloco_id: formaPagamento === "vale_gas" ? (valeGasBlocoId ?? undefined) : undefined,
-          // Gas do Povo
-          // valor_pago = valor do governo (a ser recebido depois)
-          // gas_povo_frete = frete cobrado do cliente no ato
           gas_povo_frete: formaPagamento === "gas_povo" && gasPovoFrete ? gasPovoFrete : undefined,
           valor_pago: formaPagamento === "gas_povo" ? (gasPovoValorGov || "0") : valorPago,
           data_venda: dataVenda,
@@ -261,8 +256,8 @@ function Vendas() {
   }
 
   const motoristaNome =
-    users?.data.find((u) => u.id === motoristaId)?.full_name ||
-    users?.data.find((u) => u.id === motoristaId)?.email || ""
+    usuariosCombo.find((u) => u.id === motoristaId)?.full_name ||
+    usuariosCombo.find((u) => u.id === motoristaId)?.email || ""
 
   return (
     <div className="flex flex-col gap-6 pb-24">
@@ -278,7 +273,7 @@ function Vendas() {
             <SelectValue placeholder="Selecione" />
           </SelectTrigger>
           <SelectContent>
-            {users?.data.map((u) => (
+            {usuariosCombo.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.full_name || u.email}
                 {u.roles && u.roles.length > 0 ? ` (${u.roles.join(", ")})` : ""}
@@ -337,7 +332,6 @@ function Vendas() {
         </div>
       </div>
 
-      {/* Campo valor_pago oculto para Gas do Povo (preenchido automaticamente) */}
       {formaPagamento !== "gas_povo" && (
         <div className="grid grid-cols-2 gap-4 rounded-lg border p-3 sm:max-w-md">
           <div className="grid gap-1.5">
