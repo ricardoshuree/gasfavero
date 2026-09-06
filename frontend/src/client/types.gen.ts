@@ -749,6 +749,8 @@ export type VendaCreate = {
     forma_pagamento: 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale' | 'vale_gas';
     vale_numero?: (number | null);
     data_pagamento_vale?: (string | null);
+    vale_gas_numero?: (number | null);
+    vale_gas_bloco_id?: (string | null);
     valor_pago: (number | string);
     data_venda?: (string | null);
     itens: Array<VendaItemCreate>;

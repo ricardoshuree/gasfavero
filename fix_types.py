@@ -3,11 +3,16 @@ import pathlib
 p = pathlib.Path("frontend/src/client/types.gen.ts")
 t = p.read_text(encoding="utf-8-sig")
 
-old = "forma_pagamento: 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale';"
-new = "forma_pagamento: 'cartao_debito' | 'cartao_credito' | 'pix' | 'dinheiro' | 'vale' | 'vale_gas';"
+# Adiciona vale_gas_numero e vale_gas_bloco_id em VendaCreate
+old = "    vale_numero?: (number | null);\n    data_pagamento_vale?: (string | null);\n    valor_pago: (number | string);"
+new = "    vale_numero?: (number | null);\n    data_pagamento_vale?: (string | null);\n    vale_gas_numero?: (number | null);\n    vale_gas_bloco_id?: (string | null);\n    valor_pago: (number | string);"
 
 if old in t:
-    p.write_text(t.replace(old, new), encoding="utf-8")
+    t = t.replace(old, new)
+    p.write_text(t, encoding="utf-8")
     print("OK")
 else:
-    print("nao encontrado")
+    # mostra contexto para debug
+    idx = t.find("vale_numero")
+    print("Nao encontrado. Contexto:")
+    print(repr(t[idx:idx+200]))
