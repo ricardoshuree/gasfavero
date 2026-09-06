@@ -1,11 +1,10 @@
-// [mcp-local harness] feature: recebimento-vale-gas | plano: 907fbb05 | 2026-09-05 22:37:29
-// Tela de Recebimento de Vale Gas com cards por estabelecimento e sheet lateral com folhas, toggles e contador de dias
+// [mcp-local harness] feature: recebimento-vale-gas-fix | plano: f36472ba | 2026-09-05 22:39:58
+// Remove Badge e Switch nao usados, toggle manual, remove showSuccessToast
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { UsersService } from "@/client"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -15,7 +14,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Switch } from "@/components/ui/switch"
 import useCustomToast from "@/hooks/useCustomToast"
 
 const MODULE = "vale_gas"
@@ -84,7 +82,7 @@ function formatDate(iso: string) {
   return `${dia}/${mes}/${ano}`
 }
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const token = localStorage.getItem("access_token")
   return { Authorization: `Bearer ${token}` }
 }
@@ -105,10 +103,39 @@ function DiasContador({ dias, recebido }: { dias: number; recebido: boolean }) {
     dias >= 45 ? "text-destructive font-bold" :
     dias >= 30 ? "text-orange-500 font-medium" :
     "text-muted-foreground"
+  return <span className={`text-xs ${cor}`}>{dias}d</span>
+}
+
+// ---------------------------------------------------------------------------
+// Toggle de folha (substitui Switch do shadcn que nao existe neste projeto)
+// ---------------------------------------------------------------------------
+
+function FolhaToggle({
+  checked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean
+  disabled: boolean
+  onChange: () => void
+}) {
   return (
-    <span className={`text-xs ${cor}`}>
-      {dias}d
-    </span>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+        checked ? "bg-green-600" : "bg-muted-foreground/30"
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-6" : "translate-x-1"
+        }`}
+      />
+    </button>
   )
 }
 
@@ -130,7 +157,7 @@ function FolhasSheet({
   onOpenChange: (v: boolean) => void
 }) {
   const queryClient = useQueryClient()
-  const { showSuccessToast, showErrorToast } = useCustomToast()
+  const { showErrorToast } = useCustomToast()
 
   const { data: folhas = [], isLoading } = useQuery<Folha[]>({
     queryKey: ["valeGasFolhas", blocoId],
@@ -198,10 +225,10 @@ function FolhasSheet({
                   </div>
                   <div className="flex items-center gap-2">
                     <DiasContador dias={f.dias_desde_venda} recebido={false} />
-                    <Switch
+                    <FolhaToggle
                       checked={false}
                       disabled={toggleMutation.isPending}
-                      onCheckedChange={() => toggleMutation.mutate(f.venda_id)}
+                      onChange={() => toggleMutation.mutate(f.venda_id)}
                     />
                   </div>
                 </div>
@@ -229,7 +256,9 @@ function FolhasSheet({
                   className="flex items-center justify-between rounded-md border border-muted px-3 py-2 opacity-70"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-medium w-12 text-muted-foreground">#{f.numero}</span>
+                    <span className="font-medium w-12 text-muted-foreground">
+                      #{f.numero}
+                    </span>
                     <div className="flex flex-col">
                       <span className="text-xs text-muted-foreground">
                         {formatDate(f.data_venda)}
@@ -250,10 +279,10 @@ function FolhasSheet({
                     </div>
                   </div>
                   {/* Toggle para desfazer dentro dos 60 dias */}
-                  <Switch
+                  <FolhaToggle
                     checked={true}
                     disabled={toggleMutation.isPending}
-                    onCheckedChange={() => toggleMutation.mutate(f.venda_id)}
+                    onChange={() => toggleMutation.mutate(f.venda_id)}
                   />
                 </div>
               ))}
@@ -285,7 +314,7 @@ function CardEstabelecimento({
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        {/* Info do estabelecimento + blocos */}
+        {/* Info do estabelecimento */}
         <div className="flex flex-col gap-1 min-w-[180px]">
           <p className="font-semibold">{resumo.cliente_nome}</p>
           <p className="text-xs text-muted-foreground">{resumo.cliente_cpf}</p>
@@ -327,7 +356,11 @@ function CardEstabelecimento({
             >
               {resumo.pendente_baixa_qtd}
             </div>
-            <span className={`text-sm font-medium ${resumo.pendente_baixa_qtd > 0 ? "text-orange-600" : "text-green-600"}`}>
+            <span
+              className={`text-sm font-medium ${
+                resumo.pendente_baixa_qtd > 0 ? "text-orange-600" : "text-green-600"
+              }`}
+            >
               {formatMoney(resumo.pendente_baixa_valor)}
             </span>
           </div>
@@ -350,7 +383,8 @@ function CardEstabelecimento({
 // ---------------------------------------------------------------------------
 
 function RecebimentoValeGas() {
-  const [blocoSelecionado, setBlocoSelecionado] = useState<ResumoEstabelecimento | null>(null)
+  const [blocoSelecionado, setBlocoSelecionado] =
+    useState<ResumoEstabelecimento | null>(null)
 
   const { data: resumos = [], isLoading } = useQuery<ResumoEstabelecimento[]>({
     queryKey: ["valeGasRecebimento"],
@@ -367,9 +401,12 @@ function RecebimentoValeGas() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Recebimento de Vale Gás</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Recebimento de Vale Gás
+        </h1>
         <p className="text-muted-foreground">
-          Gerencie o recebimento das folhas de vale gás por estabelecimento — folha a folha.
+          Gerencie o recebimento das folhas de vale gás por estabelecimento —
+          folha a folha.
         </p>
       </div>
 
@@ -379,16 +416,24 @@ function RecebimentoValeGas() {
           <div className="rounded-xl border px-4 py-3 flex items-center gap-3">
             <div
               className={`flex h-12 w-12 items-center justify-center rounded-md border text-xl font-semibold ${
-                totalPendente > 0 ? "border-orange-400 text-orange-600" : "border-green-400 text-green-600"
+                totalPendente > 0
+                  ? "border-orange-400 text-orange-600"
+                  : "border-green-400 text-green-600"
               }`}
             >
               {totalPendente}
             </div>
             <div className="flex flex-col">
-              <span className={`text-lg font-semibold ${totalPendente > 0 ? "text-orange-600" : "text-green-600"}`}>
+              <span
+                className={`text-lg font-semibold ${
+                  totalPendente > 0 ? "text-orange-600" : "text-green-600"
+                }`}
+              >
                 {formatMoney(totalPendenteValor)}
               </span>
-              <span className="text-xs text-muted-foreground">total pendente de baixa</span>
+              <span className="text-xs text-muted-foreground">
+                total pendente de baixa
+              </span>
             </div>
           </div>
         </div>
@@ -398,7 +443,10 @@ function RecebimentoValeGas() {
       {isLoading && (
         <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 animate-pulse rounded-xl border bg-muted/40" />
+            <div
+              key={i}
+              className="h-28 animate-pulse rounded-xl border bg-muted/40"
+            />
           ))}
         </div>
       )}
@@ -428,7 +476,9 @@ function RecebimentoValeGas() {
           clienteNome={blocoSelecionado.cliente_nome}
           clienteCpf={blocoSelecionado.cliente_cpf}
           open={!!blocoSelecionado}
-          onOpenChange={(v) => { if (!v) setBlocoSelecionado(null) }}
+          onOpenChange={(v) => {
+            if (!v) setBlocoSelecionado(null)
+          }}
         />
       )}
     </div>
