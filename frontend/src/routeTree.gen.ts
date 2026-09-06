@@ -29,6 +29,7 @@ import { Route as LayoutPermissionsRouteImport } from './routes/_layout/permissi
 import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
 import { Route as LayoutRecebimentoValeRouteImport } from './routes/_layout/recebimento-vale'
+import { Route as LayoutRecebimentoValeGasRouteImport } from './routes/_layout/recebimento-vale-gas'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutValeGasRouteImport } from './routes/_layout/vale-gas'
 import { Route as LayoutValesRouteImport } from './routes/_layout/vales'
@@ -133,6 +134,12 @@ const LayoutRecebimentoValeRoute = LayoutRecebimentoValeRouteImport.update({
   path: '/recebimento-vale',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutRecebimentoValeGasRoute =
+  LayoutRecebimentoValeGasRouteImport.update({
+    id: '/recebimento-vale-gas',
+    path: '/recebimento-vale-gas',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -174,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
   '/recebimento-vale': typeof LayoutRecebimentoValeRoute
+  '/recebimento-vale-gas': typeof LayoutRecebimentoValeGasRoute
   '/settings': typeof LayoutSettingsRoute
   '/vale-gas': typeof LayoutValeGasRoute
   '/vales': typeof LayoutValesRoute
@@ -198,6 +206,7 @@ export interface FileRoutesByTo {
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
   '/recebimento-vale': typeof LayoutRecebimentoValeRoute
+  '/recebimento-vale-gas': typeof LayoutRecebimentoValeGasRoute
   '/settings': typeof LayoutSettingsRoute
   '/vale-gas': typeof LayoutValeGasRoute
   '/vales': typeof LayoutValesRoute
@@ -225,6 +234,7 @@ export interface FileRoutesById {
   '/_layout/precos': typeof LayoutPrecosRoute
   '/_layout/produtos': typeof LayoutProdutosRoute
   '/_layout/recebimento-vale': typeof LayoutRecebimentoValeRoute
+  '/_layout/recebimento-vale-gas': typeof LayoutRecebimentoValeGasRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/vale-gas': typeof LayoutValeGasRoute
   '/_layout/vales': typeof LayoutValesRoute
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/precos'
     | '/produtos'
     | '/recebimento-vale'
+    | '/recebimento-vale-gas'
     | '/settings'
     | '/vale-gas'
     | '/vales'
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
     | '/precos'
     | '/produtos'
     | '/recebimento-vale'
+    | '/recebimento-vale-gas'
     | '/settings'
     | '/vale-gas'
     | '/vales'
@@ -303,6 +315,7 @@ export interface FileRouteTypes {
     | '/_layout/precos'
     | '/_layout/produtos'
     | '/_layout/recebimento-vale'
+    | '/_layout/recebimento-vale-gas'
     | '/_layout/settings'
     | '/_layout/vale-gas'
     | '/_layout/vales'
@@ -460,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutRecebimentoValeRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/recebimento-vale-gas': {
+      id: '/_layout/recebimento-vale-gas'
+      path: '/recebimento-vale-gas'
+      fullPath: '/recebimento-vale-gas'
+      preLoaderRoute: typeof LayoutRecebimentoValeGasRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/settings': {
       id: '/_layout/settings'
       path: '/settings'
@@ -506,6 +526,7 @@ interface LayoutRouteChildren {
   LayoutPrecosRoute: typeof LayoutPrecosRoute
   LayoutProdutosRoute: typeof LayoutProdutosRoute
   LayoutRecebimentoValeRoute: typeof LayoutRecebimentoValeRoute
+  LayoutRecebimentoValeGasRoute: typeof LayoutRecebimentoValeGasRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutValeGasRoute: typeof LayoutValeGasRoute
   LayoutValesRoute: typeof LayoutValesRoute
@@ -528,6 +549,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutPrecosRoute: LayoutPrecosRoute,
   LayoutProdutosRoute: LayoutProdutosRoute,
   LayoutRecebimentoValeRoute: LayoutRecebimentoValeRoute,
+  LayoutRecebimentoValeGasRoute: LayoutRecebimentoValeGasRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutValeGasRoute: LayoutValeGasRoute,
   LayoutValesRoute: LayoutValesRoute,
