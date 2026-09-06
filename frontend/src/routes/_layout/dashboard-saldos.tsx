@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: abertura-log-edicao | plano: afb4479e | 2026-09-05 23:08:43
-// Adiciona icone de aviso nos lancamentos de ajuste de abertura no Dashboard de Saldos
+// [mcp-local harness] feature: abertura-log-edicao-fix | plano: b44c34a0 | 2026-09-05 23:12:46
+// Substitui title por aria-label no AlertTriangle para corrigir erro TS
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
@@ -227,7 +227,7 @@ function DashboardSaldos() {
                         {l.e_ajuste && (
                           <AlertTriangle
                             className="h-3.5 w-3.5 text-amber-500 flex-shrink-0"
-                            title="Lançamento de ajuste de abertura"
+                            aria-label="Lançamento de ajuste de abertura"
                           />
                         )}
                         <p className="text-sm truncate">{l.descricao}</p>
