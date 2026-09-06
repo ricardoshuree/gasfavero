@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: recebimento-vale-gas | plano: 907fbb05 | 2026-09-05 22:37:52
-// Adiciona Recebimento de Vale Gas no sidebar apos Bloco de Vale Gas
+// [mcp-local harness] feature: sidebar-grupos | plano: a23f2512 | 2026-09-05 22:48:52
+// Organiza sidebar em grupos: Vendas, Vale Gas, Operacoes, Cadastros, Administracao
 import {
   AlertTriangle,
   Banknote,
@@ -31,39 +31,73 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import useAuth from "@/hooks/useAuth"
 import { usePermissions } from "@/hooks/usePermissions"
-import { type Item, Main } from "./Main"
+import { type Item, type ItemGroup, Main } from "./Main"
 import { User } from "./User"
-
-const FIXED_ITEMS: Item[] = [{ icon: Home, title: "Dashboard", path: "/" }]
 
 type PermissionAction = "can_create" | "can_read" | "can_update" | "can_delete"
 
-const MODULE_ITEMS: Array<Item & { module: string; action?: PermissionAction }> = [
-  { module: "vendas",        icon: ShoppingCart,  title: "Vendas",                   path: "/vendas" },
-  { module: "vendas",        icon: HandCoins,     title: "Recebimento de Fiado",      path: "/recebimento-vale" },
-  { module: "livro_vendas",  icon: Book,          title: "Livro de Vendas",           path: "/livro-vendas" },
-  { module: "inadimplencia", icon: AlertTriangle, title: "Inadimplentes",             path: "/inadimplentes" },
-  { module: "mapa",          icon: MapPin,        title: "Mapa",                      path: "/mapa" },
-  { module: "delegacao",     icon: PhoneCall,     title: "Chamado",                   path: "/chamado" },
-  { module: "delegacao", action: "can_delete", icon: ListChecks, title: "Chamados Ativos", path: "/chamados-ativos" },
-  { module: "fechamento",    icon: Sunrise,       title: "Abertura do Dia",           path: "/abertura-dia" },
-  { module: "fechamento",    icon: Moon,          title: "Fechamento do Dia",         path: "/fechamento-dia" },
-  { module: "fechamento",    icon: LayoutDashboard, title: "Dashboard de Saldos",     path: "/dashboard-saldos" },
-  { module: "produtos",      icon: Box,           title: "Produtos",                  path: "/produtos" },
-  { module: "produtos",      icon: Banknote,      title: "Preços",                    path: "/precos" },
-  { module: "clientes",      icon: UsersRound,    title: "Clientes",                  path: "/clientes" },
-  { module: "vales",         icon: Ticket,        title: "Bloco de Fiados",           path: "/vales" },
-  { module: "vale_gas",      icon: Flame,         title: "Bloco de Vale Gás",         path: "/vale-gas" },
-  { module: "vale_gas",      icon: Wallet,        title: "Recebimento de Vale Gás",   path: "/recebimento-vale-gas" },
-  { module: "usuarios",      icon: Users,         title: "Usuários",                  path: "/admin" },
-  { module: "configuracoes", icon: Settings,      title: "Configurações",             path: "/settings" },
-]
+type ModuleItem = Item & { module: string; action?: PermissionAction }
 
-const ADMIN_ITEM: Item = { icon: Package, title: "Admin", path: "/admin" }
-const PERMISSIONS_ITEM: Item = { icon: ShieldCheck, title: "Permissões", path: "/permissions" }
+// ---------------------------------------------------------------------------
+// Definição dos grupos e seus itens com módulo RBAC
+// ---------------------------------------------------------------------------
+
+type ModuleGroup = {
+  label: string
+  items: ModuleItem[]
+}
+
+const MODULE_GROUPS: ModuleGroup[] = [
+  {
+    label: "Vendas",
+    items: [
+      { module: "vendas",        icon: ShoppingCart, title: "Vendas",                path: "/vendas" },
+      { module: "vendas",        icon: HandCoins,    title: "Recebimento de Fiado",   path: "/recebimento-vale" },
+      { module: "livro_vendas",  icon: Book,         title: "Livro de Vendas",        path: "/livro-vendas" },
+      { module: "inadimplencia", icon: AlertTriangle, title: "Inadimplentes",         path: "/inadimplentes" },
+    ],
+  },
+  {
+    label: "Vale Gás",
+    items: [
+      { module: "vale_gas", icon: Flame,  title: "Bloco de Vale Gás",        path: "/vale-gas" },
+      { module: "vale_gas", icon: Wallet, title: "Recebimento de Vale Gás",  path: "/recebimento-vale-gas" },
+    ],
+  },
+  {
+    label: "Operações",
+    items: [
+      { module: "fechamento", icon: Sunrise,         title: "Abertura do Dia",     path: "/abertura-dia" },
+      { module: "fechamento", icon: Moon,            title: "Fechamento do Dia",   path: "/fechamento-dia" },
+      { module: "fechamento", icon: LayoutDashboard, title: "Dashboard de Saldos", path: "/dashboard-saldos" },
+      { module: "mapa",       icon: MapPin,          title: "Mapa",                path: "/mapa" },
+      { module: "delegacao",  icon: PhoneCall,       title: "Chamado",             path: "/chamado" },
+      { module: "delegacao",  action: "can_delete" as PermissionAction, icon: ListChecks, title: "Chamados Ativos", path: "/chamados-ativos" },
+    ],
+  },
+  {
+    label: "Cadastros",
+    items: [
+      { module: "produtos",  icon: Box,       title: "Produtos",       path: "/produtos" },
+      { module: "produtos",  icon: Banknote,  title: "Preços",         path: "/precos" },
+      { module: "clientes",  icon: UsersRound, title: "Clientes",      path: "/clientes" },
+      { module: "vales",     icon: Ticket,    title: "Bloco de Fiados", path: "/vales" },
+    ],
+  },
+  {
+    label: "Administração",
+    items: [
+      { module: "usuarios",      icon: Users,       title: "Usuários",      path: "/admin" },
+      { module: "configuracoes", icon: Settings,    title: "Configurações", path: "/settings" },
+    ],
+  },
+]
 
 export function AppSidebar() {
   const { user: currentUser } = useAuth()
@@ -76,17 +110,25 @@ export function AppSidebar() {
     return canRead(module)
   }
 
-  const moduleItems: Item[] = isLoading
+  const groups: ItemGroup[] = isLoading
     ? []
-    : MODULE_ITEMS.filter((item) =>
-        checkPermission(item.module, item.action ?? "can_read"),
-      )
+    : MODULE_GROUPS.map((group) => ({
+        label: group.label,
+        items: group.items.filter((item) =>
+          checkPermission(item.module, item.action ?? "can_read")
+        ),
+      }))
 
-  const items: Item[] = [
-    ...FIXED_ITEMS,
-    ...moduleItems,
-    ...(currentUser?.is_superuser ? [ADMIN_ITEM, PERMISSIONS_ITEM] : []),
-  ]
+  // Itens de superuser ficam no grupo Administração
+  if (currentUser?.is_superuser) {
+    const adminGroup = groups.find((g) => g.label === "Administração")
+    if (adminGroup) {
+      if (!adminGroup.items.find((i) => i.path === "/admin" && i.title === "Admin")) {
+        adminGroup.items.push({ icon: Package,     title: "Admin",      path: "/admin" })
+      }
+      adminGroup.items.push({ icon: ShieldCheck, title: "Permissões", path: "/permissions" })
+    }
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -94,7 +136,18 @@ export function AppSidebar() {
         <Logo variant="responsive" />
       </SidebarHeader>
       <SidebarContent>
-        <Main items={items} />
+        {/* Dashboard fora dos grupos — sempre visível */}
+        <SidebarMenu className="px-2 py-1">
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip="Dashboard" isActive={false} asChild>
+              <a href="/">
+                <Home />
+                <span>Dashboard</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        <Main groups={groups} />
       </SidebarContent>
       <SidebarFooter>
         <SidebarAppearance />
