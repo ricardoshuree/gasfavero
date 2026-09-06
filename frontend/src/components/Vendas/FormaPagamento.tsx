@@ -1,9 +1,7 @@
-// [mcp-local harness] feature: venda-vale-gas | plano: 9a811f03 | 2026-09-05 21:35:31
-// Adiciona botao Vale Gas com campo de numero e validacao em tempo real do estabelecimento associado
-// Checkbox 5o dia util do mes seguinte substitui o texto explicativo
-// Vale Gas: campo de numero com validacao em tempo real do estabelecimento
+// [mcp-local harness] feature: gas-povo | plano: 9b775808 | 2026-09-06 00:10:05
+// Adiciona botao Gas do Povo com campos Valor Gov e Frete; grid 4-col/7-col para acomodar 7 opcoes
 import { useEffect, useState } from "react"
-import { Banknote, CreditCard, Flame, QrCode, Receipt } from "lucide-react"
+import { Banknote, CreditCard, Flame, QrCode, Receipt, Truck } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -19,18 +17,20 @@ export type FormaPagamentoValue =
   | "dinheiro"
   | "vale"
   | "vale_gas"
+  | "gas_povo"
 
 const OPCOES: {
   value: FormaPagamentoValue
   label: string
   icon: typeof CreditCard
 }[] = [
-  { value: "cartao_debito", label: "Débito",    icon: CreditCard },
-  { value: "cartao_credito", label: "Crédito",  icon: CreditCard },
-  { value: "pix",            label: "Pix",      icon: QrCode },
-  { value: "dinheiro",       label: "Dinheiro", icon: Banknote },
-  { value: "vale",           label: "Fiado",    icon: Receipt },
-  { value: "vale_gas",       label: "Vale Gás", icon: Flame },
+  { value: "cartao_debito",  label: "Débito",    icon: CreditCard },
+  { value: "cartao_credito", label: "Crédito",   icon: CreditCard },
+  { value: "pix",            label: "Pix",       icon: QrCode },
+  { value: "dinheiro",       label: "Dinheiro",  icon: Banknote },
+  { value: "vale",           label: "Fiado",     icon: Receipt },
+  { value: "vale_gas",       label: "Vale Gás",  icon: Flame },
+  { value: "gas_povo",       label: "Gás do Povo", icon: Truck },
 ]
 
 interface ValeGasInfo {
@@ -52,6 +52,11 @@ interface FormaPagamentoProps {
   valeGasNumero: string
   onValeGasNumeroChange: (value: string) => void
   onValeGasBlocoIdChange: (value: string | null) => void
+  // Gas do Povo
+  gasPovoValorGov: string
+  onGasPovoValorGovChange: (value: string) => void
+  gasPovoFrete: string
+  onGasPovoFreteChange: (value: string) => void
 }
 
 export function FormaPagamento({
@@ -64,6 +69,10 @@ export function FormaPagamento({
   valeGasNumero,
   onValeGasNumeroChange,
   onValeGasBlocoIdChange,
+  gasPovoValorGov,
+  onGasPovoValorGovChange,
+  gasPovoFrete,
+  onGasPovoFreteChange,
 }: FormaPagamentoProps) {
   const [quintoUtil, setQuintoUtil] = useState(true)
   const [valeGasInfo, setValeGasInfo] = useState<ValeGasInfo | null>(null)
@@ -103,10 +112,14 @@ export function FormaPagamento({
     return () => clearTimeout(timer)
   }, [valeGasNumero, value])
 
+  // Total Gas do Povo = valor gov + frete
+  const gasPovoTotal =
+    (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium">Forma de Pagamento</p>
-      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+      <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
         {OPCOES.map((opcao) => {
           const Icon = opcao.icon
           const selecionado = value === opcao.value
@@ -123,7 +136,7 @@ export function FormaPagamento({
               )}
             >
               <Icon className="h-6 w-6" />
-              <span className="font-semibold text-xs">{opcao.label}</span>
+              <span className="font-semibold text-xs text-center leading-tight">{opcao.label}</span>
             </button>
           )
         })}
@@ -186,8 +199,6 @@ export function FormaPagamento({
               placeholder="Ex: 1001"
             />
           </div>
-
-          {/* Feedback de validacao */}
           {validando && (
             <p className="text-xs text-muted-foreground">Verificando...</p>
           )}
@@ -206,6 +217,53 @@ export function FormaPagamento({
                 </p>
               </div>
             )
+          )}
+        </div>
+      )}
+
+      {/* Gas do Povo */}
+      {value === "gas_povo" && (
+        <div className="flex flex-col gap-3 rounded-lg border p-3">
+          <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
+            <p className="text-xs text-blue-800">
+              Programa governamental — o governo paga depois. O frete é cobrado do cliente no ato.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="gas-povo-valor-gov">Valor do governo (R$)</Label>
+              <Input
+                id="gas-povo-valor-gov"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={gasPovoValorGov}
+                onChange={(e) => onGasPovoValorGovChange(e.target.value)}
+                placeholder="0,00"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="gas-povo-frete">Frete do cliente (R$)</Label>
+              <Input
+                id="gas-povo-frete"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={gasPovoFrete}
+                onChange={(e) => onGasPovoFreteChange(e.target.value)}
+                placeholder="0,00"
+              />
+            </div>
+          </div>
+          {gasPovoTotal > 0 && (
+            <div className="flex justify-between items-center rounded-md bg-muted px-3 py-2">
+              <span className="text-xs text-muted-foreground">Total a receber</span>
+              <span className="text-sm font-semibold">
+                R$ {gasPovoTotal.toFixed(2).replace(".", ",")}
+              </span>
+            </div>
           )}
         </div>
       )}

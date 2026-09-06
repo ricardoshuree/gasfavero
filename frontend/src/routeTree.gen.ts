@@ -28,6 +28,7 @@ import { Route as LayoutMapaRouteImport } from './routes/_layout/mapa'
 import { Route as LayoutPermissionsRouteImport } from './routes/_layout/permissions'
 import { Route as LayoutPrecosRouteImport } from './routes/_layout/precos'
 import { Route as LayoutProdutosRouteImport } from './routes/_layout/produtos'
+import { Route as LayoutRecebimentoGasPovoRouteImport } from './routes/_layout/recebimento-gas-povo'
 import { Route as LayoutRecebimentoValeRouteImport } from './routes/_layout/recebimento-vale'
 import { Route as LayoutRecebimentoValeGasRouteImport } from './routes/_layout/recebimento-vale-gas'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
@@ -129,6 +130,12 @@ const LayoutProdutosRoute = LayoutProdutosRouteImport.update({
   path: '/produtos',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutRecebimentoGasPovoRoute =
+  LayoutRecebimentoGasPovoRouteImport.update({
+    id: '/recebimento-gas-povo',
+    path: '/recebimento-gas-povo',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutRecebimentoValeRoute = LayoutRecebimentoValeRouteImport.update({
   id: '/recebimento-vale',
   path: '/recebimento-vale',
@@ -180,6 +187,7 @@ export interface FileRoutesByFullPath {
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
+  '/recebimento-gas-povo': typeof LayoutRecebimentoGasPovoRoute
   '/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/recebimento-vale-gas': typeof LayoutRecebimentoValeGasRoute
   '/settings': typeof LayoutSettingsRoute
@@ -205,6 +213,7 @@ export interface FileRoutesByTo {
   '/permissions': typeof LayoutPermissionsRoute
   '/precos': typeof LayoutPrecosRoute
   '/produtos': typeof LayoutProdutosRoute
+  '/recebimento-gas-povo': typeof LayoutRecebimentoGasPovoRoute
   '/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/recebimento-vale-gas': typeof LayoutRecebimentoValeGasRoute
   '/settings': typeof LayoutSettingsRoute
@@ -233,6 +242,7 @@ export interface FileRoutesById {
   '/_layout/permissions': typeof LayoutPermissionsRoute
   '/_layout/precos': typeof LayoutPrecosRoute
   '/_layout/produtos': typeof LayoutProdutosRoute
+  '/_layout/recebimento-gas-povo': typeof LayoutRecebimentoGasPovoRoute
   '/_layout/recebimento-vale': typeof LayoutRecebimentoValeRoute
   '/_layout/recebimento-vale-gas': typeof LayoutRecebimentoValeGasRoute
   '/_layout/settings': typeof LayoutSettingsRoute
@@ -262,6 +272,7 @@ export interface FileRouteTypes {
     | '/permissions'
     | '/precos'
     | '/produtos'
+    | '/recebimento-gas-povo'
     | '/recebimento-vale'
     | '/recebimento-vale-gas'
     | '/settings'
@@ -287,6 +298,7 @@ export interface FileRouteTypes {
     | '/permissions'
     | '/precos'
     | '/produtos'
+    | '/recebimento-gas-povo'
     | '/recebimento-vale'
     | '/recebimento-vale-gas'
     | '/settings'
@@ -314,6 +326,7 @@ export interface FileRouteTypes {
     | '/_layout/permissions'
     | '/_layout/precos'
     | '/_layout/produtos'
+    | '/_layout/recebimento-gas-povo'
     | '/_layout/recebimento-vale'
     | '/_layout/recebimento-vale-gas'
     | '/_layout/settings'
@@ -466,6 +479,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutProdutosRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/recebimento-gas-povo': {
+      id: '/_layout/recebimento-gas-povo'
+      path: '/recebimento-gas-povo'
+      fullPath: '/recebimento-gas-povo'
+      preLoaderRoute: typeof LayoutRecebimentoGasPovoRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/recebimento-vale': {
       id: '/_layout/recebimento-vale'
       path: '/recebimento-vale'
@@ -525,6 +545,7 @@ interface LayoutRouteChildren {
   LayoutPermissionsRoute: typeof LayoutPermissionsRoute
   LayoutPrecosRoute: typeof LayoutPrecosRoute
   LayoutProdutosRoute: typeof LayoutProdutosRoute
+  LayoutRecebimentoGasPovoRoute: typeof LayoutRecebimentoGasPovoRoute
   LayoutRecebimentoValeRoute: typeof LayoutRecebimentoValeRoute
   LayoutRecebimentoValeGasRoute: typeof LayoutRecebimentoValeGasRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
@@ -548,6 +569,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutPermissionsRoute: LayoutPermissionsRoute,
   LayoutPrecosRoute: LayoutPrecosRoute,
   LayoutProdutosRoute: LayoutProdutosRoute,
+  LayoutRecebimentoGasPovoRoute: LayoutRecebimentoGasPovoRoute,
   LayoutRecebimentoValeRoute: LayoutRecebimentoValeRoute,
   LayoutRecebimentoValeGasRoute: LayoutRecebimentoValeGasRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,

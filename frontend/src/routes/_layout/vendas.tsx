@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: venda-vale-gas | plano: 5e65e659 | 2026-09-05 21:39:08
-// Adiciona estado valeGasNumero e valeGasBlocoId, passa para FormaPagamento, inclui no VendaCreate e na validacao podeFinalizar
+// [mcp-local harness] feature: gas-povo | plano: 9b775808 | 2026-09-06 00:11:12
+// Adiciona estados gasPovoValorGov e gasPovoFrete, passa para FormaPagamento, inclui gas_povo no VendaCreate e validacao podeFinalizar
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -77,6 +77,13 @@ function Vendas() {
   // Vale Gas
   const [valeGasNumero, setValeGasNumero] = useState("")
   const [valeGasBlocoId, setValeGasBlocoId] = useState<string | null>(null)
+  // Gas do Povo
+  // gasPovoValorGov: valor tabelado pelo governo (substitui preco do catalogo)
+  // gasPovoFrete: frete cobrado do cliente no ato (pago imediatamente)
+  // valor_pago enviado ao backend = gasPovoValorGov (o governo paga esse valor depois)
+  // gas_povo_frete enviado ao backend = gasPovoFrete
+  const [gasPovoValorGov, setGasPovoValorGov] = useState("")
+  const [gasPovoFrete, setGasPovoFrete] = useState("")
   // Pagamento
   const [valorPago, setValorPago] = useState("")
   const [valorPagoManual, setValorPagoManual] = useState(false)
@@ -123,9 +130,24 @@ function Vendas() {
     0,
   )
 
+  // Para Gas do Povo: valor_pago = valor do governo (informado manualmente)
+  // Para demais formas: valor_pago = total da sacola (calculado pelo catalogo)
   useEffect(() => {
+    if (formaPagamento === "gas_povo") {
+      // Gas do Povo: valor_pago vem do campo gasPovoValorGov, nao do total da sacola
+      setValorPago(gasPovoValorGov)
+      return
+    }
     if (!valorPagoManual) setValorPago(total > 0 ? total.toFixed(2) : "")
-  }, [total, valorPagoManual])
+  }, [total, valorPagoManual, formaPagamento, gasPovoValorGov])
+
+  // Reset campos Gas do Povo ao trocar forma de pagamento
+  useEffect(() => {
+    if (formaPagamento !== "gas_povo") {
+      setGasPovoValorGov("")
+      setGasPovoFrete("")
+    }
+  }, [formaPagamento])
 
   const quantidadesNaSacola = Object.fromEntries(
     sacola.map((i) => [i.produtoId, i.quantidade]),
@@ -166,6 +188,8 @@ function Vendas() {
     setDataPagamentoVale("")
     setValeGasNumero("")
     setValeGasBlocoId(null)
+    setGasPovoValorGov("")
+    setGasPovoFrete("")
     setValorPago("")
     setValorPagoManual(false)
     setDataVenda(hojeISO())
@@ -179,14 +203,18 @@ function Vendas() {
           endereco_id: endereco?.id,
           motorista_id: motoristaId,
           forma_pagamento: formaPagamento as
-            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale" | "vale_gas",
+            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale" | "vale_gas" | "gas_povo",
           // Fiado
           vale_numero: formaPagamento === "vale" && valeNumero ? Number(valeNumero) : undefined,
           data_pagamento_vale: formaPagamento === "vale" && dataPagamentoVale ? dataPagamentoVale : undefined,
           // Vale Gas
           vale_gas_numero: formaPagamento === "vale_gas" && valeGasNumero ? Number(valeGasNumero) : undefined,
           vale_gas_bloco_id: formaPagamento === "vale_gas" ? (valeGasBlocoId ?? undefined) : undefined,
-          valor_pago: valorPago,
+          // Gas do Povo
+          // valor_pago = valor do governo (a ser recebido depois)
+          // gas_povo_frete = frete cobrado do cliente no ato
+          gas_povo_frete: formaPagamento === "gas_povo" && gasPovoFrete ? gasPovoFrete : undefined,
+          valor_pago: formaPagamento === "gas_povo" ? (gasPovoValorGov || "0") : valorPago,
           data_venda: dataVenda,
           itens: sacola.map((i) => ({ produto_id: i.produtoId, quantidade: i.quantidade })),
         },
@@ -206,14 +234,19 @@ function Vendas() {
     },
   })
 
+  const gasPovoValido =
+    formaPagamento === "gas_povo" &&
+    parseFloat(gasPovoValorGov) > 0 &&
+    parseFloat(gasPovoFrete) > 0
+
   const podeFinalizar =
     !!cliente &&
     sacola.length > 0 &&
     !!motoristaId &&
     !!formaPagamento &&
     (formaPagamento !== "vale" || valeNumero.trim().length > 0) &&
-    // Vale Gas: exige numero valido (bloco_id preenchido pelo validador)
-    (formaPagamento !== "vale_gas" || (valeGasNumero.trim().length > 0 && !!valeGasBlocoId))
+    (formaPagamento !== "vale_gas" || (valeGasNumero.trim().length > 0 && !!valeGasBlocoId)) &&
+    (formaPagamento !== "gas_povo" || gasPovoValido)
 
   const handleAbrirResumo = () => {
     if (!cliente) return showErrorToast("Selecione ou cadastre um cliente")
@@ -222,6 +255,8 @@ function Vendas() {
     if (formaPagamento === "vale" && !valeNumero.trim()) return showErrorToast("Informe o número do fiado")
     if (formaPagamento === "vale_gas" && !valeGasNumero.trim()) return showErrorToast("Informe o número do vale gás")
     if (formaPagamento === "vale_gas" && !valeGasBlocoId) return showErrorToast("Número de vale gás inválido — verifique o estabelecimento")
+    if (formaPagamento === "gas_povo" && !(parseFloat(gasPovoValorGov) > 0)) return showErrorToast("Informe o valor do governo para Gás do Povo")
+    if (formaPagamento === "gas_povo" && !(parseFloat(gasPovoFrete) > 0)) return showErrorToast("Informe o valor do frete para Gás do Povo")
     setShowResumo(true)
   }
 
@@ -286,7 +321,7 @@ function Vendas() {
         <div>
           <FormaPagamento
             value={formaPagamento}
-            onChange={setFormaPagamento}
+            onChange={(v) => { setFormaPagamento(v); setValorPagoManual(false) }}
             valeNumero={valeNumero}
             onValeNumeroChange={setValeNumero}
             dataPagamentoVale={dataPagamentoVale}
@@ -294,34 +329,55 @@ function Vendas() {
             valeGasNumero={valeGasNumero}
             onValeGasNumeroChange={setValeGasNumero}
             onValeGasBlocoIdChange={setValeGasBlocoId}
+            gasPovoValorGov={gasPovoValorGov}
+            onGasPovoValorGovChange={setGasPovoValorGov}
+            gasPovoFrete={gasPovoFrete}
+            onGasPovoFreteChange={setGasPovoFrete}
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 rounded-lg border p-3 sm:max-w-md">
-        <div className="grid gap-1.5">
-          <Label htmlFor="valor-pago">PAGO (R$)</Label>
-          <Input
-            id="valor-pago"
-            type="text"
-            inputMode="decimal"
-            value={valorPago}
-            onChange={(e) => {
-              setValorPago(e.target.value)
-              setValorPagoManual(true)
-            }}
-          />
+      {/* Campo valor_pago oculto para Gas do Povo (preenchido automaticamente) */}
+      {formaPagamento !== "gas_povo" && (
+        <div className="grid grid-cols-2 gap-4 rounded-lg border p-3 sm:max-w-md">
+          <div className="grid gap-1.5">
+            <Label htmlFor="valor-pago">PAGO (R$)</Label>
+            <Input
+              id="valor-pago"
+              type="text"
+              inputMode="decimal"
+              value={valorPago}
+              onChange={(e) => {
+                setValorPago(e.target.value)
+                setValorPagoManual(true)
+              }}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="data-venda">Data</Label>
+            <Input
+              id="data-venda"
+              type="date"
+              value={dataVenda}
+              onChange={(e) => setDataVenda(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="data-venda">Data</Label>
-          <Input
-            id="data-venda"
-            type="date"
-            value={dataVenda}
-            onChange={(e) => setDataVenda(e.target.value)}
-          />
+      )}
+
+      {formaPagamento === "gas_povo" && (
+        <div className="grid grid-cols-1 gap-4 rounded-lg border p-3 sm:max-w-md">
+          <div className="grid gap-1.5">
+            <Label htmlFor="data-venda-gp">Data</Label>
+            <Input
+              id="data-venda-gp"
+              type="date"
+              value={dataVenda}
+              onChange={(e) => setDataVenda(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="sticky bottom-4 flex justify-end">
         <Button size="lg" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
@@ -339,7 +395,9 @@ function Vendas() {
         formaPagamento={formaPagamento ?? ""}
         valeNumero={valeNumero}
         dataPagamentoVale={dataPagamentoVale}
-        valorPago={valorPago}
+        valorPago={formaPagamento === "gas_povo"
+          ? String((parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0))
+          : valorPago}
         dataVenda={dataVenda}
         isPending={mutation.isPending}
         onConfirm={() => mutation.mutate()}

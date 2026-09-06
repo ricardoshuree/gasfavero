@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: sidebar-grupos | plano: a23f2512 | 2026-09-05 22:48:52
-// Organiza sidebar em grupos: Vendas, Vale Gas, Operacoes, Cadastros, Administracao
+// [mcp-local harness] feature: gas-povo | plano: 9b775808 | 2026-09-06 00:12:09
+// Adiciona grupo Gas do Povo com item Recebimento Gas do Povo no sidebar
 import {
   AlertTriangle,
   Banknote,
@@ -19,6 +19,7 @@ import {
   ShoppingCart,
   Sunrise,
   Ticket,
+  Truck,
   Users,
   UsersRound,
   Wallet,
@@ -44,10 +45,6 @@ type PermissionAction = "can_create" | "can_read" | "can_update" | "can_delete"
 
 type ModuleItem = Item & { module: string; action?: PermissionAction }
 
-// ---------------------------------------------------------------------------
-// Definição dos grupos e seus itens com módulo RBAC
-// ---------------------------------------------------------------------------
-
 type ModuleGroup = {
   label: string
   items: ModuleItem[]
@@ -57,9 +54,9 @@ const MODULE_GROUPS: ModuleGroup[] = [
   {
     label: "Vendas",
     items: [
-      { module: "vendas",        icon: ShoppingCart, title: "Vendas",                path: "/vendas" },
-      { module: "vendas",        icon: HandCoins,    title: "Recebimento de Fiado",   path: "/recebimento-vale" },
-      { module: "livro_vendas",  icon: Book,         title: "Livro de Vendas",        path: "/livro-vendas" },
+      { module: "vendas",        icon: ShoppingCart,  title: "Vendas",                path: "/vendas" },
+      { module: "vendas",        icon: HandCoins,     title: "Recebimento de Fiado",  path: "/recebimento-vale" },
+      { module: "livro_vendas",  icon: Book,          title: "Livro de Vendas",       path: "/livro-vendas" },
       { module: "inadimplencia", icon: AlertTriangle, title: "Inadimplentes",         path: "/inadimplentes" },
     ],
   },
@@ -68,6 +65,12 @@ const MODULE_GROUPS: ModuleGroup[] = [
     items: [
       { module: "vale_gas", icon: Flame,  title: "Bloco de Vale Gás",        path: "/vale-gas" },
       { module: "vale_gas", icon: Wallet, title: "Recebimento de Vale Gás",  path: "/recebimento-vale-gas" },
+    ],
+  },
+  {
+    label: "Gás do Povo",
+    items: [
+      { module: "gas_povo", icon: Truck, title: "Recebimento Gás do Povo", path: "/recebimento-gas-povo" },
     ],
   },
   {
@@ -84,17 +87,17 @@ const MODULE_GROUPS: ModuleGroup[] = [
   {
     label: "Cadastros",
     items: [
-      { module: "produtos",  icon: Box,       title: "Produtos",       path: "/produtos" },
-      { module: "produtos",  icon: Banknote,  title: "Preços",         path: "/precos" },
-      { module: "clientes",  icon: UsersRound, title: "Clientes",      path: "/clientes" },
-      { module: "vales",     icon: Ticket,    title: "Bloco de Fiados", path: "/vales" },
+      { module: "produtos",  icon: Box,        title: "Produtos",        path: "/produtos" },
+      { module: "produtos",  icon: Banknote,   title: "Preços",          path: "/precos" },
+      { module: "clientes",  icon: UsersRound, title: "Clientes",        path: "/clientes" },
+      { module: "vales",     icon: Ticket,     title: "Bloco de Fiados", path: "/vales" },
     ],
   },
   {
     label: "Administração",
     items: [
-      { module: "usuarios",      icon: Users,       title: "Usuários",      path: "/admin" },
-      { module: "configuracoes", icon: Settings,    title: "Configurações", path: "/settings" },
+      { module: "usuarios",      icon: Users,    title: "Usuários",      path: "/admin" },
+      { module: "configuracoes", icon: Settings, title: "Configurações", path: "/settings" },
     ],
   },
 ]
@@ -119,7 +122,6 @@ export function AppSidebar() {
         ),
       }))
 
-  // Itens de superuser ficam no grupo Administração
   if (currentUser?.is_superuser) {
     const adminGroup = groups.find((g) => g.label === "Administração")
     if (adminGroup) {
@@ -136,7 +138,6 @@ export function AppSidebar() {
         <Logo variant="responsive" />
       </SidebarHeader>
       <SidebarContent>
-        {/* Dashboard fora dos grupos — sempre visível */}
         <SidebarMenu className="px-2 py-1">
           <SidebarMenuItem>
             <SidebarMenuButton tooltip="Dashboard" isActive={false} asChild>
