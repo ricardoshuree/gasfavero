@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: venda-edicao-frontend | plano: fea92882 | 2026-09-06 01:12:34
-// Corrige TS18048: substitui venda.qtd_edicoes por qtd_edicoes (variavel local com ?? 0) e (venda.qtd_edicoes ?? 0) na tabela
+// [mcp-local harness] feature: panel-cancelar-edicao | plano: 17e37098 | 2026-09-06 01:20:27
+// Adiciona botao Cancelar edicao laranja; dialog de confirmacao de cancelamento mais destacado com borda e icone; botao Fechar para vendas canceladas
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Search, XCircle } from "lucide-react"
 import { useState } from "react"
@@ -150,6 +150,12 @@ function VendaEditPanel({
   const trocouParaComplexo = !FORMAS_SIMPLES.includes(formaPagamento) && formaPagamento !== venda.forma_pagamento
   const qtdEdicoes = venda.qtd_edicoes ?? 0
 
+  // Verifica se houve alguma alteracao nos campos
+  const houveAlteracao =
+    formaPagamento !== venda.forma_pagamento ||
+    valorPago !== String(venda.valor_pago) ||
+    dataVenda !== venda.data_venda
+
   const invalidateQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["livroVendas"] })
     queryClient.invalidateQueries({ queryKey: ["livroResumo"] })
@@ -282,12 +288,23 @@ function VendaEditPanel({
             />
           </div>
 
-          <Button
-            onClick={() => mutEditar.mutate()}
-            disabled={mutEditar.isPending || trocouParaComplexo}
-          >
-            {mutEditar.isPending ? "Salvando..." : "Salvar alterações"}
-          </Button>
+          {/* Botoes de acao da edicao */}
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => mutEditar.mutate()}
+              disabled={mutEditar.isPending || trocouParaComplexo || !houveAlteracao}
+            >
+              {mutEditar.isPending ? "Salvando..." : "Salvar alterações"}
+            </Button>
+            {/* Cancelar edicao — laranja — fecha o panel sem salvar */}
+            <Button
+              onClick={onClose}
+              disabled={mutEditar.isPending}
+              style={{ backgroundColor: "#f97316", color: "#fff", borderColor: "#f97316" }}
+            >
+              Cancelar edição
+            </Button>
+          </div>
         </div>
       )}
 
@@ -314,7 +331,7 @@ function VendaEditPanel({
         </div>
       )}
 
-      {/* Cancelamento */}
+      {/* Cancelamento da venda */}
       {!isCancelada && canEdit && (
         <div className="border-t pt-4 mt-2">
           {!confirmandoCancelamento ? (
@@ -327,31 +344,41 @@ function VendaEditPanel({
               Cancelar venda
             </Button>
           ) : (
-            <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
-              <p className="text-sm font-medium text-destructive">Confirmar cancelamento?</p>
+            /* Dialog de confirmacao inline */
+            <div className="flex flex-col gap-3 rounded-lg border-2 border-destructive bg-destructive/5 p-4">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-destructive shrink-0" />
+                <p className="text-sm font-semibold text-destructive">Tem certeza que deseja cancelar esta venda?</p>
+              </div>
               <p className="text-xs text-muted-foreground">
-                A venda será marcada como cancelada e o estorno contábil será lançado automaticamente. Esta ação não pode ser desfeita.
+                Esta ação <strong>não pode ser desfeita</strong>. A venda será marcada como cancelada e o estorno contábil será lançado automaticamente.
               </p>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2 mt-1">
                 <Button
                   variant="destructive"
-                  className="flex-1"
                   onClick={() => mutCancelar.mutate()}
                   disabled={mutCancelar.isPending}
                 >
-                  {mutCancelar.isPending ? "Cancelando..." : "Confirmar"}
+                  {mutCancelar.isPending ? "Cancelando..." : "Sim, cancelar"}
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1"
                   onClick={() => setConfirmandoCancelamento(false)}
+                  disabled={mutCancelar.isPending}
                 >
-                  Voltar
+                  Não, voltar
                 </Button>
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {/* Botao fechar para vendas canceladas (sem edicao) */}
+      {(isCancelada || !canEdit) && (
+        <Button variant="outline" onClick={onClose}>
+          Fechar
+        </Button>
       )}
     </div>
   )

@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: sidebar-label-color | plano: 7c8fd47b | 2026-09-06 00:58:36
-// Cor #4ade80 nos SidebarGroupLabel
+// [mcp-local harness] feature: panel-cancelar-edicao | plano: 17e37098 | 2026-09-06 01:19:04
+// Usa text-primary nos SidebarGroupLabel em vez de cor hardcoded
 import { Link as RouterLink, useRouterState } from "@tanstack/react-router"
 import type { LucideIcon } from "lucide-react"
 
@@ -43,7 +43,7 @@ export function Main({ groups }: MainProps) {
         if (group.items.length === 0) return null
         return (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel style={{ color: "#4ade80" }}>
+            <SidebarGroupLabel className="text-primary">
               {group.label}
             </SidebarGroupLabel>
             <SidebarGroupContent>
