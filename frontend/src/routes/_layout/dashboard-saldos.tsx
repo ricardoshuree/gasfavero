@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: abertura-log-edicao-fix | plano: b44c34a0 | 2026-09-05 23:12:46
-// Substitui title por aria-label no AlertTriangle para corrigir erro TS
+// [mcp-local harness] feature: fuso-horario-lancamentos | plano: 4c63f6ca | 2026-09-05 23:33:22
+// Usa created_at ISO e converte para hora local com toLocaleTimeString — corrige fuso horario 3h adiantado
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
@@ -45,13 +45,21 @@ interface DashboardData {
     debito_numero: string
     credito_numero: string
     valor: number
-    hora: string
+    created_at: string  // ISO UTC — convertido para fuso local no render
     e_ajuste: boolean
   }[]
 }
 
 function fmt(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+// Converte ISO UTC para hora local do browser (resolve o problema de fuso)
+function horaLocal(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 async function apiFetch(path: string): Promise<DashboardData> {
@@ -236,7 +244,8 @@ function DashboardSaldos() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-medium">{fmt(l.valor)}</p>
-                      <p className="text-xs text-muted-foreground">{l.hora}</p>
+                      {/* horaLocal converte UTC para fuso do browser automaticamente */}
+                      <p className="text-xs text-muted-foreground">{horaLocal(l.created_at)}</p>
                     </div>
                   </div>
                 ))}
