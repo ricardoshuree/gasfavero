@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: abertura-log-edicao | plano: afb4479e | 2026-09-05 23:06:46
-# Adiciona log de edicao de abertura, remove dependencia de senha do gerente no backend, marca lancamentos de ajuste no dashboard
+# [mcp-local harness] feature: abertura-editar-produtos | plano: 4fe429bb | 2026-09-05 23:17:59
+# Adiciona GET /abertura/{id}/produtos e atualiza PATCH para aceitar edicao de fundo e produtos com log por campo alterado
 """
 Rotas de Fechamento Diario (abertura, fechamento e dashboard de saldos).
 """
@@ -25,8 +25,6 @@ CONTA_MAQUININHA_ID = "13000000-0000-0000-0000-000000000001"
 CONTA_QUEBRA_ID     = "31000000-0000-0000-0000-000000000001"
 CONTA_SOBRA_ID      = "32000000-0000-0000-0000-000000000001"
 
-# Prefixo de descricao dos lancamentos de ajuste de abertura --
-# usado pelo dashboard para identificar e marcar com icone de aviso.
 PREFIXO_AJUSTE_ABERTURA = "Ajuste de abertura"
 
 SQL_MOTORISTAS = (
@@ -83,16 +81,7 @@ def _get_or_create_conta_motorista(session: SessionDep, motorista_id: str) -> st
     return nova_conta_id
 
 
-def _criar_lancamento(
-    session: SessionDep,
-    data: date,
-    descricao: str,
-    valor: Decimal,
-    debito_id: str,
-    credito_id: str,
-    abertura_id: str,
-    criado_por_id: str,
-) -> None:
+def _criar_lancamento(session, data, descricao, valor, debito_id, credito_id, abertura_id, criado_por_id):
     conn = session.connection()
     conn.execute(
         sa.text(
@@ -100,46 +89,25 @@ def _criar_lancamento(
             "(id, data, descricao, valor, debito_id, credito_id, abertura_id, criado_por_id, created_at) "
             "VALUES (:id, :data, :descricao, :valor, :debito_id, :credito_id, :abertura_id, :criado_por_id, NOW())"
         ),
-        {
-            "id": str(uuid.uuid4()),
-            "data": data,
-            "descricao": descricao,
-            "valor": valor,
-            "debito_id": debito_id,
-            "credito_id": credito_id,
-            "abertura_id": abertura_id,
-            "criado_por_id": criado_por_id,
-        }
+        {"id": str(uuid.uuid4()), "data": data, "descricao": descricao, "valor": valor,
+         "debito_id": debito_id, "credito_id": credito_id, "abertura_id": abertura_id,
+         "criado_por_id": criado_por_id}
     )
 
 
-def _gravar_log_edicao(
-    conn: Any,
-    abertura_id: str,
-    campo: str,
-    valor_anterior: str,
-    valor_novo: str,
-    editado_por_id: str,
-) -> None:
-    """Grava uma linha no log de edicoes de abertura."""
+def _gravar_log_edicao(conn, abertura_id, campo, valor_anterior, valor_novo, editado_por_id):
     conn.execute(
         sa.text(
             "INSERT INTO abertura_dia_log "
             "(id, abertura_id, campo, valor_anterior, valor_novo, editado_por_id, editado_em) "
             "VALUES (:id, :abertura_id, :campo, :valor_anterior, :valor_novo, :editado_por_id, NOW())"
         ),
-        {
-            "id": str(uuid.uuid4()),
-            "abertura_id": abertura_id,
-            "campo": campo,
-            "valor_anterior": valor_anterior,
-            "valor_novo": valor_novo,
-            "editado_por_id": editado_por_id,
-        }
+        {"id": str(uuid.uuid4()), "abertura_id": abertura_id, "campo": campo,
+         "valor_anterior": valor_anterior, "valor_novo": valor_novo, "editado_por_id": editado_por_id}
     )
 
 
-def _saldo_conta(conn: Any, conta_id: str, inicio: date, fim: date) -> float:
+def _saldo_conta(conn, conta_id, inicio, fim):
     row = conn.execute(sa.text(
         "SELECT "
         "  COALESCE(SUM(CASE WHEN credito_id = :cid THEN valor ELSE 0 END), 0) - "
@@ -176,7 +144,6 @@ def read_status_abertura(session: SessionDep, data: date) -> Any:
             "SELECT id FROM fechamento_dia WHERE motorista_id = :mid AND data = :data"
         ), {"mid": motorista_id, "data": data}).fetchone() if abertura else None
 
-        # Log de edicoes desta abertura
         logs = []
         if abertura:
             log_rows = conn.execute(sa.text(
@@ -208,6 +175,37 @@ def read_status_abertura(session: SessionDep, data: date) -> Any:
         })
 
     return {"data": data.isoformat(), "motoristas": resultado}
+
+
+@router.get(
+    "/abertura/{abertura_id}/produtos",
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))],
+)
+def read_abertura_produtos(session: SessionDep, abertura_id: str) -> Any:
+    """Retorna todos os produtos do catalogo com a quantidade carregada
+    nesta abertura (0 se nao estava na carga original).
+    Usado pelo modal de edicao para montar os campos editaveis."""
+    conn = session.connection()
+
+    # Todos os produtos do catalogo
+    todos = conn.execute(sa.text(
+        "SELECT id, title FROM item ORDER BY title"
+    )).fetchall()
+
+    # Quantidades desta abertura
+    carga = conn.execute(sa.text(
+        "SELECT produto_id, quantidade FROM abertura_dia_produto WHERE abertura_id = :id"
+    ), {"id": abertura_id}).fetchall()
+    carga_map = {str(r[0]): r[1] for r in carga}
+
+    return [
+        {
+            "produto_id": str(p[0]),
+            "produto_nome": p[1],
+            "quantidade": carga_map.get(str(p[0]), 0),
+        }
+        for p in todos
+    ]
 
 
 @router.post(
@@ -264,10 +262,14 @@ def criar_abertura(*, session: SessionDep, current_user: CurrentUser, body: dict
     dependencies=[Depends(require_module_permission(MODULE, action="update"))],
 )
 def editar_abertura(*, session: SessionDep, current_user: CurrentUser, abertura_id: str, body: dict) -> Any:
-    novo_fundo = Decimal(str(body.get("novo_fundo_troco", 0)))
-    if novo_fundo <= 0:
-        raise HTTPException(status_code=400, detail="Fundo de troco deve ser maior que zero")
+    """Edita fundo de troco e/ou produtos de uma abertura ja confirmada.
+    Grava log de cada campo alterado. Cria lancamento contabil de ajuste
+    para diferenca no fundo de troco.
 
+    Body aceita:
+        novo_fundo_troco: float (opcional -- se omitido ou igual ao atual, nao altera)
+        produtos: list[{produto_id, produto_nome, quantidade}] (opcional)
+    """
     conn = session.connection()
     abertura = conn.execute(sa.text(
         "SELECT id, motorista_id, data, fundo_troco FROM abertura_dia WHERE id = :id"
@@ -275,52 +277,107 @@ def editar_abertura(*, session: SessionDep, current_user: CurrentUser, abertura_
     if not abertura:
         raise HTTPException(status_code=404, detail="Abertura nao encontrada")
 
-    fundo_atual = Decimal(str(abertura[3]))
-    diferenca = novo_fundo - fundo_atual
-    if diferenca == 0:
-        raise HTTPException(status_code=400, detail="Novo valor igual ao atual")
+    editor_id = str(current_user.id)
+    houve_alteracao = False
 
-    conta_motorista = conn.execute(sa.text(
-        "SELECT id FROM conta WHERE motorista_id = :mid"
-    ), {"mid": str(abertura[1])}).fetchone()
-    if not conta_motorista:
-        raise HTTPException(status_code=400, detail="Conta do motorista nao encontrada")
+    # --- Fundo de troco ---
+    novo_fundo_raw = body.get("novo_fundo_troco")
+    if novo_fundo_raw is not None:
+        novo_fundo = Decimal(str(novo_fundo_raw))
+        if novo_fundo <= 0:
+            raise HTTPException(status_code=400, detail="Fundo de troco deve ser maior que zero")
 
-    # Atualiza fundo de troco
-    conn.execute(sa.text(
-        "UPDATE abertura_dia SET fundo_troco = :novo, updated_at = NOW(), editado_por_id = :editor WHERE id = :id"
-    ), {"novo": novo_fundo, "editor": str(current_user.id), "id": abertura_id})
+        fundo_atual = Decimal(str(abertura[3]))
+        diferenca = novo_fundo - fundo_atual
 
-    # Grava log de edicao
-    _gravar_log_edicao(
-        conn,
-        abertura_id=abertura_id,
-        campo="fundo_troco",
-        valor_anterior=f"R$ {fundo_atual:,.2f}",
-        valor_novo=f"R$ {novo_fundo:,.2f}",
-        editado_por_id=str(current_user.id),
-    )
+        if diferenca != 0:
+            conta_motorista = conn.execute(sa.text(
+                "SELECT id FROM conta WHERE motorista_id = :mid"
+            ), {"mid": str(abertura[1])}).fetchone()
+            if not conta_motorista:
+                raise HTTPException(status_code=400, detail="Conta do motorista nao encontrada")
 
-    # Lancamento contabil de ajuste
-    if diferenca > 0:
-        debito_id, credito_id = CONTA_MESTRE_ID, str(conta_motorista[0])
-        descricao = f"{PREFIXO_AJUSTE_ABERTURA} - acrescimo de fundo de troco"
-        valor_ajuste = diferenca
-    else:
-        debito_id, credito_id = str(conta_motorista[0]), CONTA_MESTRE_ID
-        descricao = f"{PREFIXO_AJUSTE_ABERTURA} - reducao de fundo de troco"
-        valor_ajuste = abs(diferenca)
+            conn.execute(sa.text(
+                "UPDATE abertura_dia SET fundo_troco = :novo, updated_at = NOW(), editado_por_id = :editor WHERE id = :id"
+            ), {"novo": novo_fundo, "editor": editor_id, "id": abertura_id})
 
-    _criar_lancamento(session, data=abertura[2], descricao=descricao,
-        valor=valor_ajuste, debito_id=debito_id, credito_id=credito_id,
-        abertura_id=abertura_id, criado_por_id=str(current_user.id))
+            _gravar_log_edicao(conn, abertura_id=abertura_id, campo="fundo_troco",
+                valor_anterior=f"R$ {fundo_atual:,.2f}",
+                valor_novo=f"R$ {novo_fundo:,.2f}",
+                editado_por_id=editor_id)
+
+            if diferenca > 0:
+                debito_id, credito_id = CONTA_MESTRE_ID, str(conta_motorista[0])
+                descricao = f"{PREFIXO_AJUSTE_ABERTURA} - acrescimo de fundo de troco"
+                valor_ajuste = diferenca
+            else:
+                debito_id, credito_id = str(conta_motorista[0]), CONTA_MESTRE_ID
+                descricao = f"{PREFIXO_AJUSTE_ABERTURA} - reducao de fundo de troco"
+                valor_ajuste = abs(diferenca)
+
+            _criar_lancamento(session, data=abertura[2], descricao=descricao,
+                valor=valor_ajuste, debito_id=debito_id, credito_id=credito_id,
+                abertura_id=abertura_id, criado_por_id=editor_id)
+
+            houve_alteracao = True
+
+    # --- Produtos ---
+    produtos_novos = body.get("produtos")
+    if produtos_novos is not None:
+        # Carga atual para comparar
+        carga_atual = conn.execute(sa.text(
+            "SELECT produto_id, quantidade FROM abertura_dia_produto WHERE abertura_id = :id"
+        ), {"id": abertura_id}).fetchall()
+        carga_map = {str(r[0]): r[1] for r in carga_atual}
+
+        for p in produtos_novos:
+            pid = p["produto_id"]
+            nome_produto = p.get("produto_nome", pid)
+            qtd_nova = int(p.get("quantidade", 0))
+            qtd_atual = carga_map.get(pid, 0)
+
+            if qtd_nova == qtd_atual:
+                continue  # sem alteracao
+
+            # Grava log
+            _gravar_log_edicao(conn, abertura_id=abertura_id,
+                campo=f"produto:{nome_produto}",
+                valor_anterior=str(qtd_atual),
+                valor_novo=str(qtd_nova),
+                editado_por_id=editor_id)
+
+            if qtd_nova == 0:
+                # Remove da carga
+                conn.execute(sa.text(
+                    "DELETE FROM abertura_dia_produto WHERE abertura_id = :aid AND produto_id = :pid"
+                ), {"aid": abertura_id, "pid": pid})
+            elif qtd_atual == 0:
+                # Insere novo
+                conn.execute(sa.text(
+                    "INSERT INTO abertura_dia_produto (id, abertura_id, produto_id, quantidade) "
+                    "VALUES (:id, :aid, :pid, :qtd)"
+                ), {"id": str(uuid.uuid4()), "aid": abertura_id, "pid": pid, "qtd": qtd_nova})
+            else:
+                # Atualiza
+                conn.execute(sa.text(
+                    "UPDATE abertura_dia_produto SET quantidade = :qtd "
+                    "WHERE abertura_id = :aid AND produto_id = :pid"
+                ), {"qtd": qtd_nova, "aid": abertura_id, "pid": pid})
+
+            # Marca abertura como editada
+            conn.execute(sa.text(
+                "UPDATE abertura_dia SET updated_at = NOW(), editado_por_id = :editor WHERE id = :id"
+            ), {"editor": editor_id, "id": abertura_id})
+
+            houve_alteracao = True
+
+    if not houve_alteracao:
+        raise HTTPException(status_code=400, detail="Nenhuma alteracao detectada")
 
     session.commit()
-    return {"abertura_id": abertura_id, "fundo_troco": float(novo_fundo)}
+    return {"abertura_id": abertura_id, "ok": True}
 
 
-# endpoint de verificar-senha-gerente mantido para nao quebrar chamadas existentes
-# mas nao e mais usado pelo frontend de abertura
 @router.post("/verificar-senha-gerente")
 def verificar_senha_gerente(*, session: SessionDep, body: dict) -> Any:
     from app.core.security import verify_password
@@ -380,16 +437,11 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
 
     for forma, valor in totais:
         v = Decimal(str(valor))
-        if forma == "dinheiro":
-            total_dinheiro = v
-        elif forma == "pix":
-            total_pix = v
-        elif forma == "cartao_debito":
-            total_debito = v
-        elif forma == "cartao_credito":
-            total_credito = v
-        elif forma == "vale":
-            total_fiado = v
+        if forma == "dinheiro": total_dinheiro = v
+        elif forma == "pix": total_pix = v
+        elif forma == "cartao_debito": total_debito = v
+        elif forma == "cartao_credito": total_credito = v
+        elif forma == "vale": total_fiado = v
 
     fundo_troco = Decimal(str(abertura[1]))
     total_esperado = fundo_troco + total_dinheiro
@@ -408,10 +460,7 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
 
     return {
         "abertura_id": str(abertura[0]),
-        "carga_produtos": [
-            {"produto_id": str(c[0]), "produto_nome": c[1], "carregado": c[2]}
-            for c in carga
-        ],
+        "carga_produtos": [{"produto_id": str(c[0]), "produto_nome": c[1], "carregado": c[2]} for c in carga],
         "fundo_troco": float(fundo_troco),
         "total_dinheiro": float(total_dinheiro),
         "total_pix": float(total_pix),
@@ -421,16 +470,8 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
         "total_esperado": float(total_esperado),
         "total_geral": float(total_dinheiro + total_pix + total_debito + total_credito + total_fiado),
         "ja_fechado": fechado is not None,
-        "vendas": [
-            {
-                "id": str(v[0]),
-                "cliente_nome": v[1],
-                "forma_pagamento": v[2],
-                "valor_pago": float(v[3]),
-                "data_venda": v[4].isoformat(),
-            }
-            for v in vendas
-        ],
+        "vendas": [{"id": str(v[0]), "cliente_nome": v[1], "forma_pagamento": v[2],
+                    "valor_pago": float(v[3]), "data_venda": v[4].isoformat()} for v in vendas],
     }
 
 
@@ -555,16 +596,12 @@ def fechar_dia(*, session: SessionDep, current_user: CurrentUser, body: dict) ->
                 "produto_id": r["produto_id"], "quantidade_retorno": r["quantidade_retorno"]})
 
     session.commit()
-    return {
-        "fechamento_id": fechamento_id,
-        "total_esperado": float(total_esperado),
-        "total_contado": float(total_contado),
-        "diferenca": float(diferenca),
-    }
+    return {"fechamento_id": fechamento_id, "total_esperado": float(total_esperado),
+            "total_contado": float(total_contado), "diferenca": float(diferenca)}
 
 
 # ---------------------------------------------------------------------------
-# Dashboard de saldos (Fase 4)
+# Dashboard de saldos
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -618,11 +655,8 @@ def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
         iniciais = "".join(p[0].upper() for p in nome.split()[:2])
 
         motoristas_saldo.append({
-            "motorista_id": mid,
-            "motorista_nome": nome,
-            "iniciais": iniciais,
-            "status": status,
-            "fundo_troco": float(abertura[1]) if abertura else 0,
+            "motorista_id": mid, "motorista_nome": nome, "iniciais": iniciais,
+            "status": status, "fundo_troco": float(abertura[1]) if abertura else 0,
             "saldo_transito": s,
         })
 
@@ -637,12 +671,9 @@ def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
             "SELECT id FROM abertura_dia WHERE motorista_id = :mid AND data = :data"
         ), {"mid": mid, "data": hoje}).fetchone()
         motoristas_saldo.append({
-            "motorista_id": mid,
-            "motorista_nome": nome,
-            "iniciais": iniciais,
+            "motorista_id": mid, "motorista_nome": nome, "iniciais": iniciais,
             "status": "aberto" if abertura else "sem_abertura",
-            "fundo_troco": 0,
-            "saldo_transito": 0.0,
+            "fundo_troco": 0, "saldo_transito": 0.0,
         })
 
     motoristas_saldo.sort(key=lambda m: m["motorista_nome"])
@@ -661,20 +692,14 @@ def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
         "data_inicio": data_inicio.isoformat(),
         "data_fim": hoje.isoformat(),
         "resumo": {
-            "saldo_mestre": saldo_mestre,
-            "total_transito": total_transito,
-            "total_fiado": saldo_fiado,
-            "total_maquininha": saldo_maquininha,
+            "saldo_mestre": saldo_mestre, "total_transito": total_transito,
+            "total_fiado": saldo_fiado, "total_maquininha": saldo_maquininha,
         },
         "motoristas": motoristas_saldo,
         "lancamentos": [
             {
-                "descricao": l[0],
-                "debito_numero": l[1],
-                "credito_numero": l[2],
-                "valor": float(l[3]),
-                "hora": l[4].strftime("%H:%M"),
-                # flag para o frontend exibir icone de aviso
+                "descricao": l[0], "debito_numero": l[1], "credito_numero": l[2],
+                "valor": float(l[3]), "hora": l[4].strftime("%H:%M"),
                 "e_ajuste": l[0].startswith(PREFIXO_AJUSTE_ABERTURA),
             }
             for l in lancamentos

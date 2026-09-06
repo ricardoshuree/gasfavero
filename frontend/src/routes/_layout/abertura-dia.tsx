@@ -1,9 +1,9 @@
-// [mcp-local harness] feature: abertura-log-edicao | plano: afb4479e | 2026-09-05 23:07:52
-// Remove senha do gerente, adiciona alerta de rastreabilidade no modal de edicao, exibe log de edicoes abaixo da lista
+// [mcp-local harness] feature: abertura-editar-produtos | plano: 4fe429bb | 2026-09-05 23:20:45
+// ModalEdicao carrega carga atual de produtos ao abrir e permite editar fundo e quantidades com log por campo
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { AlertTriangle, CheckCircle, Clock, Edit2, Unlock } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { UsersService } from "@/client"
 import { Badge } from "@/components/ui/badge"
@@ -82,6 +82,12 @@ interface StatusMotorista {
   fundo_troco: number | null
   aberto_em: string | null
   logs_edicao: LogEdicao[]
+}
+
+interface ProdutoAbertura {
+  produto_id: string
+  produto_nome: string
+  quantidade: number
 }
 
 interface Produto {
@@ -219,7 +225,7 @@ function ModalAbertura({
 }
 
 // ---------------------------------------------------------------------------
-// Modal de edição — sem senha, com alerta de rastreabilidade
+// Modal de edição — sem senha, com alerta de rastreabilidade + produtos
 // ---------------------------------------------------------------------------
 function ModalEdicao({
   motorista,
@@ -233,19 +239,47 @@ function ModalEdicao({
   const [novoFundo, setNovoFundo] = useState(
     motorista.fundo_troco?.toFixed(2).replace(".", ",") ?? "",
   )
+  const [quantidades, setQuantidades] = useState<Record<string, number>>({})
+  const [produtos, setProdutos] = useState<ProdutoAbertura[]>([])
+  const [loadingProdutos, setLoadingProdutos] = useState(true)
   const [loading, setLoading] = useState(false)
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
+  // Carrega carga atual ao abrir
+  useEffect(() => {
+    if (!motorista.abertura_id) return
+    apiFetch(`/fechamento/abertura/${motorista.abertura_id}/produtos`)
+      .then((data: ProdutoAbertura[]) => {
+        setProdutos(data)
+        const qtds: Record<string, number> = {}
+        data.forEach((p) => { qtds[p.produto_id] = p.quantidade })
+        setQuantidades(qtds)
+      })
+      .catch(() => showErrorToast("Erro ao carregar produtos da abertura"))
+      .finally(() => setLoadingProdutos(false))
+  }, [motorista.abertura_id])
+
   const handleSalvar = async () => {
     const valor = parseFloat(novoFundo.replace(",", "."))
-    if (!valor || valor <= 0) return showErrorToast("Informe um valor válido")
+    if (!valor || valor <= 0) return showErrorToast("Informe um valor de troco válido")
+
+    // Monta payload de produtos com nomes para o log
+    const produtosPayload = produtos.map((p) => ({
+      produto_id: p.produto_id,
+      produto_nome: p.produto_nome,
+      quantidade: quantidades[p.produto_id] ?? 0,
+    }))
+
     setLoading(true)
     try {
       await apiFetch(`/fechamento/abertura/${motorista.abertura_id}`, {
         method: "PATCH",
-        body: JSON.stringify({ novo_fundo_troco: valor }),
+        body: JSON.stringify({
+          novo_fundo_troco: valor,
+          produtos: produtosPayload,
+        }),
       })
-      showSuccessToast("Fundo de troco atualizado")
+      showSuccessToast("Abertura atualizada")
       onSuccess()
       onClose()
     } catch (e: any) {
@@ -257,7 +291,7 @@ function ModalEdicao({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar abertura — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
@@ -271,23 +305,56 @@ function ModalEdicao({
           </span>
         </div>
 
-        <div className="grid gap-3 py-2">
-          <Label>Novo fundo de troco (R$)</Label>
-          <Input
-            type="text"
-            inputMode="decimal"
-            value={novoFundo}
-            onChange={(e) => setNovoFundo(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSalvar()}
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">
-            Um lançamento de ajuste será gerado pela diferença.
-          </p>
+        <div className="grid gap-4 py-2">
+          {/* Fundo de troco */}
+          <div className="grid gap-1.5">
+            <Label>Fundo de troco (R$)</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={novoFundo}
+              onChange={(e) => setNovoFundo(e.target.value)}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Um lançamento de ajuste será gerado pela diferença.
+            </p>
+          </div>
+
+          {/* Produtos */}
+          <div className="grid gap-2">
+            <Label>Carga de produtos</Label>
+            {loadingProdutos ? (
+              <div className="h-24 animate-pulse rounded-lg border bg-muted/40" />
+            ) : produtos.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum produto cadastrado.</p>
+            ) : (
+              <div className="rounded-lg border divide-y">
+                {produtos.map((p) => (
+                  <div key={p.produto_id} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm">{p.produto_nome}</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={quantidades[p.produto_id] ?? 0}
+                      onChange={(e) =>
+                        setQuantidades((prev) => ({
+                          ...prev,
+                          [p.produto_id]: Number(e.target.value) || 0,
+                        }))
+                      }
+                      className="w-20 h-7 text-right"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-          <Button onClick={handleSalvar} disabled={loading}>
+          <Button onClick={handleSalvar} disabled={loading || loadingProdutos}>
             {loading ? "Salvando..." : "Salvar ajuste"}
           </Button>
         </DialogFooter>
@@ -297,10 +364,16 @@ function ModalEdicao({
 }
 
 // ---------------------------------------------------------------------------
-// Log de edições de uma abertura
+// Log de edições
 // ---------------------------------------------------------------------------
 function LogEdicoes({ logs }: { logs: LogEdicao[] }) {
   if (logs.length === 0) return null
+
+  function labelCampo(campo: string) {
+    if (campo === "fundo_troco") return "fundo de troco"
+    if (campo.startsWith("produto:")) return campo.replace("produto:", "")
+    return campo
+  }
 
   return (
     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
@@ -313,7 +386,7 @@ function LogEdicoes({ logs }: { logs: LogEdicao[] }) {
           <div key={i} className="text-xs text-amber-700">
             <span className="font-medium">{log.editado_por}</span>
             {" alterou "}
-            <span className="font-medium">{log.campo === "fundo_troco" ? "fundo de troco" : log.campo}</span>
+            <span className="font-medium">{labelCampo(log.campo)}</span>
             {" de "}
             <span className="font-medium">{log.valor_anterior}</span>
             {" para "}
@@ -343,11 +416,7 @@ function AberturaDia() {
 
   const motoristas: StatusMotorista[] = data?.motoristas ?? []
   const totalAbertos = motoristas.filter((m) => m.aberto).length
-
-  // Coleta todos os logs de edições do dia
-  const todosLogs = motoristas.flatMap((m) =>
-    (m.logs_edicao ?? []).map((l) => ({ ...l, motorista_nome: m.motorista_nome }))
-  )
+  const todosLogs = motoristas.flatMap((m) => m.logs_edicao ?? [])
 
   const invalidar = () =>
     queryClient.invalidateQueries({ queryKey: ["abertura-status"] })
@@ -419,8 +488,7 @@ function AberturaDia() {
                         <span>
                           {" "}· Aberto às{" "}
                           {new Date(m.aberto_em).toLocaleTimeString("pt-BR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
+                            hour: "2-digit", minute: "2-digit",
                           })}
                         </span>
                       )}
@@ -447,7 +515,7 @@ function AberturaDia() {
                       size="sm"
                       variant="ghost"
                       onClick={() => setModalEditar(m)}
-                      title="Editar fundo de troco"
+                      title="Editar abertura"
                     >
                       <Edit2 className="h-4 w-4" />
                     </Button>
@@ -464,18 +532,8 @@ function AberturaDia() {
         </div>
       )}
 
-      {/* Log de edições do dia — aparece só se houver edições */}
-      {todosLogs.length > 0 && (
-        <LogEdicoes
-          logs={todosLogs.map((l) => ({
-            campo: l.campo,
-            valor_anterior: l.valor_anterior,
-            valor_novo: l.valor_novo,
-            editado_em: l.editado_em,
-            editado_por: l.editado_por,
-          }))}
-        />
-      )}
+      {/* Log de edições do dia */}
+      {todosLogs.length > 0 && <LogEdicoes logs={todosLogs} />}
 
       {modalAbrir && (
         <ModalAbertura
