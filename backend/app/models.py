@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: gas-povo | plano: 8ec9cbb7 | 2026-09-06 00:03:46
-# Adiciona campos gas_povo_frete e gas_povo_frete_recebido_em em Venda/VendaCreate/VendaPublic; adiciona gas_povo no Literal; adiciona modelos GasPovoRecebimentoPublic
+# [mcp-local harness] feature: venda-edicao | plano: ee66766a | 2026-09-06 00:51:12
+# Adiciona VendaLog, VendaLogPublic, VendaEditarRequest, status/cancelamento em Venda e VendaPublic
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -469,9 +469,6 @@ class Venda(SQLModel, table=True):
         default=None, foreign_key="bloco_vale_gas.id", ondelete="RESTRICT"
     )
     # Campos para Gas do Povo (migration u6v7w8x9y0z1)
-    # gas_povo_frete: frete cobrado do cliente no ato da entrega (pago imediatamente)
-    # gas_povo_frete_recebido_em: preenchido automaticamente na criacao da venda
-    # pago_em (existente): preenchido quando o governo pagar o valor principal
     gas_povo_frete: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
     gas_povo_frete_recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     valor_total: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
@@ -482,6 +479,11 @@ class Venda(SQLModel, table=True):
     recebido_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+    # Campos de cancelamento e status (migration v7w8x9y0z1a2)
+    # status: 'ativa' | 'cancelada'
+    status: str = Field(default="ativa", max_length=20)
+    cancelada_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    cancelada_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
 
 
 class VendaItem(SQLModel, table=True):
@@ -492,6 +494,18 @@ class VendaItem(SQLModel, table=True):
     preco_id: uuid.UUID = Field(foreign_key="preco.id", ondelete="RESTRICT")
     quantidade: int
     subtotal: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+
+
+class VendaLog(SQLModel, table=True):
+    """Auditoria de edicoes de venda — mesmo padrao do abertura_dia_log."""
+    __tablename__ = "venda_log"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
+    campo: str = Field(max_length=100)
+    valor_anterior: str = Field(max_length=500)
+    valor_novo: str = Field(max_length=500)
+    editado_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    editado_em: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class VendaItemCreate(SQLModel):
@@ -516,6 +530,18 @@ class VendaCreate(SQLModel):
     itens: list[VendaItemCreate] = Field(min_length=1)
 
 
+class VendaEditarRequest(SQLModel):
+    """
+    Edicao simples de venda — so campos sem impacto estrutural complexo.
+    Forma de pagamento: apenas as formas 'simples' (cartao/pix/dinheiro) podem ser
+    trocadas entre si. Fiado, Vale Gas e Gas do Povo requerem cancelar e refazer.
+    """
+    forma_pagamento: str | None = None
+    valor_pago: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+    data_venda: date | None = None
+    motorista_id: uuid.UUID | None = None
+
+
 class VendaItemPublic(SQLModel):
     id: uuid.UUID
     produto_id: uuid.UUID
@@ -523,6 +549,15 @@ class VendaItemPublic(SQLModel):
     quantidade: int
     preco_unitario: Decimal
     subtotal: Decimal
+
+
+class VendaLogPublic(SQLModel):
+    id: uuid.UUID
+    campo: str
+    valor_anterior: str
+    valor_novo: str
+    editado_por_nome: str | None = None
+    editado_em: datetime
 
 
 class VendaPublic(SQLModel):
@@ -546,6 +581,13 @@ class VendaPublic(SQLModel):
     pago_em: datetime | None = None
     recebido_em: datetime | None = None
     recebido_por_nome: str | None = None
+    # Status e cancelamento
+    status: str = "ativa"
+    cancelada_em: datetime | None = None
+    cancelada_por_nome: str | None = None
+    # Log de edicoes
+    logs_edicao: list[VendaLogPublic] = []
+    qtd_edicoes: int = 0
     criado_por_id: uuid.UUID
     created_at: datetime
     itens: list[VendaItemPublic] = []
