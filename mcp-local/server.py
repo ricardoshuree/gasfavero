@@ -12,9 +12,6 @@ BLOCKED = set(cfg.get("blocked_dirs", []))
 HARNESS_ROOT = Path(__file__).parent.resolve()
 
 # ── Telemetria SQLite ──────────────────────────────────────────────────────────
-# Grava cada tool call em mcp-local/monitor/tool_calls.db (mesmo formato do
-# finops-focus) para ser consumida pelo monitor_mcp.py na raiz do projeto.
-# A pasta monitor/ e o banco sao criados automaticamente no primeiro uso.
 _TELEM_DIR = HARNESS_ROOT / "monitor"
 _TELEM_DB  = _TELEM_DIR / "tool_calls.db"
 
@@ -27,7 +24,7 @@ def _init_telem():
         " ts REAL NOT NULL, "
         " tool TEXT NOT NULL, "
         " dur_ms REAL NOT NULL, "
-        " ok INTEGER NOT NULL)"  # 1=ok, 0=erro
+        " ok INTEGER NOT NULL)"
     )
     con.commit()
     con.close()
@@ -42,11 +39,11 @@ def _record_call(tool: str, dur_ms: float, ok: bool):
         con.commit()
         con.close()
     except Exception:
-        pass  # telemetria nunca quebra o fluxo principal
+        pass
 
 _init_telem()
 
-# ── MCP server ─────────────────────────────────────────────────────────────────
+# ── MCP server — 5 ferramentas (limite do tool_search do Claude) ───────────────
 mcp = FastMCP(cfg["project_name"])
 
 
@@ -55,12 +52,11 @@ def _safe_path(rel_path: str) -> Path:
     if not str(p).startswith(str(ROOT)):
         raise ValueError("Caminho fora do escopo do projeto")
     if any(b in p.parts for b in BLOCKED):
-        raise ValueError("Diretório bloqueado")
+        raise ValueError("Diretorio bloqueado")
     return p
 
 
 def _timed(tool_name: str, fn):
-    """Executa fn(), grava telemetria, repropaga excecoes."""
     t0 = time.perf_counter()
     ok = True
     try:
@@ -70,8 +66,7 @@ def _timed(tool_name: str, fn):
         ok = False
         raise
     finally:
-        dur_ms = (time.perf_counter() - t0) * 1000
-        _record_call(tool_name, dur_ms, ok)
+        _record_call(tool_name, (time.perf_counter() - t0) * 1000, ok)
 
 
 @mcp.tool
@@ -91,43 +86,36 @@ def list_dir(rel_path: str = ".") -> list[str]:
 
 @mcp.tool
 def propose_change(feature: str, description: str, files: list[str]) -> dict:
-    """
-    Primeiro passo, obrigatorio antes de qualquer write_file.
-    Declare a feature/alteracao, uma descricao objetiva do proposito, e a
-    lista de paths (relativos a raiz do projeto) que serao criados ou
-    modificados. Retorna um plano pendente de aprovacao do usuario.
-    """
+    """Primeiro passo, obrigatorio antes de qualquer write_file.
+    Declare a feature, descricao e lista de paths que serao modificados.
+    Retorna um plano com plan_id para ser aprovado."""
     return _timed("propose_change", lambda: cc.propose_change(HARNESS_ROOT, feature, description, files))
 
 
 @mcp.tool
-def approve_change(plan_id: str) -> dict:
-    """Aprova um plano previamente proposto, liberando write_file para os
-    arquivos declarados nele. So chame isso depois de aprovacao explicita
-    do usuario na conversa."""
-    return _timed("approve_change", lambda: cc.approve_change(HARNESS_ROOT, plan_id))
-
-
-@mcp.tool
-def reject_change(plan_id: str) -> dict:
-    """Rejeita/cancela um plano pendente."""
-    return _timed("reject_change", lambda: cc.reject_change(HARNESS_ROOT, plan_id))
-
-
-@mcp.tool
-def list_pending_changes(status: str = "pending") -> list[dict]:
-    """Lista planos por status: 'pending', 'approved' ou 'rejected'."""
-    return _timed("list_pending_changes", lambda: cc.list_plans(HARNESS_ROOT, status))
+def approve_change(plan_id: str, action: str = "approve") -> dict:
+    """Gerencia um plano pelo plan_id.
+    action='approve'  -> aprova o plano, liberando write_file (padrao).
+    action='reject'   -> rejeita/cancela o plano.
+    action='list'     -> lista planos; plan_id vira filtro de status
+                         ('pending', 'approved', 'rejected') ou 'all'.
+    So aprove depois de confirmacao explicita do usuario na conversa."""
+    def _run():
+        if action == "reject":
+            return cc.reject_change(HARNESS_ROOT, plan_id)
+        if action == "list":
+            status = plan_id if plan_id in ("pending", "approved", "rejected") else "pending"
+            return cc.list_plans(HARNESS_ROOT, status)
+        # padrao: approve
+        return cc.approve_change(HARNESS_ROOT, plan_id)
+    return _timed("approve_change", _run)
 
 
 @mcp.tool
 def write_file(rel_path: str, content: str, plan_id: str, feature: str, description: str) -> str:
-    """
-    Escreve/sobrescreve um arquivo do projeto.
-    Requer um plan_id ja aprovado (via propose_change + approve_change) cujo
-    escopo inclua rel_path. O conteudo salvo recebe automaticamente um
-    comentario de rastreabilidade no topo (feature, plano, data/hora).
-    """
+    """Escreve/sobrescreve um arquivo do projeto.
+    Requer plan_id ja aprovado via propose_change + approve_change.
+    O conteudo recebe um comentario de rastreabilidade no topo automaticamente."""
     def _run():
         cc.check_authorized(HARNESS_ROOT, plan_id, rel_path)
         p = _safe_path(rel_path)
@@ -143,3 +131,4 @@ def write_file(rel_path: str, content: str, plan_id: str, feature: str, descript
 
 if __name__ == "__main__":
     mcp.run()
+    
