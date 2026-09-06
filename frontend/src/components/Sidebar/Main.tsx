@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: sidebar-grupos | plano: a23f2512 | 2026-09-05 22:48:24
-// Refatora Main para aceitar grupos com label em vez de lista plana
+// [mcp-local harness] feature: sidebar-label-color | plano: 7c8fd47b | 2026-09-06 00:58:36
+// Cor #4ade80 nos SidebarGroupLabel
 import { Link as RouterLink, useRouterState } from "@tanstack/react-router"
 import type { LucideIcon } from "lucide-react"
 
@@ -43,7 +43,9 @@ export function Main({ groups }: MainProps) {
         if (group.items.length === 0) return null
         return (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupLabel style={{ color: "#4ade80" }}>
+              {group.label}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
