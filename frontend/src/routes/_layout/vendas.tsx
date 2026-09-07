@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: vendas-filtro-combo-motorista | plano: fd2ef5e4 | 2026-09-06 01:29:36
-// Filtra combo para exibir apenas Distribuidora, gerentes e motoristas
+// [mcp-local harness] feature: emprestimo_casco | plano: f507aa50 | 2026-09-07 15:15:54
+// Adiciona estado cascos, PainelCasco abaixo da Sacola e cascos no payload da mutation
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -27,6 +27,7 @@ import ClienteSection from "@/components/Vendas/ClienteSection"
 import FormaPagamento, {
   type FormaPagamentoValue,
 } from "@/components/Vendas/FormaPagamento"
+import PainelCasco, { type CascoItem } from "@/components/Vendas/PainelCasco"
 import ProdutoGrid from "@/components/Vendas/ProdutoGrid"
 import ResumoVendaDialog from "@/components/Vendas/ResumoVendaDialog"
 import Sacola, { type SacolaItem } from "@/components/Vendas/Sacola"
@@ -35,7 +36,6 @@ import { handleError } from "@/utils"
 
 const MODULE = "vendas"
 const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
-// Roles permitidas no combo "Atribuir venda a" (além da Distribuidora, que é usuario sistema)
 const ROLES_PERMITIDAS = ["gerente", "motorista"]
 
 function hojeISO(): string {
@@ -69,20 +69,17 @@ function Vendas() {
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const [sacola, setSacola] = useState<SacolaItem[]>([])
+  const [cascos, setCascos] = useState<CascoItem[]>([])
   const [cliente, setCliente] = useState<ClientePublic | null>(null)
   const [endereco, setEndereco] = useState<EnderecoPublic | null>(null)
   const [motoristaId, setMotoristaId] = useState("")
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoValue | null>(null)
-  // Fiado
   const [valeNumero, setValeNumero] = useState("")
   const [dataPagamentoVale, setDataPagamentoVale] = useState("")
-  // Vale Gas
   const [valeGasNumero, setValeGasNumero] = useState("")
   const [valeGasBlocoId, setValeGasBlocoId] = useState<string | null>(null)
-  // Gas do Povo
   const [gasPovoValorGov, setGasPovoValorGov] = useState("")
   const [gasPovoFrete, setGasPovoFrete] = useState("")
-  // Pagamento
   const [valorPago, setValorPago] = useState("")
   const [valorPagoManual, setValorPagoManual] = useState(false)
   const [dataVenda, setDataVenda] = useState(hojeISO())
@@ -99,20 +96,17 @@ function Vendas() {
     queryFn: () => UsersService.readUsers({ limit: 100 }),
   })
 
-  // Filtra para exibir apenas Distribuidora (usuario sistema), gerentes e motoristas
   const usuariosCombo = (users?.data ?? []).filter((u) =>
     u.full_name === NOME_DISTRIBUIDORA ||
     (u.roles ?? []).some((r) => ROLES_PERMITIDAS.includes(r.toLowerCase()))
   )
 
-  // Default motorista = Distribuidora Gás Favero
   useEffect(() => {
     if (motoristaId || !users) return
     const distribuidora = users.data.find((u) => u.full_name === NOME_DISTRIBUIDORA)
     if (distribuidora) setMotoristaId(distribuidora.id)
   }, [users, motoristaId])
 
-  // Ao escolher "Fiado", sugere próximo número livre do bloco do motorista
   useEffect(() => {
     if (formaPagamento !== "vale" || !motoristaId) return
     VendasService.readProximoNumeroVale({ motoristaId })
@@ -123,7 +117,6 @@ function Vendas() {
       .catch(() => {})
   }, [formaPagamento, motoristaId])
 
-  // Ao escolher "Fiado", pré-preenche data com hoje+30 dias
   useEffect(() => {
     if (formaPagamento !== "vale") return
     setDataPagamentoVale((atual) => atual ? atual : somarDiasISO(hojeISO(), 30))
@@ -149,6 +142,12 @@ function Vendas() {
     }
   }, [formaPagamento])
 
+  // Ao remover item da sacola, limpa cascos desse produto
+  useEffect(() => {
+    const idsNaSacola = new Set(sacola.map((i) => i.produtoId))
+    setCascos((prev) => prev.filter((c) => idsNaSacola.has(c.produto_id)))
+  }, [sacola])
+
   const quantidadesNaSacola = Object.fromEntries(
     sacola.map((i) => [i.produtoId, i.quantidade]),
   )
@@ -169,18 +168,29 @@ function Vendas() {
   const handleIncrementar = (produtoId: string) =>
     setSacola((prev) => prev.map((i) => i.produtoId === produtoId ? { ...i, quantidade: i.quantidade + 1 } : i))
 
-  const handleDecrementar = (produtoId: string) =>
+  const handleDecrementar = (produtoId: string) => {
     setSacola((prev) => prev.flatMap((i) => {
       if (i.produtoId !== produtoId) return [i]
       if (i.quantidade <= 1) return []
       return [{ ...i, quantidade: i.quantidade - 1 }]
     }))
+    // Se decrementar abaixo da qtd de cascos, ajusta
+    setCascos((prev) => prev.map((c) => {
+      if (c.produto_id !== produtoId) return c
+      const itemAtual = sacola.find((i) => i.produtoId === produtoId)
+      const novaQtdSacola = (itemAtual?.quantidade ?? 1) - 1
+      return { ...c, quantidade: Math.min(c.quantidade, novaQtdSacola) }
+    }).filter((c) => c.quantidade > 0))
+  }
 
-  const handleRemover = (produtoId: string) =>
+  const handleRemover = (produtoId: string) => {
     setSacola((prev) => prev.filter((i) => i.produtoId !== produtoId))
+    setCascos((prev) => prev.filter((c) => c.produto_id !== produtoId))
+  }
 
   const resetForm = () => {
     setSacola([])
+    setCascos([])
     setCliente(null)
     setEndereco(null)
     setFormaPagamento(null)
@@ -212,6 +222,7 @@ function Vendas() {
           valor_pago: formaPagamento === "gas_povo" ? (gasPovoValorGov || "0") : valorPago,
           data_venda: dataVenda,
           itens: sacola.map((i) => ({ produto_id: i.produtoId, quantidade: i.quantidade })),
+          cascos: cascos.length > 0 ? cascos : [],
         },
       }),
     onSuccess: () => {
@@ -226,6 +237,7 @@ function Vendas() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["vales"] })
       queryClient.invalidateQueries({ queryKey: ["blocosVale"] })
+      queryClient.invalidateQueries({ queryKey: ["cascos"] })
     },
   })
 
@@ -292,13 +304,19 @@ function Vendas() {
             onSelect={handleSelectProduto}
           />
         </div>
-        <div>
-          <p className="mb-2 text-sm font-medium">Sacola</p>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm font-medium">Sacola</p>
           <Sacola
             itens={sacola}
             onIncrementar={handleIncrementar}
             onDecrementar={handleDecrementar}
             onRemover={handleRemover}
+          />
+          {/* Painel de casco — aparece quando há itens na sacola */}
+          <PainelCasco
+            itens={sacola}
+            cascos={cascos}
+            onChange={setCascos}
           />
         </div>
       </div>

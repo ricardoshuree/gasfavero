@@ -1,12 +1,7 @@
-// [mcp-local harness] feature: acessibilidade-cliente-endereco | plano: c4a2bd6c | 2026-08-08 13:14:07
-// Aplica CAMPO_ACESSIVEL/LABEL_ACESSIVEL em toda a secao: busca de cliente, resultados, cadastro rapido, sub-secao de endereco. Mais espacamento entre campos (gap-3 -> gap-4)
-// [mcp-local harness] feature: acessibilidade-cliente-endereco | plano: c4a2bd6c
-// Campos maiores (fonte/altura/espacamento) -- pedido de acessibilidade,
-// motoristas/atendentes com dificuldade de visao relataram dificuldade
-// pra preencher. Aplicado aqui porque /chamado e /vendas reaproveitam
-// este mesmo componente -- um ajuste so cobre os dois.
+// [mcp-local harness] feature: emprestimo_casco | plano: f507aa50 | 2026-09-07 15:17:10
+// Adiciona AvisoCascosCliente (banner âmbar) e ícone Package+⚠️ no histórico de vendas quando há casco em aberto
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { MapPin, Plus, Search, User, X } from "lucide-react"
+import { MapPin, Package, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
@@ -35,12 +30,6 @@ import useCustomToast from "@/hooks/useCustomToast"
 import useSugestoesRua from "@/hooks/useSugestoesRua"
 import { handleError } from "@/utils"
 
-// Classes reaproveitadas nos campos desta seção -- campo maior (48px
-// de altura, fonte 16px) e label maior (14px -> 16px), em vez do
-// padrão compacto (36px/14px) usado no resto do sistema. Escopo
-// deliberadamente limitado a cliente/endereço por enquanto (onde o
-// pedido de acessibilidade veio) -- não mexe no componente base
-// Input/Label (isso afetaria toda a aplicação de uma vez).
 const CAMPO_ACESSIVEL = "h-12 px-4 text-base"
 const LABEL_ACESSIVEL = "text-base"
 
@@ -67,8 +56,6 @@ function formatMoney(valor: string | number): string {
   })
 }
 
-// Mesmo limite usado no backend (DIAS_ATRASO_VALE em vendas.py) --
-// contado a partir de data_venda, só pra decidir o badge de status.
 const DIAS_ATRASO_VALE = 30
 
 function isAtrasado(dataVendaISO: string): boolean {
@@ -79,13 +66,6 @@ function isAtrasado(dataVendaISO: string): boolean {
   return dataVenda <= limite
 }
 
-/** Vendas fora de "vale" são pagas na hora (pago_em já vem
- * preenchido na criação) -- só o vale passa pelos estados
- * aberto/atraso/aguardando baixa/baixado (ver Recebimento de Vale).
- * Cores (pedido do Ricardo): pago/baixado = fundo verde solido +
- * letra branca; aberto/atraso = fundo vermelho solido + letra
- * branca; aguardando baixa fica azul claro (não fazia parte do
- * pedido). */
 function statusVenda(v: VendaPublic): { label: string; className: string } {
   if (v.forma_pagamento !== "vale") {
     return { label: "Pago", className: "bg-green-600 text-white" }
@@ -97,17 +77,11 @@ function statusVenda(v: VendaPublic): { label: string; className: string } {
     return { label: "Aguardando baixa", className: "bg-sky-100 text-sky-800" }
   }
   if (isAtrasado(v.data_venda)) {
-    return {
-      label: "Em atraso",
-      className: "bg-red-600 text-white",
-    }
+    return { label: "Em atraso", className: "bg-red-600 text-white" }
   }
   return { label: "Em aberto", className: "bg-red-600 text-white" }
 }
 
-/** Formata dígitos como "(54) 99999-9999", progressivamente enquanto
- * digita. DDD 54 (Veranópolis/RS) já vem preenchido por padrão --
- * editável, o usuário pode apagar e trocar se precisar. */
 function formatTelefone(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11)
   if (d.length === 0) return ""
@@ -116,23 +90,55 @@ function formatTelefone(raw: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
 }
 
+// ---------------------------------------------------------------------------
+// Histórico de vendas com ícone de casco quando há empréstimo em aberto
+// ---------------------------------------------------------------------------
+
 function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
-  const { data } = useQuery({
+  const { data: historicoData } = useQuery({
     queryKey: ["historicoVendasCliente", clienteId],
     queryFn: () =>
       VendasService.readHistoricoVendasCliente({ clienteId, limit: 3 }),
   })
 
-  if (!data || data.data.length === 0) return null
+  // Busca cascos em aberto deste cliente para cruzar com o histórico
+  const { data: cascosData } = useQuery({
+    queryKey: ["cascos", "cliente", clienteId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/v1/cascos/cliente/${clienteId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+          },
+        },
+      )
+      if (!res.ok) return null
+      return res.json() as Promise<{ cascos: Array<{ venda_id: string; quantidade: number; status: string }> }>
+    },
+  })
+
+  // Mapa venda_id -> quantos cascos em aberto (não devolvidos)
+  const cascosPorVenda = new Map<string, number>()
+  if (cascosData?.cascos) {
+    for (const c of cascosData.cascos) {
+      if (c.status !== "devolvido") {
+        cascosPorVenda.set(c.venda_id, (cascosPorVenda.get(c.venda_id) ?? 0) + c.quantidade)
+      }
+    }
+  }
+
+  if (!historicoData || historicoData.data.length === 0) return null
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2">
       <p className="text-xs font-medium text-muted-foreground">
-        Histórico de vendas (últimas {data.data.length})
+        Histórico de vendas (últimas {historicoData.data.length})
       </p>
       <div className="flex flex-col gap-1.5">
-        {data.data.map((v) => {
+        {historicoData.data.map((v) => {
           const status = statusVenda(v)
+          const qtdCascoAberto = cascosPorVenda.get(v.id) ?? 0
           return (
             <div
               key={v.id}
@@ -149,15 +155,61 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
                   ? `${v.endereco.rua_nome}, ${v.endereco.numero}`
                   : "—"}
               </span>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${status.className}`}
-              >
-                {status.label}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {qtdCascoAberto > 0 && (
+                  <span
+                    className="flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                    title={`${qtdCascoAberto} casco(s) emprestado(s) nesta venda`}
+                  >
+                    <Package className="h-3 w-3" aria-hidden="true" />
+                    ⚠️ {qtdCascoAberto}
+                  </span>
+                )}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${status.className}`}
+                >
+                  {status.label}
+                </span>
+              </div>
             </div>
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Aviso de cascos em aberto do cliente (exibido ao selecionar o cliente)
+// ---------------------------------------------------------------------------
+
+function AvisoCascosCliente({ clienteId }: { clienteId: string }) {
+  const { data } = useQuery({
+    queryKey: ["cascos", "cliente", clienteId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/v1/cascos/cliente/${clienteId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+          },
+        },
+      )
+      if (!res.ok) return null
+      return res.json() as Promise<{ total_cascos_abertos: number }>
+    },
+  })
+
+  if (!data || data.total_cascos_abertos === 0) return null
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-700 dark:bg-amber-950/30">
+      <Package className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+      <span className="text-amber-800 dark:text-amber-200">
+        ⚠️ Este cliente tem{" "}
+        <strong>{data.total_cascos_abertos} casco{data.total_cascos_abertos !== 1 ? "s" : ""}</strong>{" "}
+        emprestado{data.total_cascos_abertos !== 1 ? "s" : ""} em aberto
+      </span>
     </div>
   )
 }
@@ -179,9 +231,6 @@ export function ClienteSection({
     enabled: query.trim().length >= 2 && !cliente,
   })
 
-  // Ao selecionar um cliente, busca o endereço da venda mais recente
-  // dele (sugestão) -- se não tiver histórico de venda, cai pro
-  // endereço vigente do cadastro.
   useEffect(() => {
     if (!cliente) {
       onEnderecoChange(null)
@@ -225,6 +274,9 @@ export function ClienteSection({
             <X className="h-5 w-5" />
           </Button>
         </div>
+
+        {/* Aviso de cascos em aberto */}
+        <AvisoCascosCliente clienteId={cliente.id} />
 
         <div className="flex items-center gap-2 text-base">
           <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -331,11 +383,6 @@ export function ClienteSection({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Cadastro rápido de cliente -- endereço é OPCIONAL aqui (diferente da
-// tela /clientes, onde é obrigatório). Decisão do Ricardo.
-// ---------------------------------------------------------------------------
-
 interface QuickAddClienteProps {
   onCancel: () => void
   onCreated: (cliente: ClientePublic) => void
@@ -375,7 +422,6 @@ function QuickAddCliente({
   const podeSalvar = nome.trim().length > 0 && cpf.trim().length >= 11
 
   const onSubmit = () => {
-    // Só manda telefone se tiver algo além do DDD padrão (54)
     const telefoneDigits = telefone.replace(/\D/g, "")
     mutation.mutate({
       nome,
