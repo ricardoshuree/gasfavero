@@ -1,32 +1,5 @@
-# [mcp-local harness] feature: venda-edicao | plano: ee66766a | 2026-09-06 00:54:21
-# Adiciona endpoints editar_venda e cancelar_venda com log de auditoria e estorno contabil; atualiza _to_venda_public com status e logs; exclui canceladas dos totais
-"""
-Rotas de Venda (venda de balcao da distribuidora). Controle de acesso
-via modulo RBAC "vendas".
-
-Uma Venda e criada numa unica chamada (cabecalho + itens da "sacola"),
-dentro de uma transacao: se qualquer item falhar (produto sem preco,
-vale invalido, etc.) nada e gravado.
-
-Preco de cada item vem da linha vigente de Preco no momento da venda
--- essa linha e imutavel (ver comentario em Preco, models.py), entao
-reajustes futuros de preco nunca afetam vendas ja registradas.
-
-Gas do Povo: forma_pagamento="gas_povo". O valor_total e o frete sao
-informados manualmente (programa governamental, preco tabelado variavel).
-O frete e pago pelo cliente no ato (gas_povo_frete_recebido_em preenchido
-na criacao). O valor principal e liquidado pelo governo posteriormente
-via tela "Recebimento Gas do Povo" (pago_em preenchido na baixa).
-
-Edicao simples: PATCH /vendas/{id}/editar -- corrige forma de pagamento
-(apenas formas simples: cartao/pix/dinheiro entre si), valor pago, data
-da venda e motorista. Cada campo alterado gera uma linha em venda_log.
-Fiado, Vale Gas e Gas do Povo requerem cancelar e refazer a venda.
-
-Cancelamento: PATCH /vendas/{id}/cancelar -- marca a venda como cancelada
-e lanca o estorno contabil (debito/credito invertidos do lancamento original).
-A venda permanece visivel na tabela com badge "Cancelada".
-"""
+# [mcp-local harness] feature: emprestimo_casco | plano: 5aa828fc | 2026-09-07 15:20:20
+# Adiciona EmprestimoCasco no import e processa cascos[] dentro do create_venda na mesma transação
 import calendar
 import uuid
 from datetime import date, timedelta
@@ -47,6 +20,7 @@ from app.models import (
     BlocoValeGas,
     Cidade,
     Cliente,
+    EmprestimoCasco,
     Endereco,
     EnderecoPublic,
     InadimplentesMotoristaPublic,
@@ -89,19 +63,13 @@ MODULE_INADIMPLENCIA = "inadimplencia"
 DIAS_ATRASO_VALE = 30
 FORMAS_PAGAMENTO_ORDEM = ["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
 
-# Formas que podem ser trocadas entre si na edicao simples (sem campos auxiliares)
 FORMAS_SIMPLES = {"cartao_debito", "cartao_credito", "pix", "dinheiro"}
 
-# IDs fixos das contas contabeis (mesmo padrao do fechamento.py)
 CONTA_MESTRE_ID     = "10000000-0000-0000-0000-000000000001"
 CONTA_TRANSITO_ID   = "11000000-0000-0000-0000-000000000001"
 CONTA_FIADO_ID      = "12000000-0000-0000-0000-000000000001"
 CONTA_MAQUININHA_ID = "13000000-0000-0000-0000-000000000001"
 
-
-# ---------------------------------------------------------------------------
-# Helpers internos
-# ---------------------------------------------------------------------------
 
 def _preco_vigente(session: SessionDep, produto_id: uuid.UUID) -> Preco | None:
     return session.exec(
@@ -166,7 +134,6 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
     recebido_por = session.get(User, venda.recebido_por_id) if venda.recebido_por_id else None
     cancelada_por = session.get(User, venda.cancelada_por_id) if venda.cancelada_por_id else None
 
-    # Nome do estabelecimento para vendas em Vale Gas
     vale_gas_estabelecimento: str | None = None
     if venda.vale_gas_bloco_id:
         bloco_gas = session.get(BlocoValeGas, venda.vale_gas_bloco_id)
@@ -191,7 +158,6 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
             )
         )
 
-    # Logs de edicao
     logs_db = session.exec(
         select(VendaLog).where(VendaLog.venda_id == venda.id).order_by(col(VendaLog.editado_em).desc())
     ).all()
@@ -262,7 +228,6 @@ def _criar_lancamento_venda(session: SessionDep, data: date, descricao: str, val
 
 
 def _conta_motorista(session: SessionDep, motorista_id: uuid.UUID) -> str | None:
-    """Retorna o ID da conta contabil do motorista (Caixa em Transito), se existir."""
     conn = session.connection()
     row = conn.execute(
         sa.text("SELECT id FROM conta WHERE motorista_id = :mid"),
@@ -272,22 +237,13 @@ def _conta_motorista(session: SessionDep, motorista_id: uuid.UUID) -> str | None
 
 
 def _conta_por_forma(forma: str, motorista_id: uuid.UUID, session: SessionDep) -> tuple[str, str]:
-    """
-    Retorna (debito_id, credito_id) para o lancamento de uma venda conforme a forma de pagamento.
-    Convencao: debito = quem recebe o dinheiro, credito = origem.
-    """
     cmi = _conta_motorista(session, motorista_id) or CONTA_MESTRE_ID
     if forma in ("cartao_debito", "cartao_credito"):
         return CONTA_MAQUININHA_ID, cmi
     if forma == "vale":
         return CONTA_FIADO_ID, cmi
-    # pix, dinheiro, vale_gas, gas_povo: entra no caixa mestre
     return CONTA_MESTRE_ID, cmi
 
-
-# ---------------------------------------------------------------------------
-# Rotas
-# ---------------------------------------------------------------------------
 
 @router.get("/", response_model=VendasPublic,
     dependencies=[Depends(require_module_permission(MODULE, action="read"))])
@@ -340,10 +296,6 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
             return ProximoValeNumeroPublic(numero=vale_livre.numero)
     return ProximoValeNumeroPublic(numero=None)
 
-
-# ---------------------------------------------------------------------------
-# Recebimento de Vale (fiado)
-# ---------------------------------------------------------------------------
 
 def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
     query = select(Venda).where(Venda.forma_pagamento == "vale").where(col(Venda.pago_em).is_(None))
@@ -455,18 +407,9 @@ def baixar_vale(*, session: SessionDep, id: uuid.UUID, body: VendaBaixarValeRequ
     return _to_venda_public(session, venda)
 
 
-# ---------------------------------------------------------------------------
-# Edicao simples de venda
-# ---------------------------------------------------------------------------
-
 @router.patch("/{id}/editar", response_model=VendaPublic,
     dependencies=[Depends(require_module_permission(MODULE, action="update"))])
 def editar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, body: VendaEditarRequest) -> Any:
-    """
-    Edicao simples de venda. Campos editaveis: forma_pagamento (apenas formas simples),
-    valor_pago, data_venda, motorista_id. Cada campo alterado gera uma linha em venda_log.
-    Vendas canceladas nao podem ser editadas.
-    """
     venda = session.get(Venda, id)
     if not venda:
         raise HTTPException(status_code=404, detail="Venda nao encontrada")
@@ -476,9 +419,7 @@ def editar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUI
     houve_alteracao = False
     editor_id = current_user.id
 
-    # Forma de pagamento
     if body.forma_pagamento is not None and body.forma_pagamento != venda.forma_pagamento:
-        # Apenas formas simples podem ser trocadas entre si
         nova_forma = body.forma_pagamento
         forma_atual = venda.forma_pagamento
         if nova_forma not in FORMAS_SIMPLES or forma_atual not in FORMAS_SIMPLES:
@@ -494,21 +435,18 @@ def editar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUI
         venda.forma_pagamento = nova_forma
         houve_alteracao = True
 
-    # Valor pago
     if body.valor_pago is not None and body.valor_pago != venda.valor_pago:
         _gravar_log_venda(session, venda.id, "valor_pago",
                           f"R$ {venda.valor_pago:,.2f}", f"R$ {body.valor_pago:,.2f}", editor_id)
         venda.valor_pago = body.valor_pago
         houve_alteracao = True
 
-    # Data da venda
     if body.data_venda is not None and body.data_venda != venda.data_venda:
         _gravar_log_venda(session, venda.id, "data_venda",
                           venda.data_venda.isoformat(), body.data_venda.isoformat(), editor_id)
         venda.data_venda = body.data_venda
         houve_alteracao = True
 
-    # Motorista
     if body.motorista_id is not None and body.motorista_id != venda.motorista_id:
         motorista_novo = session.get(User, body.motorista_id)
         if not motorista_novo:
@@ -529,25 +467,15 @@ def editar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUI
     return _to_venda_public(session, venda)
 
 
-# ---------------------------------------------------------------------------
-# Cancelamento de venda + estorno contabil
-# ---------------------------------------------------------------------------
-
 @router.patch("/{id}/cancelar", response_model=VendaPublic,
     dependencies=[Depends(require_module_permission(MODULE, action="update"))])
 def cancelar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
-    """
-    Cancela uma venda e lanca o estorno contabil (debito/credito invertidos do lancamento original).
-    A venda permanece visivel na tabela com status='cancelada' e badge vermelho.
-    """
     venda = session.get(Venda, id)
     if not venda:
         raise HTTPException(status_code=404, detail="Venda nao encontrada")
     if venda.status == "cancelada":
         raise HTTPException(status_code=400, detail="Esta venda ja esta cancelada")
 
-    # Lanca estorno contabil (debito/credito invertidos)
-    # Busca o lancamento original desta venda
     conn = session.connection()
     lancamento_original = conn.execute(sa.text(
         "SELECT debito_id, credito_id, valor FROM lancamento_contabil "
@@ -555,24 +483,21 @@ def cancelar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.U
     ), {"vid": str(venda.id)}).fetchone()
 
     if lancamento_original:
-        # Estorno: inverte debito e credito
         _criar_lancamento_venda(
             session,
             data=date.today(),
             descricao=f"Estorno de venda cancelada - {venda.cliente_id}",
             valor=Decimal(str(lancamento_original[2])),
-            debito_id=str(lancamento_original[1]),   # credito original vira debito
-            credito_id=str(lancamento_original[0]),  # debito original vira credito
+            debito_id=str(lancamento_original[1]),
+            credito_id=str(lancamento_original[0]),
             venda_id=venda.id,
             criado_por_id=current_user.id,
         )
 
-    # Marca como cancelada
     venda.status = "cancelada"
     venda.cancelada_em = get_datetime_utc()
     venda.cancelada_por_id = current_user.id
 
-    # Log de auditoria
     _gravar_log_venda(session, venda.id, "status", "ativa", "cancelada", current_user.id)
 
     session.add(venda)
@@ -580,10 +505,6 @@ def cancelar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.U
     session.refresh(venda)
     return _to_venda_public(session, venda)
 
-
-# ---------------------------------------------------------------------------
-# Livro de Vendas
-# ---------------------------------------------------------------------------
 
 NOMES_DIA_SEMANA = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"]
 MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
@@ -659,7 +580,6 @@ def read_livro_resumo(
         periodo_fim = date(hoje.year, 12, 31)
         buckets_def = [(str(a), date(a, 1, 1), date(a, 12, 31)) for a in range(ano_inicio, hoje.year + 1)]
 
-    # Exclui vendas canceladas dos totais
     vendas_periodo = session.exec(
         select(Venda)
         .where(Venda.data_venda >= periodo_inicio)
@@ -731,10 +651,6 @@ def read_livro_vendas(
     )
 
 
-# ---------------------------------------------------------------------------
-# Ranking da Semana
-# ---------------------------------------------------------------------------
-
 @router.get("/ranking-semana", response_model=RankingSemanaPublic,
     dependencies=[Depends(require_module_permission(MODULE, action="read"))])
 def read_ranking_semana(session: SessionDep) -> Any:
@@ -760,10 +676,6 @@ def read_ranking_semana(session: SessionDep) -> Any:
     ranking.sort(key=lambda r: r.quantidade, reverse=True)
     return RankingSemanaPublic(periodo_inicio=periodo_inicio, periodo_fim=periodo_fim, motoristas=ranking[:3])
 
-
-# ---------------------------------------------------------------------------
-# Inadimplentes
-# ---------------------------------------------------------------------------
 
 def _esteve_em_atraso(venda: Venda, hoje: date) -> bool:
     if venda.forma_pagamento != "vale":
@@ -884,7 +796,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
     gas_povo_frete_recebido_em = None
     pago_em: Any = get_datetime_utc()
 
-    # --- Fiado ---
     if venda_in.forma_pagamento == "vale":
         pago_em = None
         if venda_in.vale_numero is None:
@@ -902,7 +813,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
         if data_pagamento_vale is None:
             data_pagamento_vale = _quinto_dia_util_proximo_mes()
 
-    # --- Vale Gas ---
     elif venda_in.forma_pagamento == "vale_gas":
         pago_em = None
         if venda_in.vale_gas_numero is None:
@@ -922,7 +832,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             raise HTTPException(status_code=400, detail=f"O vale gas numero {num} ja foi usado em outra venda")
         vale_gas_bloco_id = bloco_gas.id
 
-    # --- Gas do Povo ---
     elif venda_in.forma_pagamento == "gas_povo":
         pago_em = None
         if venda_in.gas_povo_frete is None:
@@ -976,10 +885,37 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
         criado_por_id=current_user.id,
     )
     session.add(venda)
-    session.flush()
+    session.flush()  # gera venda.id antes de criar itens e cascos
 
     for item_in, preco, subtotal in itens_resolvidos:
-        session.add(VendaItem(venda_id=venda.id, produto_id=item_in.produto_id, preco_id=preco.id, quantidade=item_in.quantidade, subtotal=subtotal))
+        session.add(VendaItem(
+            venda_id=venda.id,
+            produto_id=item_in.produto_id,
+            preco_id=preco.id,
+            quantidade=item_in.quantidade,
+            subtotal=subtotal,
+        ))
+
+    # Registra cascos emprestados (dentro da mesma transação)
+    # Valida: quantidade do casco nao pode exceder a quantidade do produto na sacola
+    qtd_por_produto = {str(i.produto_id): i.quantidade for i in venda_in.itens}
+    for casco_in in venda_in.cascos:
+        if casco_in.quantidade <= 0:
+            continue
+        qtd_vendida = qtd_por_produto.get(str(casco_in.produto_id), 0)
+        if casco_in.quantidade > qtd_vendida:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Quantidade de cascos ({casco_in.quantidade}) nao pode exceder a quantidade vendida ({qtd_vendida})"
+            )
+        session.add(EmprestimoCasco(
+            id=uuid.uuid4(),
+            venda_id=venda.id,
+            produto_id=casco_in.produto_id,
+            quantidade=casco_in.quantidade,
+            motorista_id=venda_in.motorista_id,
+            cliente_id=venda_in.cliente_id,
+        ))
 
     session.commit()
     session.refresh(venda)
