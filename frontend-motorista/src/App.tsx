@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: vendas-motorista | plano: d865e550 | 2026-09-07 12:15:55
-// App.tsx: passa usuario para VendasTela (motorista logado atribuído automaticamente)
+// [mcp-local harness] feature: livro-vendas-motorista | plano: 4a6b950d | 2026-09-07 12:36:12
+// Passa token e usuario para FinanceiroTela
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
@@ -46,9 +46,7 @@ function App() {
     }
   }
 
-  useEffect(() => {
-    carregarSessao()
-  }, [])
+  useEffect(() => { carregarSessao() }, [])
 
   useEffect(() => {
     function aoPrimeiroToque() {
@@ -68,11 +66,9 @@ function App() {
   if (estado.fase === "verificando") {
     return <TelaCentral titulo="Gás Favero Motorista" subtitulo="Carregando..." />
   }
-
   if (estado.fase === "deslogado") {
     return <Login onSuccess={carregarSessao} />
   }
-
   if (estado.fase === "erro") {
     return <Login onSuccess={carregarSessao} />
   }
@@ -91,12 +87,15 @@ function App() {
             aoConcluirChamado={() => setAbaAtiva("vendas")}
           />
         )}
-        {/* VendasTela recebe token e usuario (motorista logado é atribuído automaticamente) */}
         {abaAtiva === "vendas" && (
           <VendasTela token={token} usuario={usuario} />
         )}
-        {abaAtiva === "financeiro" && <FinanceiroTela />}
-        {abaAtiva === "perfil" && <PerfilTela usuario={usuario} onLogout={handleLogout} />}
+        {abaAtiva === "financeiro" && (
+          <FinanceiroTela token={token} usuario={usuario} />
+        )}
+        {abaAtiva === "perfil" && (
+          <PerfilTela usuario={usuario} onLogout={handleLogout} />
+        )}
       </main>
 
       <BottomNav abaAtiva={abaAtiva} onMudarAba={setAbaAtiva} />
@@ -114,10 +113,7 @@ function TelaCentral({ titulo, subtitulo }: { titulo: string; subtitulo: string 
 }
 
 const estilos = {
-  shell: {
-    minHeight: "100vh",
-    background: CORES_APP.fundo,
-  },
+  shell: { minHeight: "100vh", background: CORES_APP.fundo },
   conteudo: {
     paddingTop: `calc(${ALTURA_TOPBAR_PX}px + env(safe-area-inset-top))`,
     paddingBottom: `calc(${ALTURA_BOTTOMNAV_PX}px + env(safe-area-inset-bottom))`,
@@ -131,8 +127,7 @@ const estilos = {
     alignItems: "center",
     justifyContent: "center",
     gap: "0.75rem",
-    padding:
-      "max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left))",
+    padding: "max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left))",
     textAlign: "center" as const,
     fontFamily: "system-ui, sans-serif",
     background: CORES_LOGIN.fundo,
