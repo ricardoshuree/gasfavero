@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: livro-vendas-motorista | plano: 4a6b950d | 2026-09-07 12:36:12
-// Passa token e usuario para FinanceiroTela
+// [mcp-local harness] feature: recebimento-fiado-motorista | plano: 2701b061 | 2026-09-07 13:03:54
+// App.tsx: sub-navegação no módulo Financeiro (Livro de Vendas / Receber Fiado), adiciona RecebimentoFiadoTela
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
@@ -7,6 +7,7 @@ import FinanceiroTela from "./components/FinanceiroTela"
 import Login from "./components/Login"
 import MinhasDemandas from "./components/MinhasDemandas"
 import PerfilTela from "./components/PerfilTela"
+import RecebimentoFiadoTela from "./components/RecebimentoFiadoTela"
 import TopBar, { ALTURA_TOPBAR_PX } from "./components/TopBar"
 import VendasTela from "./components/VendasTela"
 import { desbloquearAudio } from "./lib/alarme"
@@ -19,6 +20,9 @@ type Estado =
   | { fase: "logado"; token: string; usuario: UserMe }
   | { fase: "erro"; mensagem: string }
 
+// Sub-abas do módulo Financeiro
+type SubAbaFinanceiro = "livro" | "fiado"
+
 const MOTORISTA_ID_KEY = "motorista_id"
 
 type JanelaComPonteAndroid = Window & {
@@ -28,13 +32,11 @@ type JanelaComPonteAndroid = Window & {
 function App() {
   const [estado, setEstado] = useState<Estado>({ fase: "verificando" })
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("demandas")
+  const [subAbaFinanceiro, setSubAbaFinanceiro] = useState<SubAbaFinanceiro>("livro")
 
   async function carregarSessao() {
     const token = await getToken()
-    if (!token) {
-      setEstado({ fase: "deslogado" })
-      return
-    }
+    if (!token) { setEstado({ fase: "deslogado" }); return }
     try {
       const usuario = await fetchCurrentUser(token)
       setEstado({ fase: "logado", token, usuario })
@@ -63,15 +65,9 @@ function App() {
     setEstado({ fase: "deslogado" })
   }
 
-  if (estado.fase === "verificando") {
-    return <TelaCentral titulo="Gás Favero Motorista" subtitulo="Carregando..." />
-  }
-  if (estado.fase === "deslogado") {
-    return <Login onSuccess={carregarSessao} />
-  }
-  if (estado.fase === "erro") {
-    return <Login onSuccess={carregarSessao} />
-  }
+  if (estado.fase === "verificando") return <TelaCentral titulo="Gás Favero Motorista" subtitulo="Carregando..." />
+  if (estado.fase === "deslogado") return <Login onSuccess={carregarSessao} />
+  if (estado.fase === "erro") return <Login onSuccess={carregarSessao} />
 
   const { token, usuario } = estado
 
@@ -81,17 +77,22 @@ function App() {
 
       <main style={estilos.conteudo}>
         {abaAtiva === "demandas" && (
-          <MinhasDemandas
-            token={token}
-            meuId={usuario.id}
-            aoConcluirChamado={() => setAbaAtiva("vendas")}
-          />
+          <MinhasDemandas token={token} meuId={usuario.id} aoConcluirChamado={() => setAbaAtiva("vendas")} />
         )}
         {abaAtiva === "vendas" && (
           <VendasTela token={token} usuario={usuario} />
         )}
         {abaAtiva === "financeiro" && (
-          <FinanceiroTela token={token} usuario={usuario} />
+          <>
+            {/* Sub-navegação do módulo financeiro */}
+            <SubNav aba={subAbaFinanceiro} onMudar={setSubAbaFinanceiro} />
+            {subAbaFinanceiro === "livro" && (
+              <FinanceiroTela token={token} usuario={usuario} />
+            )}
+            {subAbaFinanceiro === "fiado" && (
+              <RecebimentoFiadoTela token={token} usuario={usuario} />
+            )}
+          </>
         )}
         {abaAtiva === "perfil" && (
           <PerfilTela usuario={usuario} onLogout={handleLogout} />
@@ -101,6 +102,59 @@ function App() {
       <BottomNav abaAtiva={abaAtiva} onMudarAba={setAbaAtiva} />
     </div>
   )
+}
+
+// Sub-navegação horizontal dentro do módulo Financeiro
+function SubNav({
+  aba,
+  onMudar,
+}: {
+  aba: SubAbaFinanceiro
+  onMudar: (a: SubAbaFinanceiro) => void
+}) {
+  const itens: { id: SubAbaFinanceiro; label: string }[] = [
+    { id: "livro", label: "Livro de Vendas" },
+    { id: "fiado", label: "Receber Fiado" },
+  ]
+  return (
+    <div style={subNav.barra}>
+      {itens.map(item => (
+        <button
+          key={item.id}
+          style={{ ...subNav.btn, ...(aba === item.id ? subNav.ativo : {}) }}
+          onClick={() => onMudar(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const subNav = {
+  barra: {
+    display: "flex",
+    background: "#f5f5f5",
+    borderBottom: "1px solid #e5e7eb",
+    padding: "8px 14px",
+    gap: "8px",
+  } as const,
+  btn: {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    padding: "6px 14px",
+    fontSize: "13px",
+    color: "#374151",
+    cursor: "pointer",
+    fontWeight: 400,
+  } as const,
+  ativo: {
+    background: "#606C38",
+    borderColor: "#606C38",
+    color: "#F8FAFC",
+    fontWeight: 600,
+  } as const,
 }
 
 function TelaCentral({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {

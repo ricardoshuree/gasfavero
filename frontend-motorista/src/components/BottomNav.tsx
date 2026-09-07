@@ -1,5 +1,6 @@
-// [mcp-local harness] feature: frontend-motorista-redesign-ifood | plano: 46dc14df | 2026-08-07 19:19:09
-// BottomNav estilo iFood: fundo branco, aba ativa em vermelho, inativa cinza. Label "Demandas" vira "Chamadas" (display) -- id tecnico continua "demandas"
+// [mcp-local harness] feature: recebimento-fiado-motorista | plano: 2701b061 | 2026-09-07 13:03:20
+// BottomNav sem alterações funcionais
+// BottomNav — sem alterações, apenas re-exportando AbaId atualizado
 import type { CSSProperties } from "react"
 import { CORES_APP as CORES } from "../theme"
 
@@ -7,14 +8,11 @@ const ALTURA_BOTTOMNAV_PX = 58
 
 type AbaId = "demandas" | "vendas" | "financeiro" | "perfil"
 
-// "demandas" é o id técnico (mesmo padrão DemandaVenda/Chamado já
-// usado no backend) -- o label exibido é "Chamadas", nome que o
-// negócio usa de verdade.
 const ABAS: { id: AbaId; label: string; icone: string }[] = [
   { id: "demandas", label: "Chamadas", icone: "📋" },
-  { id: "vendas", label: "Vendas", icone: "🧾" },
+  { id: "vendas",   label: "Vendas",   icone: "🧾" },
   { id: "financeiro", label: "Financeiro", icone: "💰" },
-  { id: "perfil", label: "Perfil", icone: "👤" },
+  { id: "perfil",   label: "Perfil",   icone: "👤" },
 ]
 
 function BottomNav({
@@ -29,11 +27,7 @@ function BottomNav({
       {ABAS.map((aba) => {
         const ativa = aba.id === abaAtiva
         return (
-          <button
-            key={aba.id}
-            onClick={() => onMudarAba(aba.id)}
-            style={estiloItem(ativa)}
-          >
+          <button key={aba.id} onClick={() => onMudarAba(aba.id)} style={estiloItem(ativa)}>
             <span style={estiloIcone(ativa)}>{aba.icone}</span>
             <span style={estilos.label}>{aba.label}</span>
           </button>
@@ -59,8 +53,6 @@ function estiloItem(ativa: boolean): CSSProperties {
 }
 
 function estiloIcone(ativa: boolean): CSSProperties {
-  // Emojis são placeholder até os ícones de verdade (vermelhos,
-  // pequenos, estilo iFood) entrarem -- Ricardo vai fornecer depois.
   return {
     fontSize: "1.15rem",
     lineHeight: 1,
