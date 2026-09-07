@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: fuso-horario-lancamentos | plano: 4c63f6ca | 2026-09-05 23:32:34
-# Dashboard retorna created_at como ISO string em vez de hora formatada — frontend converte para fuso local
+# [mcp-local harness] feature: casco_fechamento_dia | plano: f8934175 | 2026-09-07 17:20:40
+# Adiciona cascos_do_dia no read_resumo_fechamento: emprestados hoje, devolvidos hoje, total acumulado em aberto, com detalhe de produto/cliente/endereço/data
 """
 Rotas de Fechamento Diario (abertura, fechamento e dashboard de saldos).
 """
@@ -307,6 +307,79 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
         "FROM abertura_dia_produto adp JOIN item i ON i.id = adp.produto_id "
         "WHERE adp.abertura_id = :abertura_id"
     ), {"abertura_id": str(abertura[0])}).fetchall()
+
+    # ---------------------------------------------------------------------------
+    # Cascos do dia — emprestados e devolvidos por este motorista nesta data
+    # Inclui detalhe: produto, cliente, endereço da venda, data do empréstimo
+    # ---------------------------------------------------------------------------
+    cascos_emprestados_rows = conn.execute(sa.text(
+        "SELECT "
+        "  ec.id, "
+        "  i.title AS produto_nome, "
+        "  ec.quantidade, "
+        "  c.nome AS cliente_nome, "
+        "  COALESCE(r.nome || ', ' || e.numero, '') AS endereco, "
+        "  ec.created_at AS emprestado_em, "
+        "  ec.recebido_em, "
+        "  ec.confirmado_em "
+        "FROM emprestimo_casco ec "
+        "JOIN item i ON i.id = ec.produto_id "
+        "JOIN cliente c ON c.id = ec.cliente_id "
+        "LEFT JOIN venda v ON v.id = ec.venda_id "
+        "LEFT JOIN endereco e ON e.id = v.endereco_id "
+        "LEFT JOIN rua r ON r.id = e.rua_id "
+        "WHERE ec.motorista_id = :mid "
+        "  AND ec.created_at::date = :data "
+        "ORDER BY ec.created_at"
+    ), {"mid": motorista_id, "data": data}).fetchall()
+
+    cascos_devolvidos_rows = conn.execute(sa.text(
+        "SELECT "
+        "  ec.id, "
+        "  i.title AS produto_nome, "
+        "  ec.quantidade, "
+        "  c.nome AS cliente_nome, "
+        "  COALESCE(r.nome || ', ' || e.numero, '') AS endereco, "
+        "  ec.created_at AS emprestado_em, "
+        "  ec.recebido_em "
+        "FROM emprestimo_casco ec "
+        "JOIN item i ON i.id = ec.produto_id "
+        "JOIN cliente c ON c.id = ec.cliente_id "
+        "LEFT JOIN venda v ON v.id = ec.venda_id "
+        "LEFT JOIN endereco e ON e.id = v.endereco_id "
+        "LEFT JOIN rua r ON r.id = e.rua_id "
+        "WHERE ec.motorista_id = :mid "
+        "  AND ec.recebido_em::date = :data "
+        "ORDER BY ec.recebido_em"
+    ), {"mid": motorista_id, "data": data}).fetchall()
+
+    # Total em aberto acumulado deste motorista (todos os tempos)
+    total_aberto = conn.execute(sa.text(
+        "SELECT COUNT(*), COALESCE(SUM(quantidade), 0) "
+        "FROM emprestimo_casco "
+        "WHERE motorista_id = :mid AND confirmado_em IS NULL"
+    ), {"mid": motorista_id}).fetchone()
+
+    def _casco_row(r, tipo: str) -> dict:
+        return {
+            "id": str(r[0]),
+            "produto_nome": r[1],
+            "quantidade": r[2],
+            "cliente_nome": r[3],
+            "endereco": r[4] or "—",
+            "emprestado_em": r[5].isoformat() if r[5] else None,
+            "recebido_em": r[6].isoformat() if r[6] else None,
+        }
+
+    cascos_do_dia = {
+        "emprestados_hoje": [_casco_row(r, "emprestado") for r in cascos_emprestados_rows],
+        "devolvidos_hoje": [_casco_row(r, "devolvido") for r in cascos_devolvidos_rows],
+        "total_emprestados_hoje": sum(r[2] for r in cascos_emprestados_rows),
+        "total_devolvidos_hoje": sum(r[2] for r in cascos_devolvidos_rows),
+        "total_aberto_acumulado": int(total_aberto[1]) if total_aberto else 0,
+        "qtd_registros_abertos": int(total_aberto[0]) if total_aberto else 0,
+    }
+
     return {
         "abertura_id": str(abertura[0]),
         "carga_produtos": [{"produto_id": str(c[0]), "produto_nome": c[1], "carregado": c[2]} for c in carga],
@@ -318,6 +391,7 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
         "ja_fechado": fechado is not None,
         "vendas": [{"id": str(v[0]), "cliente_nome": v[1], "forma_pagamento": v[2],
                     "valor_pago": float(v[3]), "data_venda": v[4].isoformat()} for v in vendas],
+        "cascos_do_dia": cascos_do_dia,
     }
 
 
@@ -487,7 +561,6 @@ def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
             {
                 "descricao": l[0], "debito_numero": l[1], "credito_numero": l[2],
                 "valor": float(l[3]),
-                # created_at como ISO para o frontend converter para fuso local do browser
                 "created_at": l[4].isoformat(),
                 "e_ajuste": l[0].startswith(PREFIXO_AJUSTE_ABERTURA),
             }
