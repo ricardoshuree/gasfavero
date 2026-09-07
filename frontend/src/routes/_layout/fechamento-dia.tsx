@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: casco_fechamento_dia | plano: bae3aaa0 | 2026-09-07 17:30:10
-// Remove temCascosNoDia não usado
+// [mcp-local harness] feature: casco_fechamento_dia | plano: d1d536d5 | 2026-09-07 17:43:15
+// Fix scroll horizontal: flex-wrap nas abas, remove whitespace-nowrap dos botões, labels sem overflow
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
@@ -126,9 +126,6 @@ interface Resumo {
   vendas: { id: string; cliente_nome: string; forma_pagamento: string; valor_pago: number }[]
 }
 
-// ---------------------------------------------------------------------------
-// Aba Cascos — somente visualização
-// ---------------------------------------------------------------------------
 function AbaCascos({ cascos }: { cascos: CascosDodia }) {
   const saldoDia = cascos.total_emprestados_hoje - cascos.total_devolvidos_hoje
 
@@ -174,7 +171,7 @@ function AbaCascos({ cascos }: { cascos: CascosDodia }) {
                   <th className="px-3 py-2 text-center font-medium">Qtd</th>
                   <th className="px-3 py-2 text-left font-medium">Cliente</th>
                   <th className="px-3 py-2 text-left font-medium">Endereço</th>
-                  <th className="px-3 py-2 text-left font-medium">Emprestado em</th>
+                  <th className="px-3 py-2 text-left font-medium">Em</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,7 +203,7 @@ function AbaCascos({ cascos }: { cascos: CascosDodia }) {
                   <th className="px-3 py-2 text-center font-medium">Qtd</th>
                   <th className="px-3 py-2 text-left font-medium">Cliente</th>
                   <th className="px-3 py-2 text-left font-medium">Endereço</th>
-                  <th className="px-3 py-2 text-left font-medium">Devolvido em</th>
+                  <th className="px-3 py-2 text-left font-medium">Em</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,15 +230,12 @@ function AbaCascos({ cascos }: { cascos: CascosDodia }) {
 
       <p className="text-xs text-muted-foreground flex items-center gap-1">
         <Package className="h-3 w-3" aria-hidden="true" />
-        Somente visualização — para registrar devolução acesse Recebimento de Cascos.
+        Somente visualização — registre devoluções em Recebimento de Cascos.
       </p>
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Modal de fechamento
-// ---------------------------------------------------------------------------
 function ModalFechamento({
   motorista,
   resumo,
@@ -311,6 +305,7 @@ function ModalFechamento({
     "diferenca",
   ]
 
+  // Labels curtos para caber sem scroll horizontal
   const labelAba: Record<AbaType, string> = {
     resumo: "Resumo",
     vendas: `Vendas (${resumo.vendas.length})`,
@@ -335,12 +330,13 @@ function ModalFechamento({
           <DialogTitle>Fechamento — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex gap-1 border-b overflow-x-auto">
+        {/* Abas: flex-wrap evita scroll horizontal — quebra em 2 linhas se necessário */}
+        <div className="flex flex-wrap gap-x-1 gap-y-0 border-b">
           {abas.map((a) => (
             <button
               key={a}
               onClick={() => setAba(a)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
                 aba === a
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -594,9 +590,6 @@ function ModalFechamento({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Tela principal
-// ---------------------------------------------------------------------------
 function FechamentoDia() {
   const hoje = hojeISO()
   const [motoristaSelecionado, setMotoristaSelecionado] = useState<StatusMotorista | null>(null)
