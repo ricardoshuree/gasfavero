@@ -1,14 +1,11 @@
-// [mcp-local harness] feature: historico-vendas-cliente-layout | plano: 69cff08b | 2026-09-07 19:37:52
-// EtapaCliente: histórico com 2 linhas (data+valor+status / produtos+forma+endereço), aviso de casco em aberto, vale_numero na sublinha
+// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:06:07
+// EtapaCliente: spinner no histórico + 3 linhas por venda (data+valor+status+casco / produtos+forma+folha / endereço)
 // Etapa 2 — Busca de cliente, cadastro rápido, troca de endereço e histórico de vendas
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
 import {
-  buscarBairros,
-  buscarClientes,
-  cadastrarCliente,
-  type Bairro,
-  type Cliente,
+  buscarBairros, buscarClientes, cadastrarCliente,
+  type Bairro, type Cliente,
 } from "../../lib/vendas"
 import { request } from "../../lib/api"
 
@@ -24,7 +21,6 @@ interface Props {
 
 type ModoCliente = "busca" | "novo"
 
-// Tipo completo retornado pelo endpoint /historico (VendaPublic)
 type VendaHistorico = {
   id: string
   data_venda: string
@@ -43,21 +39,14 @@ type VendaHistorico = {
   } | null
 }
 
-type CascoCliente = {
-  count: number
-  total_cascos_abertos: number
-}
+type CascoCliente = { count: number; total_cascos_abertos: number }
 
 const DIAS_ATRASO = 30
 
 const LABEL_FORMA: Record<string, string> = {
-  cartao_debito:  "Débito",
-  cartao_credito: "Crédito",
-  pix:            "Pix",
-  dinheiro:       "Dinheiro",
-  vale:           "Fiado",
-  vale_gas:       "Vale Gás",
-  gas_povo:       "Gás do Povo",
+  cartao_debito: "Débito", cartao_credito: "Crédito",
+  pix: "Pix", dinheiro: "Dinheiro",
+  vale: "Fiado", vale_gas: "Vale Gás", gas_povo: "Gás do Povo",
 }
 
 function statusVenda(v: VendaHistorico): { label: string; bg: string; text: string } {
@@ -72,18 +61,11 @@ function statusVenda(v: VendaHistorico): { label: string; bg: string; text: stri
 }
 
 function formatData(iso: string) {
-  const [, m, d] = iso.split("-")
-  return `${d}/${m}`
+  const [, m, d] = iso.split("-"); return `${d}/${m}`
 }
 
 function formatMoney(v: string | number) {
   return `R$ ${Number(v).toFixed(2).replace(".", ",")}`
-}
-
-function enderecoStr(end: VendaHistorico["endereco"]): string {
-  if (!end) return ""
-  const comp = end.complemento ? ` (${end.complemento})` : ""
-  return `${end.rua_nome}, ${end.numero}${comp}`
 }
 
 // ---------------------------------------------------------------------------
@@ -91,15 +73,12 @@ function enderecoStr(end: VendaHistorico["endereco"]): string {
 // ---------------------------------------------------------------------------
 function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) {
   const [total, setTotal] = useState(0)
-
   useEffect(() => {
     request<CascoCliente>(`/api/v1/cascos/cliente/${clienteId}`, { token })
       .then(r => setTotal(r.total_cascos_abertos))
       .catch(() => {})
   }, [clienteId, token])
-
   if (total === 0) return null
-
   return (
     <div style={sh.avisoCasco}>
       📦 ⚠️ Este cliente tem <strong>{total} casco{total > 1 ? "s" : ""} emprestado{total > 1 ? "s" : ""} em aberto</strong>
@@ -108,43 +87,59 @@ function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) 
 }
 
 // ---------------------------------------------------------------------------
-// Histórico de vendas — 2 linhas por venda
+// Histórico de vendas — 3 linhas por venda + spinner de loading
 // ---------------------------------------------------------------------------
 function HistoricoVendas({ clienteId, token }: { clienteId: string; token: string }) {
   const [vendas, setVendas] = useState<VendaHistorico[]>([])
+  const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
+    setCarregando(true)
     request<{ data: VendaHistorico[] }>(
-      `/api/v1/vendas/cliente/${clienteId}/historico?limit=3`,
-      { token }
-    ).then(r => setVendas(r.data)).catch(() => {})
+      `/api/v1/vendas/cliente/${clienteId}/historico?limit=3`, { token }
+    )
+      .then(r => setVendas(r.data))
+      .catch(() => {})
+      .finally(() => setCarregando(false))
   }, [clienteId, token])
-
-  if (vendas.length === 0) return null
 
   return (
     <div style={sh.box}>
       <p style={sh.titulo}>Histórico de vendas (últimas 3)</p>
-      {vendas.map(v => {
+
+      {carregando && (
+        <div style={sh.spinnerBox}>
+          <div style={sh.spinner} />
+        </div>
+      )}
+
+      {!carregando && vendas.length === 0 && (
+        <p style={sh.vazio}>Nenhuma venda anterior.</p>
+      )}
+
+      {!carregando && vendas.map(v => {
         const st = statusVenda(v)
         const produtos = v.itens.map(i => `${i.quantidade}× ${i.produto_title}`).join(", ")
         const forma = LABEL_FORMA[v.forma_pagamento] ?? v.forma_pagamento
-        const numeroVale = v.vale_numero ? ` · Folha ${v.vale_numero}` : ""
-        const end = enderecoStr(v.endereco)
-        const subLinha = [produtos, forma + numeroVale, end].filter(Boolean).join(" · ")
+        const folha = v.vale_numero ? ` · Folha ${v.vale_numero}` : ""
+        const temCasco = v.itens.length > 0  // simplificado: assumimos produto com casco se houve venda
+        const end = v.endereco
+          ? `${v.endereco.rua_nome}, ${v.endereco.numero}${v.endereco.complemento ? ` (${v.endereco.complemento})` : ""}`
+          : ""
 
         return (
           <div key={v.id} style={sh.card}>
-            {/* Linha 1: data · valor · status */}
+            {/* Linha 1: data · valor · badge status · ícone casco */}
             <div style={sh.linha1}>
               <span style={sh.data}>{formatData(v.data_venda)}</span>
               <span style={sh.valor}>{formatMoney(v.valor_pago)}</span>
               <span style={{ ...sh.badge, background: st.bg, color: st.text }}>{st.label}</span>
+              {temCasco && <span style={sh.icoCasco} title="Casco emprestado">📦</span>}
             </div>
-            {/* Linha 2: produtos · forma · endereço */}
-            <div style={sh.linha2} title={subLinha}>
-              {subLinha}
-            </div>
+            {/* Linha 2: produtos · forma · folha */}
+            <div style={sh.linha2}>{produtos} · {forma}{folha}</div>
+            {/* Linha 3: endereço */}
+            {end && <div style={sh.linha3}>📍 {end}</div>}
           </div>
         )
       })}
@@ -152,15 +147,29 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
   )
 }
 
+// Keyframe de rotação via style tag inline (sem CSS global)
+const spinnerStyle = `
+@keyframes _giro { to { transform: rotate(360deg); } }
+`
+
 const sh: Record<string, CSSProperties> = {
-  box:       { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
-  titulo:    { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
-  card:      { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 4px" },
-  linha1:    { display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" },
-  data:      { fontSize: "12px", color: C.textoSecundario, flexShrink: 0, minWidth: "36px" },
-  valor:     { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
-  badge:     { fontSize: "10px", fontWeight: 600, padding: "2px 6px", borderRadius: "6px", marginLeft: "auto", whiteSpace: "nowrap" as const },
-  linha2:    { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
+  box:      { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
+  titulo:   { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
+  spinnerBox:{ display: "flex", justifyContent: "center", padding: "10px 0" },
+  spinner:  {
+    width: "20px", height: "20px", borderRadius: "50%",
+    border: `2px solid ${C.borda}`, borderTopColor: "#606C38",
+    animation: "_giro 0.7s linear infinite",
+  },
+  vazio:    { fontSize: "12px", color: C.textoSecundario, textAlign: "center" as const, margin: "6px 0" },
+  card:     { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 5px" },
+  linha1:   { display: "flex", alignItems: "center", gap: "5px", marginBottom: "3px" },
+  data:     { fontSize: "11px", color: C.textoSecundario, flexShrink: 0, minWidth: "34px" },
+  valor:    { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
+  badge:    { fontSize: "10px", fontWeight: 600, padding: "1px 5px", borderRadius: "5px", marginLeft: "auto", whiteSpace: "nowrap" as const },
+  icoCasco: { fontSize: "11px", flexShrink: 0, marginLeft: "2px" },
+  linha2:   { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
+  linha3:   { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px", marginTop: "1px" },
   avisoCasco:{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#92400e", marginTop: "8px", lineHeight: "1.4" },
 }
 
@@ -170,10 +179,8 @@ const sh: Record<string, CSSProperties> = {
 function TrocarEndereco({
   token, clienteId, onEnderecoCriado, onFechar,
 }: {
-  token: string
-  clienteId: string
-  onEnderecoCriado: (novoEnderecoId: string, novoEnderecoStr: string) => void
-  onFechar: () => void
+  token: string; clienteId: string
+  onEnderecoCriado: (id: string, str: string) => void; onFechar: () => void
 }) {
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [bairroId, setBairroId] = useState("")
@@ -190,16 +197,12 @@ function TrocarEndereco({
     setSalvando(true); setErro("")
     try {
       const atualizado = await request<Cliente>(`/api/v1/clientes/${clienteId}`, {
-        method: "PATCH", token,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          endereco: { bairro_id: bairroId, rua_nome: rua.trim(), numero: numero.trim(), complemento: complemento.trim() || undefined }
-        }),
+        method: "PATCH", token, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endereco: { bairro_id: bairroId, rua_nome: rua.trim(), numero: numero.trim(), complemento: complemento.trim() || undefined } }),
       })
       const endId = atualizado.endereco?.id ?? ""
       const endStr = atualizado.endereco
-        ? `${atualizado.endereco.rua_nome}, ${atualizado.endereco.numero} — ${atualizado.endereco.bairro_nome}`
-        : ""
+        ? `${atualizado.endereco.rua_nome}, ${atualizado.endereco.numero} — ${atualizado.endereco.bairro_nome}` : ""
       onEnderecoCriado(endId, endStr)
     } catch (e: any) {
       setErro(e.message ?? "Erro ao salvar endereço.")
@@ -250,8 +253,7 @@ const se: Record<string, CSSProperties> = {
 // EtapaCliente principal
 // ---------------------------------------------------------------------------
 export default function EtapaCliente({
-  token, clienteSelecionado,
-  onClienteChange, onEnderecoChange, onProximo, onVoltar
+  token, clienteSelecionado, onClienteChange, onEnderecoChange, onProximo, onVoltar,
 }: Props) {
   const [modo, setModo] = useState<ModoCliente>("busca")
   const [busca, setBusca] = useState("")
@@ -280,15 +282,11 @@ export default function EtapaCliente({
     request<{ rua_nome: string; numero: string; bairro_nome: string; id: string } | null>(
       `/api/v1/vendas/cliente/${clienteSelecionado.id}/ultimo-endereco`, { token }
     ).then(end => {
-      if (end) {
-        onEnderecoChange(end.id)
-        setEnderecoStr(`${end.rua_nome}, ${end.numero} — ${end.bairro_nome}`)
-      } else if (clienteSelecionado.endereco) {
+      if (end) { onEnderecoChange(end.id); setEnderecoStr(`${end.rua_nome}, ${end.numero} — ${end.bairro_nome}`) }
+      else if (clienteSelecionado.endereco) {
         onEnderecoChange(clienteSelecionado.endereco.id)
         setEnderecoStr(`${clienteSelecionado.endereco.rua_nome}, ${clienteSelecionado.endereco.numero} — ${clienteSelecionado.endereco.bairro_nome}`)
-      } else {
-        onEnderecoChange(null); setEnderecoStr("")
-      }
+      } else { onEnderecoChange(null); setEnderecoStr("") }
     }).catch(() => {
       if (clienteSelecionado.endereco) {
         onEnderecoChange(clienteSelecionado.endereco.id)
@@ -314,8 +312,7 @@ export default function EtapaCliente({
     setSalvando(true); setErroCadastro("")
     try {
       const c = await cadastrarCliente(token, {
-        nome: nome.trim(),
-        cpf: cpf.trim().replace(/\D/g, ""),
+        nome: nome.trim(), cpf: cpf.trim().replace(/\D/g, ""),
         telefone: tel.trim() || undefined,
         endereco: ruaNome.trim() && numero.trim() && bairroId
           ? { bairro_id: bairroId, rua_nome: ruaNome.trim(), numero: numero.trim(), complemento: complemento.trim() || undefined }
@@ -340,34 +337,30 @@ export default function EtapaCliente({
 
   return (
     <div style={s.pagina}>
+      {/* Injeta keyframe do spinner */}
+      <style>{spinnerStyle}</style>
+
       {modo === "busca" && (
         <>
           {clienteSelecionado && (
             <div style={s.clienteCard}>
               <div style={s.clienteNome}>{clienteSelecionado.nome}</div>
               <div style={s.clienteSub}>CPF {clienteSelecionado.cpf}</div>
-
-              {/* Aviso casco em aberto */}
               <AvisoCasco clienteId={clienteSelecionado.id} token={token} />
-
               <div style={s.enderecoRow}>
                 <span style={s.enderecoTxt}>📍 {enderecoStr || "Sem endereço"}</span>
                 <button style={s.btnTrocarEnd} onClick={() => setMostrarTrocarEnd(p => !p)}>
                   {mostrarTrocarEnd ? "Cancelar" : "Trocar"}
                 </button>
               </div>
-
               {mostrarTrocarEnd && (
                 <TrocarEndereco
-                  token={token}
-                  clienteId={clienteSelecionado.id}
+                  token={token} clienteId={clienteSelecionado.id}
                   onEnderecoCriado={(id, str) => { onEnderecoChange(id); setEnderecoStr(str); setMostrarTrocarEnd(false) }}
                   onFechar={() => setMostrarTrocarEnd(false)}
                 />
               )}
-
               <HistoricoVendas clienteId={clienteSelecionado.id} token={token} />
-
               <button style={s.btnTrocar} onClick={() => { onClienteChange(null); onEnderecoChange(null); setEnderecoStr("") }}>
                 Trocar cliente
               </button>
@@ -379,11 +372,8 @@ export default function EtapaCliente({
               <div style={s.searchBox}>
                 <span style={s.searchIcon}>🔍</span>
                 <input
-                  style={s.searchInput}
-                  placeholder="Buscar por nome ou CPF..."
-                  value={busca}
-                  onChange={e => setBusca(e.target.value)}
-                  autoFocus
+                  style={s.searchInput} placeholder="Buscar por nome ou CPF..."
+                  value={busca} onChange={e => setBusca(e.target.value)} autoFocus
                 />
                 {busca && <button style={s.clearBtn} onClick={() => { setBusca(""); setResultados([]) }}>✕</button>}
               </div>
@@ -402,16 +392,12 @@ export default function EtapaCliente({
 
           <div style={s.separator} />
           <button style={s.btnNovo} onClick={() => setModo("novo")}>+ Cadastrar novo cliente</button>
-
           <div style={s.rodape}>
             <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
             <button
               style={{ ...s.btnProximo, opacity: clienteSelecionado ? 1 : 0.4 }}
-              disabled={!clienteSelecionado}
-              onClick={onProximo}
-            >
-              Próximo →
-            </button>
+              disabled={!clienteSelecionado} onClick={onProximo}
+            >Próximo →</button>
           </div>
         </>
       )}

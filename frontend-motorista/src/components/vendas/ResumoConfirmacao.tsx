@@ -1,6 +1,8 @@
-// [mcp-local harness] feature: vendas-motorista | plano: d865e550 | 2026-09-07 12:14:54
-// Tela de resumo e confirmação: exibe cliente, itens, pagamento e submete a venda
-// Resumo final antes de confirmar e submeter a venda
+// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:04:23
+// ResumoConfirmacao: erros de negócio (vale já usado, bloco outro motorista) em amarelo ⚠️, erros de servidor em vermelho ❌
+// ResumoConfirmacao — resumo final antes de confirmar e submeter a venda
+// Erros de negócio (vale já usado, bloco de outro motorista) em amarelo com ⚠️
+// Erros de servidor em vermelho
 import { useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
 import { criarVenda, type Cliente, type DadosPagamento, type ItemSacola } from "../../lib/vendas"
@@ -13,6 +15,26 @@ const LABEL_FORMA: Record<string, string> = {
   vale:           "Fiado",
   vale_gas:       "Vale Gás",
   gas_povo:       "Gás do Povo",
+}
+
+// Mensagens de negócio que devem aparecer em amarelo (aviso) em vez de vermelho (erro)
+const ERROS_NEGOCIO = [
+  "ja foi usado",
+  "já foi usado",
+  "pertence ao bloco de outro motorista",
+  "outro motorista",
+  "ja tem uma venda a prazo",
+  "já tem uma venda a prazo",
+  "bloco nao encontrado",
+  "bloco não encontrado",
+  "fora do intervalo",
+  "numero de vale gas invalido",
+  "número de vale gás inválido",
+]
+
+function ehErroNegocio(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return ERROS_NEGOCIO.some(p => lower.includes(p))
 }
 
 interface Props {
@@ -63,6 +85,8 @@ export default function ResumoConfirmacao({
       setEnviando(false)
     }
   }
+
+  const isNegocio = erro && ehErroNegocio(erro)
 
   return (
     <div style={s.pagina}>
@@ -116,12 +140,15 @@ export default function ResumoConfirmacao({
         </div>
       </div>
 
-      {erro && <p style={s.erro}>{erro}</p>}
+      {/* Erro — amarelo para erros de negócio, vermelho para erros de servidor */}
+      {erro && (
+        <div style={isNegocio ? s.avisoNegocio : s.erroServidor}>
+          {isNegocio ? "⚠️ " : "❌ "}{erro}
+        </div>
+      )}
 
       <div style={s.rodape}>
-        <button style={s.btnVoltar} onClick={onVoltar} disabled={enviando}>
-          ← Editar
-        </button>
+        <button style={s.btnVoltar} onClick={onVoltar} disabled={enviando}>← Editar</button>
         <button style={s.btnConfirmar} onClick={confirmar} disabled={enviando}>
           {enviando ? "Enviando..." : "✓ Confirmar"}
         </button>
@@ -131,24 +158,34 @@ export default function ResumoConfirmacao({
 }
 
 const s: Record<string, CSSProperties> = {
-  pagina: { padding: "0.75rem 1rem 1.5rem" },
-  titulo: { fontSize: "17px", fontWeight: 700, color: C.texto, margin: "0 0 12px" },
+  pagina:    { padding: "0.75rem 1rem 1.5rem" },
+  titulo:    { fontSize: "17px", fontWeight: 700, color: C.texto, margin: "0 0 12px" },
   secao: {
     background: C.fundoCard, border: `1px solid ${C.borda}`,
     borderRadius: "12px", padding: "12px 14px", marginBottom: "10px",
   },
-  secaoLabel: { fontSize: "11px", fontWeight: 600, color: C.textoSecundario, textTransform: "uppercase" as const, margin: "0 0 4px", letterSpacing: "0.5px" },
-  secaoValor: { fontSize: "15px", fontWeight: 600, color: C.texto, margin: "0 0 2px" },
-  secaoSub: { fontSize: "13px", color: C.textoSecundario, margin: "2px 0 0" },
-  itemRow: { display: "flex", justifyContent: "space-between", fontSize: "14px", color: C.texto, padding: "3px 0" },
-  totalRow: {
-    display: "flex", justifyContent: "space-between",
-    fontSize: "15px", fontWeight: 700, color: C.texto,
-    borderTop: `1px solid ${C.borda}`, marginTop: "8px", paddingTop: "8px",
+  secaoLabel:{ fontSize: "11px", fontWeight: 600, color: C.textoSecundario, textTransform: "uppercase" as const, margin: "0 0 4px", letterSpacing: "0.5px" },
+  secaoValor:{ fontSize: "15px", fontWeight: 600, color: C.texto, margin: "0 0 2px" },
+  secaoSub:  { fontSize: "13px", color: C.textoSecundario, margin: "2px 0 0" },
+  itemRow:   { display: "flex", justifyContent: "space-between", fontSize: "14px", color: C.texto, padding: "3px 0" },
+  totalRow:  {
+    display: "flex", justifyContent: "space-between", fontSize: "15px",
+    fontWeight: 700, color: C.texto, borderTop: `1px solid ${C.borda}`, marginTop: "8px", paddingTop: "8px",
   },
-  erro: { color: C.erro, fontSize: "13px", textAlign: "center" as const, margin: "8px 0" },
-  rodape: { display: "flex", gap: "10px", marginTop: "16px" },
-  btnVoltar: {
+  // Erro de negócio — amarelo com ícone ⚠️
+  avisoNegocio: {
+    background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "10px",
+    padding: "10px 12px", fontSize: "13px", color: "#92400e",
+    margin: "8px 0", lineHeight: "1.5",
+  },
+  // Erro de servidor — vermelho
+  erroServidor: {
+    background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: "10px",
+    padding: "10px 12px", fontSize: "13px", color: "#991b1b",
+    margin: "8px 0", lineHeight: "1.5",
+  },
+  rodape:     { display: "flex", gap: "10px", marginTop: "16px" },
+  btnVoltar:  {
     flex: 1, background: "transparent", border: `1px solid ${C.borda}`,
     borderRadius: "12px", padding: "13px", fontSize: "15px", color: C.texto, cursor: "pointer",
   },

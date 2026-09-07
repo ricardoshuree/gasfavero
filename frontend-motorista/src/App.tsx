@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fix-steps-header-rbac-produtos | plano: be918930 | 2026-09-07 19:13:04
-// App.tsx: cabeçalho de sub-tela com título centralizado e botão ← no lado esquerdo para todas as sub-telas do Financeiro
+// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:03:42
+// App.tsx: passa nomeMotorista para TopBar
 // App.tsx — navegação do Financeiro via hub de blocos (estilo v1.0 aprovada)
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
@@ -31,7 +31,6 @@ type JanelaComPonteAndroid = Window & {
   AndroidFCM?: { sincronizar?: () => void }
 }
 
-// Título exibido no cabeçalho de cada sub-tela do Financeiro
 const SUBTELA_TITULO: Record<SubTelaFinanceiro, string> = {
   livro:            "Livro de Vendas",
   recebimento_vale: "Recebimento de Fiado",
@@ -95,36 +94,28 @@ function App() {
 
     const cabecalho = (
       <div style={estilos.subCabecalho}>
-        <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>
-          ←
-        </button>
+        <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>←</button>
         <span style={estilos.subTitulo}>{SUBTELA_TITULO[subTelaFinanceiro]}</span>
-        {/* espaço vazio para centralizar o título */}
         <div style={{ width: "36px" }} />
       </div>
     )
 
-    if (subTelaFinanceiro === "livro") {
-      return <>{cabecalho}<FinanceiroTela token={token} usuario={usuario} /></>
-    }
-    if (subTelaFinanceiro === "recebimento_vale") {
-      return <>{cabecalho}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
-    }
-    if (subTelaFinanceiro === "inadimplentes") {
-      return <>{cabecalho}<InadimplentesTola token={token} usuario={usuario} /></>
-    }
-    if (subTelaFinanceiro === "malote") {
-      return <>{cabecalho}<MaloteTela token={token} usuario={usuario} /></>
-    }
-    if (subTelaFinanceiro === "cascos") {
-      return <>{cabecalho}<DevolucaoCascosTela token={token} usuario={usuario} /></>
-    }
+    if (subTelaFinanceiro === "livro")            return <>{cabecalho}<FinanceiroTela token={token} usuario={usuario} /></>
+    if (subTelaFinanceiro === "recebimento_vale") return <>{cabecalho}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
+    if (subTelaFinanceiro === "inadimplentes")    return <>{cabecalho}<InadimplentesTola token={token} usuario={usuario} /></>
+    if (subTelaFinanceiro === "malote")           return <>{cabecalho}<MaloteTela token={token} usuario={usuario} /></>
+    if (subTelaFinanceiro === "cascos")           return <>{cabecalho}<DevolucaoCascosTela token={token} usuario={usuario} /></>
     return null
   }
 
   return (
     <div style={estilos.shell}>
-      <TopBar token={token} motoristaId={usuario.id} />
+      {/* Passa o nome do motorista para a TopBar */}
+      <TopBar
+        token={token}
+        motoristaId={usuario.id}
+        nomeMotorista={usuario.full_name ?? usuario.email}
+      />
 
       <main style={estilos.conteudo}>
         {abaAtiva === "demandas" && (
@@ -158,49 +149,26 @@ const estilos = {
   conteudo: {
     paddingTop: `calc(${ALTURA_TOPBAR_PX}px + env(safe-area-inset-top))`,
     paddingBottom: `calc(${ALTURA_BOTTOMNAV_PX}px + env(safe-area-inset-bottom))`,
-    minHeight: "100vh",
-    boxSizing: "border-box" as const,
+    minHeight: "100vh", boxSizing: "border-box" as const,
   },
-  // Cabeçalho das sub-telas do Financeiro
   subCabecalho: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "10px 16px 8px",
-    background: "#fff",
-    borderBottom: "1px solid #F3F4F6",
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "10px 16px 8px", background: "#fff", borderBottom: "1px solid #F3F4F6",
   } as const,
   btnVoltar: {
-    background: "transparent",
-    border: "none",
-    color: "#606C38",
-    fontSize: "20px",
-    fontWeight: 700,
-    cursor: "pointer",
-    padding: "2px 6px",
-    lineHeight: 1,
-    width: "36px",
+    background: "transparent", border: "none", color: "#606C38",
+    fontSize: "20px", fontWeight: 700, cursor: "pointer", padding: "2px 6px", lineHeight: 1, width: "36px",
   } as const,
   subTitulo: {
-    fontSize: "15px",
-    fontWeight: 700,
-    color: CORES_APP.texto,
-    flex: 1,
-    textAlign: "center" as const,
+    fontSize: "15px", fontWeight: 700, color: CORES_APP.texto,
+    flex: 1, textAlign: "center" as const,
   },
   splash: {
-    minHeight: "100vh",
-    display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "0.75rem",
+    minHeight: "100vh", display: "flex", flexDirection: "column" as const,
+    alignItems: "center", justifyContent: "center", gap: "0.75rem",
     padding: "max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left))",
-    textAlign: "center" as const,
-    fontFamily: "system-ui, sans-serif",
-    background: CORES_LOGIN.fundo,
-    color: CORES_LOGIN.texto,
-    boxSizing: "border-box" as const,
+    textAlign: "center" as const, fontFamily: "system-ui, sans-serif",
+    background: CORES_LOGIN.fundo, color: CORES_LOGIN.texto, boxSizing: "border-box" as const,
   },
   splashTitulo:    { fontSize: "1.5rem", fontWeight: 700, color: CORES_LOGIN.texto },
   splashSubtitulo: { color: CORES_LOGIN.texto, opacity: 0.75 },
