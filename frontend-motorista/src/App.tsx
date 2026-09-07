@@ -1,11 +1,12 @@
-// [mcp-local harness] feature: inadimplentes-motorista | plano: 458ed6ae | 2026-09-07 13:21:20
-// App.tsx: adiciona InadimplentesTola na sub-nav do Financeiro (Livro / Receber Fiado / Inadimplentes)
+// [mcp-local harness] feature: malote-motorista | plano: e2831dfc | 2026-09-07 13:42:35
+// App.tsx: adiciona MaloteTela na sub-nav do Financeiro como 4a aba
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
 import FinanceiroTela from "./components/FinanceiroTela"
 import InadimplentesTola from "./components/InadimplentesTola"
 import Login from "./components/Login"
+import MaloteTela from "./components/MaloteTela"
 import MinhasDemandas from "./components/MinhasDemandas"
 import PerfilTela from "./components/PerfilTela"
 import RecebimentoFiadoTela from "./components/RecebimentoFiadoTela"
@@ -21,7 +22,7 @@ type Estado =
   | { fase: "logado"; token: string; usuario: UserMe }
   | { fase: "erro"; mensagem: string }
 
-type SubAbaFinanceiro = "livro" | "fiado" | "inadimplentes"
+type SubAbaFinanceiro = "livro" | "fiado" | "inadimplentes" | "malote"
 
 const MOTORISTA_ID_KEY = "motorista_id"
 
@@ -85,9 +86,10 @@ function App() {
         {abaAtiva === "financeiro" && (
           <>
             <SubNav aba={subAbaFinanceiro} onMudar={setSubAbaFinanceiro} />
-            {subAbaFinanceiro === "livro" && <FinanceiroTela token={token} usuario={usuario} />}
-            {subAbaFinanceiro === "fiado" && <RecebimentoFiadoTela token={token} usuario={usuario} />}
+            {subAbaFinanceiro === "livro"         && <FinanceiroTela token={token} usuario={usuario} />}
+            {subAbaFinanceiro === "fiado"         && <RecebimentoFiadoTela token={token} usuario={usuario} />}
             {subAbaFinanceiro === "inadimplentes" && <InadimplentesTola token={token} usuario={usuario} />}
+            {subAbaFinanceiro === "malote"        && <MaloteTela token={token} usuario={usuario} />}
           </>
         )}
         {abaAtiva === "perfil" && (
@@ -100,12 +102,12 @@ function App() {
   )
 }
 
-// Sub-navegação horizontal do módulo Financeiro
 function SubNav({ aba, onMudar }: { aba: SubAbaFinanceiro; onMudar: (a: SubAbaFinanceiro) => void }) {
   const itens: { id: SubAbaFinanceiro; label: string }[] = [
     { id: "livro",          label: "Livro" },
     { id: "fiado",          label: "Receber Fiado" },
     { id: "inadimplentes",  label: "Inadimplentes" },
+    { id: "malote",         label: "Malote" },
   ]
   return (
     <div style={subNav.barra}>
