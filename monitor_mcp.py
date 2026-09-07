@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: monitor-layout | plano: e11a4255 | 2026-09-07 11:28:31
-# Padding nome metodo 16 chars, remove #plan_id da linha principal, mantem feature e path
+# [mcp-local harness] feature: monitor-path-inline | plano: 10123693 | 2026-09-07 11:39:10
+# Path inline na mesma linha com icone por extensao (🐍 .py, 📜 .ts/.tsx, 📄 outros), sem linha separada
 """
 monitor_mcp.py — erp-gasfavero MCP Monitor  (interface unificada)
 Uso: python monitor_mcp.py  |  Encerrar: Ctrl+C
@@ -10,8 +10,8 @@ Fontes de dados:
   - mcp-local/monitor/tool_calls.db  → duração (ms) e status ok/erro por chamada
   - mcp-local/mcp_audit.jsonl        → feature e path por operação
 
-Painel superior: status do processo MCP (via psutil).
-Painel inferior: últimas 12 tool calls — barra colorida + feature + path do arquivo.
+Layout por linha:
+  HH:MM:SS  ✓  write_file       12.8 ms  ██████████░░░░░░░░░░░░  feature  📄 path/arquivo.py
 """
 from __future__ import annotations
 import sys, os, time, threading, re, json, sqlite3
@@ -43,8 +43,10 @@ _CY  = "\x1b[38;5;39m"
 _BL  = "\x1b[38;5;75m"
 
 _PING_INTERVAL = 3.0
-_HIST_W   = 55
-_LINE_W   = 95
+_HIST_W   = 80
+_LINE_W   = 120
+_BAR_W    = 22
+_PATH_W   = 50    # chars do path exibidos inline (só o nome relativo curto)
 _ROWS     = 12
 _BLOCKS   = " \u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
 _ANSI_RE  = re.compile(r'\x1b\[[0-9;]*m')
@@ -164,7 +166,7 @@ def _hist(history, width):
     return "".join(out)
 
 
-def _dur_bar(dur_ms: float, max_ms: float, width: int = 20) -> str:
+def _dur_bar(dur_ms: float, max_ms: float, width: int = _BAR_W) -> str:
     if max_ms <= 0:
         max_ms = 1
     ratio  = min(dur_ms / max_ms, 1.0)
@@ -270,6 +272,14 @@ def _unified_rows(n: int = _ROWS) -> list[dict]:
     return rows
 
 
+def _short_path(path: str, max_w: int = _PATH_W) -> str:
+    """Normaliza e trunca o path para exibição inline."""
+    p = path.replace("\\", "/")
+    if len(p) > max_w:
+        p = "…" + p[-(max_w - 1):]
+    return p
+
+
 def _render_calls(rows: list[dict]) -> list[str]:
     if not rows:
         return [f"  {_DIM}(nenhuma chamada registrada ainda){_R}"]
@@ -287,9 +297,9 @@ def _render_calls(rows: list[dict]) -> list[str]:
 
         c_op  = _OP_COLOR.get(tool, _CY)
         c_dur = _G if dur < 50 else (_GN if dur < 200 else _AM)
-        bar   = _dur_bar(dur, max_ms, width=18)
+        bar   = _dur_bar(dur, max_ms)
 
-        # Linha principal — nome do método com padding 16 (sem #plan_id)
+        # Tudo na mesma linha: barra → feature → 📄 path
         l1 = (
             f"  {_DIM}{ts_str}{_R}  "
             f"{ok_mark}  "
@@ -297,16 +307,19 @@ def _render_calls(rows: list[dict]) -> list[str]:
             f"{c_dur}{dur:>6.1f} ms{_R}  "
             f"{bar}"
         )
+        # feature (se houver)
         if feat:
             l1 += f"  {_BL}{feat}{_R}"
-        lines.append(l1)
 
-        # Linha de detalhe: path do arquivo
+        # path inline após a barra (só quando há path)
         if path:
-            short = path.replace("\\", "/")
-            if len(short) > 68:
-                short = "…" + short[-67:]
-            lines.append(f"         {_DIM}{short}{_R}")
+            short = _short_path(path)
+            # usa ícone de arquivo diferente por extensão
+            ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+            icon = "📜" if ext == "py" else ("📜" if ext in ("ts", "tsx", "js") else "📄")     # 🐍
+            l1 += f"  {_GR}{icon} {short}{_R}"
+
+        lines.append(l1)
 
     return lines
 
