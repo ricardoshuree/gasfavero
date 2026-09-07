@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fix-steps-layout-definitivo | plano: 4e89ea9b | 2026-09-07 19:59:15
-// Steps com grid layout definitivo: bolinhas e linhas no mesmo grid, marginBottom compensa o label para alinhar linha com centro da bolinha
+// [mcp-local harness] feature: fix-steps-futuro-unused | plano: 35038027 | 2026-09-07 20:00:47
+// Remove variável futuro não usada — corrige TS6133
 // VendasTela: orquestrador do fluxo 4 etapas com indicador de progresso estilo iFood
 import { useState, type CSSProperties } from "react"
 import type { UserMe } from "../lib/auth"
@@ -25,13 +25,11 @@ interface Props {
 }
 
 // ── Barra de steps estilo iFood ──────────────────────────────────────────────
-// Abordagem: container com `display:grid` de N colunas onde
-// colunas ímpares = bolinha (largura fixa) e colunas pares = linha (flex-grow).
-// Isso garante que bolinhas e linhas compartilhem exatamente o mesmo eixo central.
+// Grid com colunas alternadas: bolinha (auto) e linha separadora (1fr).
+// Garante que bolinhas e linhas compartilhem o mesmo eixo vertical central.
 function StepsBar({ etapaAtual }: { etapaAtual: Etapa }) {
   const idx = ETAPAS.indexOf(etapaAtual)
 
-  // Monta as colunas do grid: "auto 1fr auto 1fr auto 1fr auto"
   const gridCols = ETAPAS.map((_, i) =>
     i < ETAPAS.length - 1 ? "auto 1fr" : "auto"
   ).join(" ")
@@ -45,12 +43,10 @@ function StepsBar({ etapaAtual }: { etapaAtual: Etapa }) {
       borderBottom: "1px solid #F3F4F6",
       padding: "10px 16px",
       boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-      gap: 0,
     }}>
       {ETAPAS.map((e, i) => {
         const ativo   = i === idx
         const passado = i < idx
-        const futuro  = i > idx
         const cor     = (ativo || passado) ? VERMELHO : "#E5E7EB"
 
         return [
@@ -93,7 +89,8 @@ function StepsBar({ etapaAtual }: { etapaAtual: Etapa }) {
               height: "2px",
               background: i < idx ? VERMELHO : "#E5E7EB",
               margin: "0 4px",
-              // Empurra para cima para alinhar com o centro da bolinha (bolinha 24px + label ~14px ≈ centralizar na bolinha)
+              // Empurra para cima para alinhar com o centro da bolinha
+              // bolinha 24px + label ~13px ≈ offset de 8px para baixo do centro do grid
               marginBottom: "17px",
             }} />
           ),
