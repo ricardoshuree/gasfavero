@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: casco_fechamento_dia | plano: d1d536d5 | 2026-09-07 17:43:15
-// Fix scroll horizontal: flex-wrap nas abas, remove whitespace-nowrap dos botões, labels sem overflow
+// [mcp-local harness] feature: casco_fechamento_dia | plano: cc94c92a | 2026-09-07 17:51:54
+// Abas na mesma linha: flex-1 + px-2 py-1.5 text-xs whitespace-nowrap text-center nos botões, sem flex-wrap
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
@@ -305,22 +305,21 @@ function ModalFechamento({
     "diferenca",
   ]
 
-  // Labels curtos para caber sem scroll horizontal
   const labelAba: Record<AbaType, string> = {
-    resumo: "Resumo",
-    vendas: `Vendas (${resumo.vendas.length})`,
+    resumo:   "Resumo",
+    vendas:   `Vendas (${resumo.vendas.length})`,
     produtos: "Produtos",
-    cascos: cascos ? `Cascos (${cascos.total_aberto_acumulado})` : "Cascos",
-    especie: "Conferência",
-    diferenca: "Diferenças",
+    cascos:   cascos ? `Cascos (${cascos.total_aberto_acumulado})` : "Cascos",
+    especie:  "Conferência",
+    diferenca:"Diferenças",
   }
 
   const labelForma: Record<string, string> = {
-    dinheiro: "Dinheiro",
-    pix: "Pix",
+    dinheiro:      "Dinheiro",
+    pix:           "Pix",
     cartao_debito: "Débito",
-    cartao_credito: "Crédito",
-    vale: "Vale/Fiado",
+    cartao_credito:"Crédito",
+    vale:          "Vale/Fiado",
   }
 
   return (
@@ -330,13 +329,16 @@ function ModalFechamento({
           <DialogTitle>Fechamento — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
 
-        {/* Abas: flex-wrap evita scroll horizontal — quebra em 2 linhas se necessário */}
-        <div className="flex flex-wrap gap-x-1 gap-y-0 border-b">
+        {/*
+          Todas as abas na mesma linha, sem scroll.
+          Solução: px-2 py-1.5 text-xs nos botões — compacto o suficiente para 6 abas.
+        */}
+        <div className="flex border-b">
           {abas.map((a) => (
             <button
               key={a}
               onClick={() => setAba(a)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex-1 px-2 py-1.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap text-center ${
                 aba === a
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -344,10 +346,10 @@ function ModalFechamento({
             >
               {labelAba[a]}
               {a === "diferenca" && temDiferenca && (
-                <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-amber-500" />
+                <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500 align-middle" />
               )}
               {a === "cascos" && cascos && cascos.total_aberto_acumulado > 0 && (
-                <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-amber-500" />
+                <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500 align-middle" />
               )}
             </button>
           ))}
@@ -358,12 +360,12 @@ function ModalFechamento({
             <div className="grid gap-3">
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Fundo de troco", valor: resumo.fundo_troco, icon: <Banknote className="h-4 w-4" /> },
+                  { label: "Fundo de troco",    valor: resumo.fundo_troco,   icon: <Banknote className="h-4 w-4" /> },
                   { label: "Dinheiro (vendas)", valor: resumo.total_dinheiro, icon: <Banknote className="h-4 w-4" /> },
-                  { label: "Pix", valor: resumo.total_pix, icon: <QrCode className="h-4 w-4" /> },
-                  { label: "Cartão Débito", valor: resumo.total_debito, icon: <CreditCard className="h-4 w-4" /> },
-                  { label: "Cartão Crédito", valor: resumo.total_credito, icon: <CreditCard className="h-4 w-4" /> },
-                  { label: "Fiado/Vale", valor: resumo.total_fiado, icon: <Receipt className="h-4 w-4" /> },
+                  { label: "Pix",               valor: resumo.total_pix,     icon: <QrCode className="h-4 w-4" /> },
+                  { label: "Cartão Débito",     valor: resumo.total_debito,  icon: <CreditCard className="h-4 w-4" /> },
+                  { label: "Cartão Crédito",    valor: resumo.total_credito, icon: <CreditCard className="h-4 w-4" /> },
+                  { label: "Fiado/Vale",        valor: resumo.total_fiado,   icon: <Receipt className="h-4 w-4" /> },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg border p-3">
                     <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
