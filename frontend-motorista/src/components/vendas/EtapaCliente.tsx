@@ -1,5 +1,7 @@
+// [mcp-local harness] feature: fix-historico-remove-ico-casco | plano: 0b5bbfab | 2026-09-07 20:14:43
+// Remove ícone 📦 e variável temCasco do histórico de vendas
 // [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:06:07
-// EtapaCliente: spinner no histórico + 3 linhas por venda (data+valor+status+casco / produtos+forma+folha / endereço)
+// EtapaCliente: spinner no histórico + 3 linhas por venda. Ícone casco removido (aviso já existe no card).
 // Etapa 2 — Busca de cliente, cadastro rápido, troca de endereço e histórico de vendas
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
@@ -122,19 +124,17 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
         const produtos = v.itens.map(i => `${i.quantidade}× ${i.produto_title}`).join(", ")
         const forma = LABEL_FORMA[v.forma_pagamento] ?? v.forma_pagamento
         const folha = v.vale_numero ? ` · Folha ${v.vale_numero}` : ""
-        const temCasco = v.itens.length > 0  // simplificado: assumimos produto com casco se houve venda
         const end = v.endereco
           ? `${v.endereco.rua_nome}, ${v.endereco.numero}${v.endereco.complemento ? ` (${v.endereco.complemento})` : ""}`
           : ""
 
         return (
           <div key={v.id} style={sh.card}>
-            {/* Linha 1: data · valor · badge status · ícone casco */}
+            {/* Linha 1: data · valor · badge status */}
             <div style={sh.linha1}>
               <span style={sh.data}>{formatData(v.data_venda)}</span>
               <span style={sh.valor}>{formatMoney(v.valor_pago)}</span>
               <span style={{ ...sh.badge, background: st.bg, color: st.text }}>{st.label}</span>
-              {temCasco && <span style={sh.icoCasco} title="Casco emprestado">📦</span>}
             </div>
             {/* Linha 2: produtos · forma · folha */}
             <div style={sh.linha2}>{produtos} · {forma}{folha}</div>
@@ -147,29 +147,21 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
   )
 }
 
-// Keyframe de rotação via style tag inline (sem CSS global)
-const spinnerStyle = `
-@keyframes _giro { to { transform: rotate(360deg); } }
-`
+const spinnerStyle = `@keyframes _giro { to { transform: rotate(360deg); } }`
 
 const sh: Record<string, CSSProperties> = {
-  box:      { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
-  titulo:   { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
+  box:       { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
+  titulo:    { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
   spinnerBox:{ display: "flex", justifyContent: "center", padding: "10px 0" },
-  spinner:  {
-    width: "20px", height: "20px", borderRadius: "50%",
-    border: `2px solid ${C.borda}`, borderTopColor: "#606C38",
-    animation: "_giro 0.7s linear infinite",
-  },
-  vazio:    { fontSize: "12px", color: C.textoSecundario, textAlign: "center" as const, margin: "6px 0" },
-  card:     { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 5px" },
-  linha1:   { display: "flex", alignItems: "center", gap: "5px", marginBottom: "3px" },
-  data:     { fontSize: "11px", color: C.textoSecundario, flexShrink: 0, minWidth: "34px" },
-  valor:    { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
-  badge:    { fontSize: "10px", fontWeight: 600, padding: "1px 5px", borderRadius: "5px", marginLeft: "auto", whiteSpace: "nowrap" as const },
-  icoCasco: { fontSize: "11px", flexShrink: 0, marginLeft: "2px" },
-  linha2:   { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
-  linha3:   { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px", marginTop: "1px" },
+  spinner:   { width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${C.borda}`, borderTopColor: "#606C38", animation: "_giro 0.7s linear infinite" },
+  vazio:     { fontSize: "12px", color: C.textoSecundario, textAlign: "center" as const, margin: "6px 0" },
+  card:      { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 5px" },
+  linha1:    { display: "flex", alignItems: "center", gap: "5px", marginBottom: "3px" },
+  data:      { fontSize: "11px", color: C.textoSecundario, flexShrink: 0, minWidth: "34px" },
+  valor:     { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
+  badge:     { fontSize: "10px", fontWeight: 600, padding: "1px 5px", borderRadius: "5px", marginLeft: "auto", whiteSpace: "nowrap" as const },
+  linha2:    { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
+  linha3:    { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px", marginTop: "1px" },
   avisoCasco:{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#92400e", marginTop: "8px", lineHeight: "1.4" },
 }
 
@@ -337,7 +329,6 @@ export default function EtapaCliente({
 
   return (
     <div style={s.pagina}>
-      {/* Injeta keyframe do spinner */}
       <style>{spinnerStyle}</style>
 
       {modo === "busca" && (
