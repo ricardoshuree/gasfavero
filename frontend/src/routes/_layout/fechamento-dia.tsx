@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: carga-produtos-abertura-fechamento | plano: b7702599 | 2026-09-04 18:22:27
-// Adiciona aba Produtos no modal de fechamento com retorno de botijões — informativo, não bloqueia
+// [mcp-local harness] feature: casco_fechamento_dia | plano: bae3aaa0 | 2026-09-07 17:30:10
+// Remove temCascosNoDia não usado
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import {
@@ -40,6 +40,11 @@ function hojeISO() {
 
 function fmt(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  return new Date(iso).toLocaleString("pt-BR")
 }
 
 async function apiFetch(path: string, options?: RequestInit) {
@@ -86,6 +91,25 @@ interface CargaProduto {
   carregado: number
 }
 
+interface CascoDetalhe {
+  id: string
+  produto_nome: string
+  quantidade: number
+  cliente_nome: string
+  endereco: string
+  emprestado_em: string | null
+  recebido_em: string | null
+}
+
+interface CascosDodia {
+  emprestados_hoje: CascoDetalhe[]
+  devolvidos_hoje: CascoDetalhe[]
+  total_emprestados_hoje: number
+  total_devolvidos_hoje: number
+  total_aberto_acumulado: number
+  qtd_registros_abertos: number
+}
+
 interface Resumo {
   abertura_id: string
   fundo_troco: number
@@ -98,7 +122,121 @@ interface Resumo {
   total_geral: number
   ja_fechado: boolean
   carga_produtos: CargaProduto[]
+  cascos_do_dia: CascosDodia
   vendas: { id: string; cliente_nome: string; forma_pagamento: string; valor_pago: number }[]
+}
+
+// ---------------------------------------------------------------------------
+// Aba Cascos — somente visualização
+// ---------------------------------------------------------------------------
+function AbaCascos({ cascos }: { cascos: CascosDodia }) {
+  const saldoDia = cascos.total_emprestados_hoje - cascos.total_devolvidos_hoje
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 p-3 text-center">
+          <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-1">Emprestados hoje</p>
+          <p className="text-2xl font-bold text-amber-800 dark:text-amber-200">+{cascos.total_emprestados_hoje}</p>
+        </div>
+        <div className="rounded-lg border bg-sky-50 dark:bg-sky-950/20 p-3 text-center">
+          <p className="text-xs text-sky-700 dark:text-sky-300 font-medium mb-1">Devolvidos hoje</p>
+          <p className="text-2xl font-bold text-sky-800 dark:text-sky-200">+{cascos.total_devolvidos_hoje}</p>
+        </div>
+        <div className={`rounded-lg border p-3 text-center ${saldoDia > 0 ? "bg-orange-50 dark:bg-orange-950/20" : "bg-emerald-50 dark:bg-emerald-950/20"}`}>
+          <p className={`text-xs font-medium mb-1 ${saldoDia > 0 ? "text-orange-700 dark:text-orange-300" : "text-emerald-700 dark:text-emerald-300"}`}>Saldo do dia</p>
+          <p className={`text-2xl font-bold ${saldoDia > 0 ? "text-orange-800 dark:text-orange-200" : "text-emerald-800 dark:text-emerald-200"}`}>
+            {saldoDia > 0 ? `+${saldoDia}` : saldoDia}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Package className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <span className="text-sm font-medium">Total acumulado em aberto (este motorista)</span>
+        </div>
+        <span className={`text-lg font-bold ${cascos.total_aberto_acumulado > 0 ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+          {cascos.total_aberto_acumulado} casco{cascos.total_aberto_acumulado !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {cascos.emprestados_hoje.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Emprestados hoje ({cascos.emprestados_hoje.length})
+          </p>
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground bg-muted/30">
+                  <th className="px-3 py-2 text-left font-medium">Produto</th>
+                  <th className="px-3 py-2 text-center font-medium">Qtd</th>
+                  <th className="px-3 py-2 text-left font-medium">Cliente</th>
+                  <th className="px-3 py-2 text-left font-medium">Endereço</th>
+                  <th className="px-3 py-2 text-left font-medium">Emprestado em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cascos.emprestados_hoje.map((c) => (
+                  <tr key={c.id} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-medium">{c.produto_nome}</td>
+                    <td className="px-3 py-2 text-center font-semibold text-amber-700">{c.quantidade}</td>
+                    <td className="px-3 py-2">{c.cliente_nome}</td>
+                    <td className="px-3 py-2 text-muted-foreground text-xs">{c.endereco}</td>
+                    <td className="px-3 py-2 text-muted-foreground text-xs whitespace-nowrap">{fmtDateTime(c.emprestado_em)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {cascos.devolvidos_hoje.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Devolvidos hoje ({cascos.devolvidos_hoje.length})
+          </p>
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground bg-muted/30">
+                  <th className="px-3 py-2 text-left font-medium">Produto</th>
+                  <th className="px-3 py-2 text-center font-medium">Qtd</th>
+                  <th className="px-3 py-2 text-left font-medium">Cliente</th>
+                  <th className="px-3 py-2 text-left font-medium">Endereço</th>
+                  <th className="px-3 py-2 text-left font-medium">Devolvido em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cascos.devolvidos_hoje.map((c) => (
+                  <tr key={c.id} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-medium">{c.produto_nome}</td>
+                    <td className="px-3 py-2 text-center font-semibold text-sky-700">{c.quantidade}</td>
+                    <td className="px-3 py-2">{c.cliente_nome}</td>
+                    <td className="px-3 py-2 text-muted-foreground text-xs">{c.endereco}</td>
+                    <td className="px-3 py-2 text-muted-foreground text-xs whitespace-nowrap">{fmtDateTime(c.recebido_em)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {cascos.emprestados_hoje.length === 0 && cascos.devolvidos_hoje.length === 0 && (
+        <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
+          Nenhum casco emprestado ou devolvido hoje por este motorista.
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground flex items-center gap-1">
+        <Package className="h-3 w-3" aria-hidden="true" />
+        Somente visualização — para registrar devolução acesse Recebimento de Cascos.
+      </p>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +253,7 @@ function ModalFechamento({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [aba, setAba] = useState<"resumo" | "vendas" | "produtos" | "especie" | "diferenca">("resumo")
+  const [aba, setAba] = useState<"resumo" | "vendas" | "produtos" | "cascos" | "especie" | "diferenca">("resumo")
   const [contagem, setContagem] = useState<Record<number, number>>({})
   const [retorno, setRetorno] = useState<Record<string, number>>({})
   const [justificativa, setJustificativa] = useState("")
@@ -129,6 +267,7 @@ function ModalFechamento({
   const diferenca = totalContado - resumo.total_esperado
   const temDiferenca = Math.abs(diferenca) >= 0.01
   const temCarga = resumo.carga_produtos?.length > 0
+  const cascos = resumo.cascos_do_dia
 
   const handleFechar = async () => {
     if (temDiferenca && !justificativa.trim()) {
@@ -161,15 +300,22 @@ function ModalFechamento({
     }
   }
 
-  type AbaType = "resumo" | "vendas" | "produtos" | "especie" | "diferenca"
-  const abas: AbaType[] = temCarga
-    ? ["resumo", "vendas", "produtos", "especie", "diferenca"]
-    : ["resumo", "vendas", "especie", "diferenca"]
+  type AbaType = "resumo" | "vendas" | "produtos" | "cascos" | "especie" | "diferenca"
+
+  const abas: AbaType[] = [
+    "resumo",
+    "vendas",
+    ...(temCarga ? ["produtos" as AbaType] : []),
+    "cascos",
+    "especie",
+    "diferenca",
+  ]
 
   const labelAba: Record<AbaType, string> = {
     resumo: "Resumo",
     vendas: `Vendas (${resumo.vendas.length})`,
     produtos: "Produtos",
+    cascos: cascos ? `Cascos (${cascos.total_aberto_acumulado})` : "Cascos",
     especie: "Conferência",
     diferenca: "Diferenças",
   }
@@ -189,7 +335,6 @@ function ModalFechamento({
           <DialogTitle>Fechamento — {motorista.motorista_nome}</DialogTitle>
         </DialogHeader>
 
-        {/* Abas */}
         <div className="flex gap-1 border-b overflow-x-auto">
           {abas.map((a) => (
             <button
@@ -205,231 +350,233 @@ function ModalFechamento({
               {a === "diferenca" && temDiferenca && (
                 <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-amber-500" />
               )}
+              {a === "cascos" && cascos && cascos.total_aberto_acumulado > 0 && (
+                <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-amber-500" />
+              )}
             </button>
           ))}
         </div>
 
         <div className="min-h-[360px]">
-        {aba === "resumo" && (
-          <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Fundo de troco", valor: resumo.fundo_troco, icon: <Banknote className="h-4 w-4" /> },
-                { label: "Dinheiro (vendas)", valor: resumo.total_dinheiro, icon: <Banknote className="h-4 w-4" /> },
-                { label: "Pix", valor: resumo.total_pix, icon: <QrCode className="h-4 w-4" /> },
-                { label: "Cartão Débito", valor: resumo.total_debito, icon: <CreditCard className="h-4 w-4" /> },
-                { label: "Cartão Crédito", valor: resumo.total_credito, icon: <CreditCard className="h-4 w-4" /> },
-                { label: "Fiado/Vale", valor: resumo.total_fiado, icon: <Receipt className="h-4 w-4" /> },
-              ].map((item) => (
-                <div key={item.label} className="rounded-lg border p-3">
-                  <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
-                    {item.icon}
-                    <span className="text-xs font-medium uppercase tracking-wide">{item.label}</span>
-                  </div>
-                  <p className="text-lg font-bold">{fmt(item.valor)}</p>
-                </div>
-              ))}
-            </div>
-            <div className="rounded-lg border p-3 bg-muted/30">
-              <p className="text-xs text-muted-foreground font-medium">Esperado em espécie (dinheiro + fundo)</p>
-              <p className="text-xl font-bold mt-1">{fmt(resumo.total_esperado)}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Pix, cartão e fiado não entram na contagem física
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Aba Vendas */}
-        {aba === "vendas" && (
-          <div className="rounded-lg border overflow-hidden">
-            {resumo.vendas.length === 0 ? (
-              <p className="text-sm text-muted-foreground p-4">Nenhuma venda registrada hoje.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-xs text-muted-foreground">
-                    <th className="px-3 py-2 text-left font-medium">Cliente</th>
-                    <th className="px-3 py-2 text-left font-medium">Forma</th>
-                    <th className="px-3 py-2 text-right font-medium">Valor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumo.vendas.map((v) => (
-                    <tr key={v.id} className="border-b last:border-0">
-                      <td className="px-3 py-2">{v.cliente_nome}</td>
-                      <td className="px-3 py-2">
-                        <Badge variant="outline" className="text-xs">
-                          {labelForma[v.forma_pagamento] ?? v.forma_pagamento}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium">{fmt(v.valor_pago)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-
-        {/* Aba Produtos */}
-        {aba === "produtos" && (
-          <div className="grid gap-3">
-            <p className="text-xs text-muted-foreground">
-              Informe quantos botijões de cada produto voltaram no caminhão. O sistema calcula o vendido automaticamente.
-            </p>
-            <div className="rounded-lg border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-xs text-muted-foreground bg-muted/30">
-                    <th className="px-3 py-2 text-left font-medium">Produto</th>
-                    <th className="px-3 py-2 text-center font-medium">Saiu</th>
-                    <th className="px-3 py-2 text-center font-medium">Retornou</th>
-                    <th className="px-3 py-2 text-center font-medium">Vendido</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumo.carga_produtos.map((c) => {
-                    const ret = retorno[c.produto_id] ?? 0
-                    const vendido = Math.max(0, c.carregado - ret)
-                    return (
-                      <tr key={c.produto_id} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium">{c.produto_nome}</td>
-                        <td className="px-3 py-2 text-center">{c.carregado}</td>
-                        <td className="px-3 py-2 text-center">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={c.carregado}
-                            value={retorno[c.produto_id] ?? ""}
-                            placeholder="0"
-                            onChange={(e) =>
-                              setRetorno((prev) => ({
-                                ...prev,
-                                [c.produto_id]: Number(e.target.value) || 0,
-                              }))
-                            }
-                            className="w-20 h-7 text-center mx-auto"
-                          />
-                        </td>
-                        <td className={`px-3 py-2 text-center font-semibold ${vendido > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                          {vendido}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Package className="h-3 w-3" />
-              Informativo — não bloqueia o fechamento
-            </p>
-          </div>
-        )}
-
-        {/* Aba Conferência */}
-        {aba === "especie" && (
-          <div className="grid gap-3">
-            <div className="rounded-lg border p-4">
-              <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Cédulas</p>
-              <div className="grid grid-cols-3 gap-2">
-                {CEDULAS.map((v) => (
-                  <div key={v} className="flex items-center justify-between border rounded-md px-2 py-1.5">
-                    <span className="text-sm text-muted-foreground">R$ {v}</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={contagem[v] || ""}
-                      placeholder="0"
-                      onChange={(e) =>
-                        setContagem({ ...contagem, [v]: Number(e.target.value) || 0 })
-                      }
-                      className="w-16 h-7 text-right border-0 border-b rounded-none px-1 focus-visible:ring-0"
-                    />
+          {aba === "resumo" && (
+            <div className="grid gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Fundo de troco", valor: resumo.fundo_troco, icon: <Banknote className="h-4 w-4" /> },
+                  { label: "Dinheiro (vendas)", valor: resumo.total_dinheiro, icon: <Banknote className="h-4 w-4" /> },
+                  { label: "Pix", valor: resumo.total_pix, icon: <QrCode className="h-4 w-4" /> },
+                  { label: "Cartão Débito", valor: resumo.total_debito, icon: <CreditCard className="h-4 w-4" /> },
+                  { label: "Cartão Crédito", valor: resumo.total_credito, icon: <CreditCard className="h-4 w-4" /> },
+                  { label: "Fiado/Vale", valor: resumo.total_fiado, icon: <Receipt className="h-4 w-4" /> },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg border p-3">
+                    <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                      {item.icon}
+                      <span className="text-xs font-medium uppercase tracking-wide">{item.label}</span>
+                    </div>
+                    <p className="text-lg font-bold">{fmt(item.valor)}</p>
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Moedas</p>
-              <div className="grid grid-cols-3 gap-2">
-                {MOEDAS.map((v) => (
-                  <div key={v} className="flex items-center justify-between border rounded-md px-2 py-1.5">
-                    <span className="text-sm text-muted-foreground">R$ {v.toFixed(2).replace(".", ",")}</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={contagem[v] || ""}
-                      placeholder="0"
-                      onChange={(e) =>
-                        setContagem({ ...contagem, [v]: Number(e.target.value) || 0 })
-                      }
-                      className="w-16 h-7 text-right border-0 border-b rounded-none px-1 focus-visible:ring-0"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-lg bg-foreground text-background p-4 flex justify-between items-center">
-              <span className="text-sm">Total contado</span>
-              <span className="text-xl font-bold">{fmt(totalContado)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Aba Diferenças */}
-        {aba === "diferenca" && (
-          <div className="grid gap-3">
-            <div className={`rounded-lg border p-4 ${temDiferenca ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "border-green-400 bg-green-50 dark:bg-green-950/20"}`}>
-              <div className="flex items-center gap-2 mb-3">
-                {temDiferenca
-                  ? <AlertTriangle className="h-5 w-5 text-amber-600" />
-                  : <CheckCircle className="h-5 w-5 text-green-600" />}
-                <span className={`font-semibold text-sm ${temDiferenca ? "text-amber-800 dark:text-amber-300" : "text-green-800 dark:text-green-300"}`}>
-                  {temDiferenca ? "Divergência encontrada" : "Valores conferem"}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">Esperado</p>
-                  <p className="font-semibold">{fmt(resumo.total_esperado)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Contado</p>
-                  <p className="font-semibold">{fmt(totalContado)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Diferença</p>
-                  <p className={`font-semibold ${diferenca < 0 ? "text-red-600" : diferenca > 0 ? "text-blue-600" : ""}`}>
-                    {diferenca === 0 ? "R$ 0,00" : `${diferenca > 0 ? "+" : ""}${fmt(diferenca)}`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {temDiferenca && (
-              <div className="grid gap-1.5">
-                <Label>Justificativa (obrigatória)</Label>
-                <textarea
-                  value={justificativa}
-                  onChange={(e) => setJustificativa(e.target.value)}
-                  placeholder="Descreva o motivo da diferença..."
-                  className="w-full border rounded-md p-2.5 text-sm min-h-[80px] bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Lançamento automático:{" "}
-                  {diferenca < 0
-                    ? "D: Quebra de Caixa / C: Caixa em Trânsito"
-                    : "D: Caixa em Trânsito / C: Sobra de Caixa"}{" "}
-                  — {fmt(Math.abs(diferenca))}
+              <div className="rounded-lg border p-3 bg-muted/30">
+                <p className="text-xs text-muted-foreground font-medium">Esperado em espécie (dinheiro + fundo)</p>
+                <p className="text-xl font-bold mt-1">{fmt(resumo.total_esperado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pix, cartão e fiado não entram na contagem física
                 </p>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
+          {aba === "vendas" && (
+            <div className="rounded-lg border overflow-hidden">
+              {resumo.vendas.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-4">Nenhuma venda registrada hoje.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left font-medium">Cliente</th>
+                      <th className="px-3 py-2 text-left font-medium">Forma</th>
+                      <th className="px-3 py-2 text-right font-medium">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumo.vendas.map((v) => (
+                      <tr key={v.id} className="border-b last:border-0">
+                        <td className="px-3 py-2">{v.cliente_nome}</td>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline" className="text-xs">
+                            {labelForma[v.forma_pagamento] ?? v.forma_pagamento}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium">{fmt(v.valor_pago)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {aba === "produtos" && (
+            <div className="grid gap-3">
+              <p className="text-xs text-muted-foreground">
+                Informe quantos botijões de cada produto voltaram no caminhão. O sistema calcula o vendido automaticamente.
+              </p>
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-xs text-muted-foreground bg-muted/30">
+                      <th className="px-3 py-2 text-left font-medium">Produto</th>
+                      <th className="px-3 py-2 text-center font-medium">Saiu</th>
+                      <th className="px-3 py-2 text-center font-medium">Retornou</th>
+                      <th className="px-3 py-2 text-center font-medium">Vendido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumo.carga_produtos.map((c) => {
+                      const ret = retorno[c.produto_id] ?? 0
+                      const vendido = Math.max(0, c.carregado - ret)
+                      return (
+                        <tr key={c.produto_id} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-medium">{c.produto_nome}</td>
+                          <td className="px-3 py-2 text-center">{c.carregado}</td>
+                          <td className="px-3 py-2 text-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={c.carregado}
+                              value={retorno[c.produto_id] ?? ""}
+                              placeholder="0"
+                              onChange={(e) =>
+                                setRetorno((prev) => ({
+                                  ...prev,
+                                  [c.produto_id]: Number(e.target.value) || 0,
+                                }))
+                              }
+                              className="w-20 h-7 text-center mx-auto"
+                            />
+                          </td>
+                          <td className={`px-3 py-2 text-center font-semibold ${vendido > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                            {vendido}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Package className="h-3 w-3" aria-hidden="true" />
+                Informativo — não bloqueia o fechamento
+              </p>
+            </div>
+          )}
+
+          {aba === "cascos" && cascos && (
+            <AbaCascos cascos={cascos} />
+          )}
+
+          {aba === "especie" && (
+            <div className="grid gap-3">
+              <div className="rounded-lg border p-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Cédulas</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {CEDULAS.map((v) => (
+                    <div key={v} className="flex items-center justify-between border rounded-md px-2 py-1.5">
+                      <span className="text-sm text-muted-foreground">R$ {v}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={contagem[v] || ""}
+                        placeholder="0"
+                        onChange={(e) =>
+                          setContagem({ ...contagem, [v]: Number(e.target.value) || 0 })
+                        }
+                        className="w-16 h-7 text-right border-0 border-b rounded-none px-1 focus-visible:ring-0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border p-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Moedas</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {MOEDAS.map((v) => (
+                    <div key={v} className="flex items-center justify-between border rounded-md px-2 py-1.5">
+                      <span className="text-sm text-muted-foreground">R$ {v.toFixed(2).replace(".", ",")}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={contagem[v] || ""}
+                        placeholder="0"
+                        onChange={(e) =>
+                          setContagem({ ...contagem, [v]: Number(e.target.value) || 0 })
+                        }
+                        className="w-16 h-7 text-right border-0 border-b rounded-none px-1 focus-visible:ring-0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg bg-foreground text-background p-4 flex justify-between items-center">
+                <span className="text-sm">Total contado</span>
+                <span className="text-xl font-bold">{fmt(totalContado)}</span>
+              </div>
+            </div>
+          )}
+
+          {aba === "diferenca" && (
+            <div className="grid gap-3">
+              <div className={`rounded-lg border p-4 ${temDiferenca ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "border-green-400 bg-green-50 dark:bg-green-950/20"}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  {temDiferenca
+                    ? <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    : <CheckCircle className="h-5 w-5 text-green-600" />}
+                  <span className={`font-semibold text-sm ${temDiferenca ? "text-amber-800 dark:text-amber-300" : "text-green-800 dark:text-green-300"}`}>
+                    {temDiferenca ? "Divergência encontrada" : "Valores conferem"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Esperado</p>
+                    <p className="font-semibold">{fmt(resumo.total_esperado)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Contado</p>
+                    <p className="font-semibold">{fmt(totalContado)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Diferença</p>
+                    <p className={`font-semibold ${diferenca < 0 ? "text-red-600" : diferenca > 0 ? "text-blue-600" : ""}`}>
+                      {diferenca === 0 ? "R$ 0,00" : `${diferenca > 0 ? "+" : ""}${fmt(diferenca)}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              {temDiferenca && (
+                <div className="grid gap-1.5">
+                  <Label>Justificativa (obrigatória)</Label>
+                  <textarea
+                    value={justificativa}
+                    onChange={(e) => setJustificativa(e.target.value)}
+                    placeholder="Descreva o motivo da diferença..."
+                    className="w-full border rounded-md p-2.5 text-sm min-h-[80px] bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Lançamento automático:{" "}
+                    {diferenca < 0
+                      ? "D: Quebra de Caixa / C: Caixa em Trânsito"
+                      : "D: Caixa em Trânsito / C: Sobra de Caixa"}{" "}
+                    — {fmt(Math.abs(diferenca))}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
         <DialogFooter className="mt-2">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
@@ -532,18 +679,13 @@ function FechamentoDia() {
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-2">
                 {m.fechado ? (
                   <Badge variant="outline" className="text-green-600 border-green-600">
                     Fechado
                   </Badge>
                 ) : m.aberto ? (
-                  <Button
-                    size="sm"
-                    onClick={() => handleAbrirFechamento(m)}
-                    disabled={loadingResumo}
-                  >
+                  <Button size="sm" onClick={() => handleAbrirFechamento(m)} disabled={loadingResumo}>
                     {loadingResumo ? "Carregando..." : "Fechar dia"}
                   </Button>
                 ) : (
@@ -566,4 +708,3 @@ function FechamentoDia() {
     </div>
   )
 }
-
