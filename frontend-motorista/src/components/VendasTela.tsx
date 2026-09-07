@@ -1,9 +1,7 @@
-// [mcp-local harness] feature: vendas-motorista | plano: d865e550 | 2026-09-07 12:15:21
-// VendasTela: orquestrador do fluxo 4 etapas com indicador de progresso e tela de sucesso
-// VendasTela — orquestra o fluxo de 4 etapas (produtos → cliente → pagamento → resumo)
-// O motorista logado é identificado automaticamente; sem combo de atribuição.
+// [mcp-local harness] feature: fix-visual-steps-malote-hub | plano: 5083bdc4 | 2026-09-07 18:46:06
+// Steps no estilo iFood: fundo branco, step ativo vermelho #EA1D2C com texto branco, passados com check verde, futuros cinza claro
+// VendasTela: orquestrador do fluxo 4 etapas com indicador de progresso estilo iFood
 import { useState, type CSSProperties } from "react"
-import { CORES_APP as C } from "../theme"
 import type { UserMe } from "../lib/auth"
 import type { Cliente, DadosPagamento, ItemSacola } from "../lib/vendas"
 import EtapaCliente from "./vendas/EtapaCliente"
@@ -50,24 +48,57 @@ export default function VendasTela({ token, usuario }: Props) {
         <div style={s.sucessoIcone}>✓</div>
         <p style={s.sucessoTitulo}>Venda registrada!</p>
         <p style={s.sucessoSub}>A venda foi salva com sucesso.</p>
-        <button style={s.btnNova} onClick={resetar}>
-          + Nova venda
-        </button>
+        <button style={s.btnNova} onClick={resetar}>+ Nova venda</button>
       </div>
     )
   }
 
+  const etapaAtualIdx = ETAPAS.indexOf(etapa as Etapa)
+
   return (
     <div style={s.pagina}>
-      {/* Indicador de etapas */}
-      <div style={s.steps}>
+
+      {/* ── Barra de steps estilo iFood ── */}
+      <div style={s.stepsBar}>
         {ETAPAS.map((e, idx) => {
-          const etapaAtualIdx = ETAPAS.indexOf(etapa as Etapa)
-          const ativo = e === etapa
+          const ativo  = idx === etapaAtualIdx
           const passado = idx < etapaAtualIdx
+          const futuro  = idx > etapaAtualIdx
+
+          // Separador entre steps (exceto antes do primeiro)
+          const separador = idx > 0 && (
+            <div style={{
+              ...s.separador,
+              background: idx <= etapaAtualIdx ? "#EA1D2C" : "#E5E7EB",
+            }} />
+          )
+
           return (
-            <div key={e} style={{ ...s.step, ...(ativo ? s.stepAtivo : passado ? s.stepPassado : {}) }}>
-              {ETAPA_LABEL[e]}
+            <div key={e} style={s.stepWrapper}>
+              {separador}
+              <div style={s.stepItem}>
+                {/* Bolinha */}
+                <div style={{
+                  ...s.bolinha,
+                  background: ativo ? "#EA1D2C" : passado ? "#EA1D2C" : "#E5E7EB",
+                  border: ativo ? "2px solid #EA1D2C" : passado ? "2px solid #EA1D2C" : "2px solid #D1D5DB",
+                }}>
+                  {passado
+                    ? <span style={s.bolinhaCheck}>✓</span>
+                    : <span style={{ ...s.bolinhaNum, color: ativo ? "#fff" : "#9CA3AF" }}>
+                        {idx + 1}
+                      </span>
+                  }
+                </div>
+                {/* Label */}
+                <span style={{
+                  ...s.stepLabel,
+                  color: ativo ? "#EA1D2C" : passado ? "#374151" : "#9CA3AF",
+                  fontWeight: ativo ? 700 : futuro ? 400 : 500,
+                }}>
+                  {ETAPA_LABEL[e]}
+                </span>
+              </div>
             </div>
           )
         })}
@@ -82,7 +113,6 @@ export default function VendasTela({ token, usuario }: Props) {
           onProximo={() => setEtapa("cliente")}
         />
       )}
-
       {etapa === "cliente" && (
         <EtapaCliente
           token={token}
@@ -94,7 +124,6 @@ export default function VendasTela({ token, usuario }: Props) {
           onVoltar={() => setEtapa("produtos")}
         />
       )}
-
       {etapa === "pagamento" && (
         <EtapaPagamento
           token={token}
@@ -105,7 +134,6 @@ export default function VendasTela({ token, usuario }: Props) {
           onProximo={() => setEtapa("resumo")}
         />
       )}
-
       {etapa === "resumo" && cliente && pagamento && (
         <ResumoConfirmacao
           token={token}
@@ -122,30 +150,60 @@ export default function VendasTela({ token, usuario }: Props) {
 }
 
 const s: Record<string, CSSProperties> = {
-  pagina: { minHeight: "100%", background: C.fundo },
-  steps: {
+  pagina: { minHeight: "100%", background: "#fff" },
+
+  // ── Steps bar ──
+  stepsBar: {
     display: "flex",
-    background: "#1e2912",
-    padding: "8px 12px",
-    gap: "4px",
+    alignItems: "center",
+    background: "#fff",
+    borderBottom: "1px solid #F3F4F6",
+    padding: "12px 16px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
   },
-  step: {
+  stepWrapper: {
+    display: "flex",
+    alignItems: "center",
     flex: 1,
-    textAlign: "center" as const,
+  },
+  separador: {
+    height: "2px",
+    flex: 1,
+    minWidth: "8px",
+    borderRadius: "1px",
+  },
+  stepItem: {
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center",
+    gap: "3px",
+    flexShrink: 0,
+  },
+  bolinha: {
+    width: "24px",
+    height: "24px",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bolinhaCheck: {
+    fontSize: "13px",
+    color: "#fff",
+    fontWeight: 700,
+    lineHeight: 1,
+  },
+  bolinhaNum: {
     fontSize: "12px",
-    padding: "5px 4px",
-    borderRadius: "6px",
-    color: "#C5C9A4",
-    fontWeight: 400,
-  },
-  stepAtivo: {
-    background: "#606C38",
-    color: "#F8FAFC",
     fontWeight: 600,
+    lineHeight: 1,
   },
-  stepPassado: {
-    color: "#8aab6a",
+  stepLabel: {
+    fontSize: "10px",
+    letterSpacing: "0.2px",
   },
+
+  // ── Sucesso ──
   sucesso: {
     display: "flex",
     flexDirection: "column" as const,
@@ -154,24 +212,25 @@ const s: Record<string, CSSProperties> = {
     minHeight: "60vh",
     padding: "2rem",
     gap: "0.75rem",
+    background: "#fff",
   },
   sucessoIcone: {
     width: "64px", height: "64px",
     borderRadius: "50%",
-    background: "#606C38",
-    color: "#F8FAFC",
+    background: "#EA1D2C",
+    color: "#fff",
     fontSize: "28px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontWeight: 700,
   },
-  sucessoTitulo: { fontSize: "20px", fontWeight: 700, color: C.texto, margin: 0 },
-  sucessoSub: { fontSize: "14px", color: C.textoSecundario, margin: 0 },
+  sucessoTitulo: { fontSize: "20px", fontWeight: 700, color: "#111827", margin: 0 },
+  sucessoSub:    { fontSize: "14px", color: "#6B7280", margin: 0 },
   btnNova: {
     marginTop: "1rem",
-    background: "#606C38",
-    color: "#F8FAFC",
+    background: "#EA1D2C",
+    color: "#fff",
     border: "none",
     borderRadius: "12px",
     padding: "14px 32px",

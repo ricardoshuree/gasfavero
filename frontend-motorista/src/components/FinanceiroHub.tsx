@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: financeiro-hub-menu | plano: 1a49a4e6 | 2026-09-07 18:23:00
-// Hub do módulo Financeiro — blocos de menu no estilo aprovado pelo Giovani (v1.0). Cada bloco navega para a sub-tela correspondente via onNavegar.
+// [mcp-local harness] feature: fix-visual-steps-malote-hub | plano: 5083bdc4 | 2026-09-07 18:46:26
+// Label "Recebimento de Vale" corrigido para "Recebimento de Fiado"
 // Hub do módulo Financeiro
 // Tela de entrada com blocos de menu — estilo aprovado pelo Giovani (v1.0)
 // Cada bloco chama onNavegar() com o id da sub-tela correspondente
@@ -29,8 +29,8 @@ const BLOCOS: Bloco[] = [
   },
   {
     id: "recebimento_vale",
-    titulo: "Recebimento de Vale",
-    descricao: "Só os vales dos seus clientes",
+    titulo: "Recebimento de Fiado",
+    descricao: "Receba os vales em aberto dos seus clientes",
     emoji: "📄",
   },
   {

@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: malote-motorista-fix | plano: c756f0d7 | 2026-09-07 13:45:20
-// Remove fmtData nao utilizada
+// [mcp-local harness] feature: fix-visual-steps-malote-hub | plano: 5083bdc4 | 2026-09-07 18:47:28
+// Fix tela branca: remover return null silencioso, garantir que loading e erro sempre renderizam conteúdo visível
 // Tela Malote do Motorista
 // Visão consolidada do dia para apresentar ao gerente no fechamento presencial.
 // Somente leitura — a conferência de diferenças e o fechamento são feitos pelo gerente no web.
@@ -61,6 +61,8 @@ export default function MaloteTela({ token, usuario }: Props) {
   const nomeMotorista = usuario.full_name ?? usuario.email
 
   useEffect(() => {
+    setCarregando(true)
+    setErro("")
     buscarResumoMalote(token, usuario.id)
       .then(setResumo)
       .catch(e => setErro(e.message ?? "Não foi possível carregar o malote."))
@@ -74,21 +76,37 @@ export default function MaloteTela({ token, usuario }: Props) {
     window.open(url, "_blank")
   }
 
-  if (carregando) return <p style={s.info}>Carregando malote...</p>
-  if (erro) return (
-    <div style={s.erroBox}>
-      <p style={s.erroTitulo}>Não foi possível carregar o malote.</p>
-      <p style={s.erroSub}>{erro}</p>
-      <p style={s.erroSub}>Verifique se a abertura do dia foi registrada pelo gerente.</p>
-    </div>
-  )
-  if (!resumo) return null
+  // ── Loading ──
+  if (carregando) {
+    return (
+      <div style={s.centralizado}>
+        <p style={s.info}>Carregando malote...</p>
+      </div>
+    )
+  }
 
+  // ── Erro (inclui abertura do dia não registrada) ──
+  if (erro || !resumo) {
+    return (
+      <div style={s.erroBox}>
+        <div style={s.erroIcone}>📋</div>
+        <p style={s.erroTitulo}>Malote indisponível</p>
+        <p style={s.erroSub}>
+          {erro || "Não foi possível carregar os dados."}
+        </p>
+        <p style={s.erroSub}>
+          Verifique se o gerente já registrou a <strong>abertura do dia</strong> no sistema web.
+        </p>
+      </div>
+    )
+  }
+
+  // ── Conteúdo ──
   const totalEntrega = resumo.total_geral
-  const pendFiados = resumo.fiados_em_aberto.length
-  const pendValeGas = resumo.vale_gas_aberto.length
-  const pendGasPovo = resumo.gas_povo_aberto.length
-  const totalPend = resumo.fiados_em_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
+  const pendFiados   = resumo.fiados_em_aberto.length
+  const pendValeGas  = resumo.vale_gas_aberto.length
+  const pendGasPovo  = resumo.gas_povo_aberto.length
+  const totalPend    = resumo.fiados_em_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
     + resumo.vale_gas_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
     + resumo.gas_povo_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
 
@@ -107,7 +125,6 @@ export default function MaloteTela({ token, usuario }: Props) {
 
       <div style={s.corpo}>
 
-        {/* Produtos — tabela */}
         <Secao titulo="🛢 Cilindros — conferir no caminhão">
           {resumo.carga_produtos.length === 0 ? (
             <div style={s.semDados}>Sem carga registrada na abertura do dia.</div>
@@ -140,22 +157,20 @@ export default function MaloteTela({ token, usuario }: Props) {
           </div>
         </Secao>
 
-        {/* Dinheiro a entregar */}
         <Secao titulo="💵 Dinheiro a entregar">
-          <Linha label="Espécie (dinheiro)" valor={fmt(resumo.total_dinheiro)} cor="#3a5c1a" />
-          <Linha label="Pix" valor={fmt(resumo.total_pix)} cor="#3a5c1a" />
-          <Linha label="Débito (maquininha)" valor={fmt(resumo.total_debito)} cor="#b45309" sub="apresentar recibos" />
-          <Linha label="Crédito (maquininha)" valor={fmt(resumo.total_credito)} cor="#b45309" sub="apresentar recibos" />
+          <Linha label="Espécie (dinheiro)"      valor={fmt(resumo.total_dinheiro)}       cor="#3a5c1a" />
+          <Linha label="Pix"                     valor={fmt(resumo.total_pix)}            cor="#3a5c1a" />
+          <Linha label="Débito (maquininha)"     valor={fmt(resumo.total_debito)}         cor="#b45309" sub="apresentar recibos" />
+          <Linha label="Crédito (maquininha)"    valor={fmt(resumo.total_credito)}        cor="#b45309" sub="apresentar recibos" />
           <Linha
             label="Fiados recebidos hoje"
             valor={fmt(resumo.total_fiado_recebido)}
             cor="#3a5c1a"
-            sub={resumo.fiados_recebidos.length > 0 ? `${resumo.fiados_recebidos.length} cliente(s) — toque para ver` : undefined}
+            sub={resumo.fiados_recebidos.length > 0 ? `${resumo.fiados_recebidos.length} cliente(s)` : undefined}
           />
           <LinhaTotalSecao label="Subtotal" valor={fmt(totalEntrega)} />
         </Secao>
 
-        {/* Detalhe dos fiados recebidos hoje */}
         {resumo.fiados_recebidos.length > 0 && (
           <div style={s.secao}>
             <button style={s.btnExpandir} onClick={() => setMostrarFiados(p => !p)}>
@@ -181,7 +196,6 @@ export default function MaloteTela({ token, usuario }: Props) {
           </div>
         )}
 
-        {/* Pendências */}
         {(pendFiados > 0 || pendValeGas > 0 || pendGasPovo > 0) && (
           <Secao titulo="⏳ Pendências — não entrega hoje">
             {pendFiados > 0 && (
@@ -222,29 +236,31 @@ export default function MaloteTela({ token, usuario }: Props) {
 }
 
 const s: Record<string, CSSProperties> = {
-  pagina: { background: C.fundo, minHeight: "100%", paddingBottom: "80px" },
-  totalBox: { background: "#283618", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  totalLabel: { color: "#C5C9A4", fontSize: "12px", marginBottom: "4px" },
-  totalValor: { color: "#F8FAFC", fontSize: "22px", fontWeight: 700 },
-  totalSub: { color: "#C5C9A4", fontSize: "11px" },
-  corpo: { padding: "10px 14px 16px" },
-  secao: { marginBottom: "14px" },
-  secaoTitulo: { fontSize: "10px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.6px", marginBottom: "6px" },
-  secaoCard: { background: "#f5f5f5", borderRadius: "10px", overflow: "hidden" },
-  linha: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 12px", borderBottom: `0.5px solid #e5e7eb` },
-  linhaLabel: { fontSize: "13px", color: "#374151" },
-  linhaSub: { fontSize: "11px", color: C.textoSecundario, marginTop: "1px" },
-  linhaValor: { fontSize: "13px", fontWeight: 700, flexShrink: 0, marginLeft: "8px" },
-  linhaTotal: { display: "flex", justifyContent: "space-between", padding: "9px 12px", fontSize: "14px", fontWeight: 700, color: C.texto, background: "#fff", borderTop: `0.5px solid #e5e7eb` },
-  tabela: { width: "100%", borderCollapse: "collapse" as const, fontSize: "13px" },
-  th: { padding: "8px 10px", fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.4px", borderBottom: `1px solid #e5e7eb`, textAlign: "left" as const },
-  td: { padding: "9px 10px", color: C.texto, borderBottom: `0.5px solid #f0f0f0`, fontSize: "14px" },
-  avisoTabela: { fontSize: "11px", color: C.textoSecundario, padding: "6px 12px", background: "#f5f5f5" },
-  semDados: { padding: "12px", fontSize: "13px", color: C.textoSecundario, textAlign: "center" as const },
-  info: { textAlign: "center" as const, color: C.textoSecundario, fontSize: "14px", padding: "2rem" },
-  erroBox: { padding: "2rem 1.5rem", textAlign: "center" as const },
-  erroTitulo: { fontSize: "15px", fontWeight: 600, color: C.texto, margin: "0 0 6px" },
-  erroSub: { fontSize: "13px", color: C.textoSecundario, margin: "4px 0" },
-  btnExpandir: { width: "100%", background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "9px 14px", fontSize: "13px", color: "#606C38", fontWeight: 600, cursor: "pointer", textAlign: "left" as const, marginBottom: "6px" },
+  pagina:        { background: C.fundo, minHeight: "100%", paddingBottom: "80px" },
+  centralizado:  { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh" },
+  totalBox:      { background: "#283618", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  totalLabel:    { color: "#C5C9A4", fontSize: "12px", marginBottom: "4px" },
+  totalValor:    { color: "#F8FAFC", fontSize: "22px", fontWeight: 700 },
+  totalSub:      { color: "#C5C9A4", fontSize: "11px" },
+  corpo:         { padding: "10px 14px 16px" },
+  secao:         { marginBottom: "14px" },
+  secaoTitulo:   { fontSize: "10px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.6px", marginBottom: "6px" },
+  secaoCard:     { background: "#f5f5f5", borderRadius: "10px", overflow: "hidden" },
+  linha:         { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 12px", borderBottom: `0.5px solid #e5e7eb` },
+  linhaLabel:    { fontSize: "13px", color: "#374151" },
+  linhaSub:      { fontSize: "11px", color: C.textoSecundario, marginTop: "1px" },
+  linhaValor:    { fontSize: "13px", fontWeight: 700, flexShrink: 0, marginLeft: "8px" },
+  linhaTotal:    { display: "flex", justifyContent: "space-between", padding: "9px 12px", fontSize: "14px", fontWeight: 700, color: C.texto, background: "#fff", borderTop: `0.5px solid #e5e7eb` },
+  tabela:        { width: "100%", borderCollapse: "collapse" as const, fontSize: "13px" },
+  th:            { padding: "8px 10px", fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.4px", borderBottom: `1px solid #e5e7eb`, textAlign: "left" as const },
+  td:            { padding: "9px 10px", color: C.texto, borderBottom: `0.5px solid #f0f0f0`, fontSize: "14px" },
+  avisoTabela:   { fontSize: "11px", color: C.textoSecundario, padding: "6px 12px", background: "#f5f5f5" },
+  semDados:      { padding: "12px", fontSize: "13px", color: C.textoSecundario, textAlign: "center" as const },
+  info:          { textAlign: "center" as const, color: C.textoSecundario, fontSize: "14px", padding: "2rem" },
+  erroBox:       { padding: "3rem 2rem", textAlign: "center" as const },
+  erroIcone:     { fontSize: "40px", marginBottom: "12px" },
+  erroTitulo:    { fontSize: "16px", fontWeight: 700, color: C.texto, margin: "0 0 8px" },
+  erroSub:       { fontSize: "13px", color: C.textoSecundario, margin: "4px 0", lineHeight: "1.5" },
+  btnExpandir:   { width: "100%", background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "9px 14px", fontSize: "13px", color: "#606C38", fontWeight: 600, cursor: "pointer", textAlign: "left" as const, marginBottom: "6px" },
   btnCompartilhar: { display: "block", width: "100%", background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "12px", padding: "14px", fontSize: "15px", fontWeight: 600, cursor: "pointer", textAlign: "center" as const, boxSizing: "border-box" as const, marginTop: "4px" },
 }
