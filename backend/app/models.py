@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: venda-edicao | plano: ee66766a | 2026-09-06 00:51:12
-# Adiciona VendaLog, VendaLogPublic, VendaEditarRequest, status/cancelamento em Venda e VendaPublic
+# [mcp-local harness] feature: emprestimo_casco | plano: 1c0b80ad | 2026-09-07 15:09:56
+# Adiciona modelo EmprestimoCasco, schemas Public/Create/Receber/Confirmar e CascoItem em VendaCreate
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -463,12 +463,10 @@ class Venda(SQLModel, table=True):
     forma_pagamento: str = Field(max_length=20)
     vale_id: uuid.UUID | None = Field(default=None, foreign_key="vale.id", ondelete="RESTRICT")
     data_pagamento_vale: date | None = Field(default=None)
-    # Campos para Vale Gas (migration s4t5u6v7w8x9)
     vale_gas_numero: int | None = Field(default=None)
     vale_gas_bloco_id: uuid.UUID | None = Field(
         default=None, foreign_key="bloco_vale_gas.id", ondelete="RESTRICT"
     )
-    # Campos para Gas do Povo (migration u6v7w8x9y0z1)
     gas_povo_frete: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
     gas_povo_frete_recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     valor_total: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
@@ -479,8 +477,6 @@ class Venda(SQLModel, table=True):
     recebido_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
     criado_por_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
-    # Campos de cancelamento e status (migration v7w8x9y0z1a2)
-    # status: 'ativa' | 'cancelada'
     status: str = Field(default="ativa", max_length=20)
     cancelada_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     cancelada_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
@@ -497,7 +493,7 @@ class VendaItem(SQLModel, table=True):
 
 
 class VendaLog(SQLModel, table=True):
-    """Auditoria de edicoes de venda — mesmo padrao do abertura_dia_log."""
+    """Auditoria de edicoes de venda."""
     __tablename__ = "venda_log"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
@@ -507,6 +503,86 @@ class VendaLog(SQLModel, table=True):
     editado_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
     editado_em: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
+
+# ---------------------------------------------------------------------------
+# Emprestimo de Casco
+# ---------------------------------------------------------------------------
+
+class EmprestimoCasco(SQLModel, table=True):
+    """
+    Registra cascos emprestados ao cliente em uma venda.
+
+    Fluxo de devolução (dupla checagem — mesmo padrão do Fiado):
+      recebido_em  -> motorista ou gerente registra devolução física
+      confirmado_em -> gerente confirma e dá baixa formal
+    """
+    __tablename__ = "emprestimo_casco"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="RESTRICT")
+    produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="RESTRICT")
+    quantidade: int
+    motorista_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
+    recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    recebido_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    confirmado_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    confirmado_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+
+
+class CascoItemCreate(SQLModel):
+    """Item de casco emprestado dentro de uma VendaCreate."""
+    produto_id: uuid.UUID
+    quantidade: int = Field(gt=0)
+
+
+class EmprestimoCascoPublic(SQLModel):
+    id: uuid.UUID
+    venda_id: uuid.UUID
+    produto_id: uuid.UUID
+    produto_nome: str
+    quantidade: int
+    motorista_id: uuid.UUID | None = None
+    motorista_nome: str | None = None
+    cliente_id: uuid.UUID
+    cliente_nome: str
+    # Status de devolucao
+    recebido_em: datetime | None = None
+    recebido_por_nome: str | None = None
+    confirmado_em: datetime | None = None
+    confirmado_por_nome: str | None = None
+    # Campos calculados
+    dias_em_aberto: int = 0
+    status: str  # "emprestado" | "recebido_aguardando" | "devolvido"
+    created_at: datetime
+
+
+class EmprestimosCascoPublic(SQLModel):
+    data: list[EmprestimoCascoPublic]
+    count: int
+    total_cascos_abertos: int
+
+
+class EmprestimoCascoReceberRequest(SQLModel):
+    """Payload para motorista/gerente registrar devolucao fisica do casco."""
+    quantidade_devolvida: int | None = Field(default=None, gt=0)
+
+
+class EmprestimoCascoConfirmarRequest(SQLModel):
+    """Payload para gerente confirmar e dar baixa formal (dupla checagem)."""
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class CascosClientePublic(SQLModel):
+    """Resumo de cascos em aberto de um cliente — exibido no historico de vendas."""
+    cliente_id: uuid.UUID
+    total_cascos_abertos: int
+    cascos: list[EmprestimoCascoPublic]
+
+
+# ---------------------------------------------------------------------------
+# VendaCreate — com campo opcional de cascos
+# ---------------------------------------------------------------------------
 
 class VendaItemCreate(SQLModel):
     produto_id: uuid.UUID
@@ -520,22 +596,17 @@ class VendaCreate(SQLModel):
     forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
-    # Campos para Vale Gas
     vale_gas_numero: int | None = None
     vale_gas_bloco_id: uuid.UUID | None = None
-    # Campos para Gas do Povo
     gas_povo_frete: Decimal | None = Field(default=None, gt=0, decimal_places=2)
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
     data_venda: date | None = None
     itens: list[VendaItemCreate] = Field(min_length=1)
+    # Cascos emprestados nesta venda (opcional — lista vazia = sem emprestimo)
+    cascos: list[CascoItemCreate] = Field(default_factory=list)
 
 
 class VendaEditarRequest(SQLModel):
-    """
-    Edicao simples de venda — so campos sem impacto estrutural complexo.
-    Forma de pagamento: apenas as formas 'simples' (cartao/pix/dinheiro) podem ser
-    trocadas entre si. Fiado, Vale Gas e Gas do Povo requerem cancelar e refazer.
-    """
     forma_pagamento: str | None = None
     valor_pago: Decimal | None = Field(default=None, gt=0, decimal_places=2)
     data_venda: date | None = None
@@ -572,7 +643,6 @@ class VendaPublic(SQLModel):
     data_pagamento_vale: date | None = None
     vale_gas_numero: int | None = None
     vale_gas_estabelecimento: str | None = None
-    # Gas do Povo
     gas_povo_frete: Decimal | None = None
     gas_povo_frete_recebido_em: datetime | None = None
     valor_total: Decimal
@@ -581,16 +651,16 @@ class VendaPublic(SQLModel):
     pago_em: datetime | None = None
     recebido_em: datetime | None = None
     recebido_por_nome: str | None = None
-    # Status e cancelamento
     status: str = "ativa"
     cancelada_em: datetime | None = None
     cancelada_por_nome: str | None = None
-    # Log de edicoes
     logs_edicao: list[VendaLogPublic] = []
     qtd_edicoes: int = 0
     criado_por_id: uuid.UUID
     created_at: datetime
     itens: list[VendaItemPublic] = []
+    # Cascos emprestados nesta venda (preenchido pelo endpoint de venda)
+    cascos_emprestados: list[EmprestimoCascoPublic] = []
 
 
 class VendasPublic(SQLModel):
@@ -922,7 +992,6 @@ class BlocosValeGasPublic(SQLModel):
 # ---------------------------------------------------------------------------
 
 class GasPovoVendaPublic(SQLModel):
-    """Venda Gas do Povo com dados relevantes para o painel de recebimento."""
     id: uuid.UUID
     cliente_id: uuid.UUID
     cliente_nome: str

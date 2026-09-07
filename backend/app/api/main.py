@@ -1,8 +1,9 @@
-# [mcp-local harness] feature: gas-povo | plano: 91907a1a | 2026-09-06 00:07:12
-# Registra gas_povo.router
+# [mcp-local harness] feature: emprestimo_casco | plano: 1c0b80ad | 2026-09-07 15:10:46
+# Registra cascos.router no api_router
 from fastapi import APIRouter
 
 from app.api.routes import (
+    cascos,
     clientes,
     vale_gas,
     gas_povo,
@@ -35,6 +36,7 @@ api_router.include_router(clientes.router)
 api_router.include_router(precos.router)
 api_router.include_router(vales.router)
 api_router.include_router(vendas.router)
+api_router.include_router(cascos.router)
 api_router.include_router(delegacao.router)
 api_router.include_router(fechamento.router)
 api_router.include_router(vale_gas.router)
