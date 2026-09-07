@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: gas-povo | plano: 9b775808 | 2026-09-06 00:12:09
-// Adiciona grupo Gas do Povo com item Recebimento Gas do Povo no sidebar
+// [mcp-local harness] feature: emprestimo_casco | plano: 1b682768 | 2026-09-07 16:11:45
+// Sidebar: novo grupo Recebimentos (Cascos + Vale Gás + Gás do Povo), Bloco de Vale Gás move para Cadastros, grupos Vale Gás e Gás do Povo removidos
 import {
   AlertTriangle,
   Banknote,
@@ -54,23 +54,18 @@ const MODULE_GROUPS: ModuleGroup[] = [
   {
     label: "Vendas",
     items: [
-      { module: "vendas",        icon: ShoppingCart,  title: "Vendas",                path: "/vendas" },
-      { module: "vendas",        icon: HandCoins,     title: "Recebimento de Fiado",  path: "/recebimento-vale" },
-      { module: "livro_vendas",  icon: Book,          title: "Livro de Vendas",       path: "/livro-vendas" },
-      { module: "inadimplencia", icon: AlertTriangle, title: "Inadimplentes",         path: "/inadimplentes" },
+      { module: "vendas",        icon: ShoppingCart,  title: "Vendas",               path: "/vendas" },
+      { module: "vendas",        icon: HandCoins,     title: "Recebimento de Fiado", path: "/recebimento-vale" },
+      { module: "livro_vendas",  icon: Book,          title: "Livro de Vendas",      path: "/livro-vendas" },
+      { module: "inadimplencia", icon: AlertTriangle, title: "Inadimplentes",        path: "/inadimplentes" },
     ],
   },
   {
-    label: "Vale Gás",
+    label: "Recebimentos",
     items: [
-      { module: "vale_gas", icon: Flame,  title: "Bloco de Vale Gás",        path: "/vale-gas" },
-      { module: "vale_gas", icon: Wallet, title: "Recebimento de Vale Gás",  path: "/recebimento-vale-gas" },
-    ],
-  },
-  {
-    label: "Gás do Povo",
-    items: [
-      { module: "gas_povo", icon: Truck, title: "Recebimento Gás do Povo", path: "/recebimento-gas-povo" },
+      { module: "cascos",   icon: Package,  title: "Recebimento de Cascos",   path: "/recebimento-cascos" },
+      { module: "vale_gas", icon: Wallet,   title: "Recebimento de Vale Gás", path: "/recebimento-vale-gas" },
+      { module: "gas_povo", icon: Truck,    title: "Recebimento Gás do Povo", path: "/recebimento-gas-povo" },
     ],
   },
   {
@@ -87,10 +82,11 @@ const MODULE_GROUPS: ModuleGroup[] = [
   {
     label: "Cadastros",
     items: [
-      { module: "produtos",  icon: Box,        title: "Produtos",        path: "/produtos" },
-      { module: "produtos",  icon: Banknote,   title: "Preços",          path: "/precos" },
-      { module: "clientes",  icon: UsersRound, title: "Clientes",        path: "/clientes" },
-      { module: "vales",     icon: Ticket,     title: "Bloco de Fiados", path: "/vales" },
+      { module: "produtos",  icon: Box,        title: "Produtos",            path: "/produtos" },
+      { module: "produtos",  icon: Banknote,   title: "Preços",              path: "/precos" },
+      { module: "clientes",  icon: UsersRound, title: "Clientes",            path: "/clientes" },
+      { module: "vales",     icon: Ticket,     title: "Bloco de Fiados",     path: "/vales" },
+      { module: "vale_gas",  icon: Flame,      title: "Bloco de Vale Gás",   path: "/vale-gas" },
     ],
   },
   {
@@ -126,7 +122,7 @@ export function AppSidebar() {
     const adminGroup = groups.find((g) => g.label === "Administração")
     if (adminGroup) {
       if (!adminGroup.items.find((i) => i.path === "/admin" && i.title === "Admin")) {
-        adminGroup.items.push({ icon: Package,     title: "Admin",      path: "/admin" })
+        adminGroup.items.push({ icon: Package, title: "Admin", path: "/admin" })
       }
       adminGroup.items.push({ icon: ShieldCheck, title: "Permissões", path: "/permissions" })
     }

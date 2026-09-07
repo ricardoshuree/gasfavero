@@ -1,10 +1,10 @@
-// [mcp-local harness] feature: panel-cancelar-edicao | plano: 17e37098 | 2026-09-06 01:20:27
-// Adiciona botao Cancelar edicao laranja; dialog de confirmacao de cancelamento mais destacado com borda e icone; botao Fechar para vendas canceladas
+// [mcp-local harness] feature: emprestimo_casco | plano: 1b682768 | 2026-09-07 16:11:17
+// Adiciona ícone Package+⚠️ na coluna status quando a venda tem casco em aberto, cruzando com CascosService.readCascosEmAberto
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, ChevronLeft, ChevronRight, Search, XCircle } from "lucide-react"
+import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
 
-import { type VendaPublic, VendasService } from "@/client"
+import { CascosService, type VendaPublic, VendasService } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -80,32 +80,55 @@ function isAtrasado(dataVendaISO: string): boolean {
   return dataVenda <= limite
 }
 
-function StatusBadge({ venda }: { venda: VendaPublic }) {
+function StatusBadge({
+  venda,
+  temCascoAberto,
+}: {
+  venda: VendaPublic
+  temCascoAberto: boolean
+}) {
+  let badge: React.ReactNode
+
   if (venda.status === "cancelada") {
-    return (
+    badge = (
       <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-medium text-white">
         Cancelada
       </span>
     )
-  }
-  if (venda.pago_em) {
-    return (
+  } else if (venda.pago_em) {
+    badge = (
       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
         Pago
       </span>
     )
-  }
-  if (venda.forma_pagamento === "vale" && isAtrasado(venda.data_venda)) {
-    return (
+  } else if (venda.forma_pagamento === "vale" && isAtrasado(venda.data_venda)) {
+    badge = (
       <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs text-destructive">
         Em atraso
       </span>
     )
+  } else {
+    badge = (
+      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+        Em aberto
+      </span>
+    )
   }
+
   return (
-    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-      Em aberto
-    </span>
+    <div className="flex items-center gap-1.5">
+      {badge}
+      {temCascoAberto && (
+        <span
+          title="Casco emprestado"
+          className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400"
+          aria-label="Casco emprestado"
+        >
+          <Package className="h-3.5 w-3.5" aria-hidden="true" />
+          ⚠️
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -150,7 +173,6 @@ function VendaEditPanel({
   const trocouParaComplexo = !FORMAS_SIMPLES.includes(formaPagamento) && formaPagamento !== venda.forma_pagamento
   const qtdEdicoes = venda.qtd_edicoes ?? 0
 
-  // Verifica se houve alguma alteracao nos campos
   const houveAlteracao =
     formaPagamento !== venda.forma_pagamento ||
     valorPago !== String(venda.valor_pago) ||
@@ -195,8 +217,6 @@ function VendaEditPanel({
 
   return (
     <div className="flex flex-col gap-5 p-1">
-
-      {/* Dados da venda */}
       <div className="rounded-lg border bg-muted/30 p-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Cliente</span>
@@ -225,7 +245,6 @@ function VendaEditPanel({
         )}
       </div>
 
-      {/* Status cancelada */}
       {isCancelada && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2">
           <p className="text-sm font-medium text-destructive">Venda cancelada</p>
@@ -235,7 +254,6 @@ function VendaEditPanel({
         </div>
       )}
 
-      {/* Formulario de edicao */}
       {!isCancelada && canEdit && (
         <div className="flex flex-col gap-4">
           <div className="grid gap-1.5">
@@ -268,47 +286,25 @@ function VendaEditPanel({
 
           <div className="grid gap-1.5">
             <Label htmlFor="ep-valor">Valor pago (R$)</Label>
-            <Input
-              id="ep-valor"
-              type="number"
-              step="0.01"
-              min="0"
-              value={valorPago}
-              onChange={(e) => setValorPago(e.target.value)}
-            />
+            <Input id="ep-valor" type="number" step="0.01" min="0" value={valorPago} onChange={(e) => setValorPago(e.target.value)} />
           </div>
 
           <div className="grid gap-1.5">
             <Label htmlFor="ep-data">Data da venda</Label>
-            <Input
-              id="ep-data"
-              type="date"
-              value={dataVenda}
-              onChange={(e) => setDataVenda(e.target.value)}
-            />
+            <Input id="ep-data" type="date" value={dataVenda} onChange={(e) => setDataVenda(e.target.value)} />
           </div>
 
-          {/* Botoes de acao da edicao */}
           <div className="flex flex-col gap-2">
-            <Button
-              onClick={() => mutEditar.mutate()}
-              disabled={mutEditar.isPending || trocouParaComplexo || !houveAlteracao}
-            >
+            <Button onClick={() => mutEditar.mutate()} disabled={mutEditar.isPending || trocouParaComplexo || !houveAlteracao}>
               {mutEditar.isPending ? "Salvando..." : "Salvar alterações"}
             </Button>
-            {/* Cancelar edicao — laranja — fecha o panel sem salvar */}
-            <Button
-              onClick={onClose}
-              disabled={mutEditar.isPending}
-              style={{ backgroundColor: "#f97316", color: "#fff", borderColor: "#f97316" }}
-            >
+            <Button onClick={onClose} disabled={mutEditar.isPending} style={{ backgroundColor: "#f97316", color: "#fff", borderColor: "#f97316" }}>
               Cancelar edição
             </Button>
           </div>
         </div>
       )}
 
-      {/* Log de edicoes */}
       {venda.logs_edicao && venda.logs_edicao.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico de edições</p>
@@ -331,20 +327,14 @@ function VendaEditPanel({
         </div>
       )}
 
-      {/* Cancelamento da venda */}
       {!isCancelada && canEdit && (
         <div className="border-t pt-4 mt-2">
           {!confirmandoCancelamento ? (
-            <Button
-              variant="destructive"
-              className="w-full"
-              onClick={() => setConfirmandoCancelamento(true)}
-            >
+            <Button variant="destructive" className="w-full" onClick={() => setConfirmandoCancelamento(true)}>
               <XCircle className="h-4 w-4 mr-2" />
               Cancelar venda
             </Button>
           ) : (
-            /* Dialog de confirmacao inline */
             <div className="flex flex-col gap-3 rounded-lg border-2 border-destructive bg-destructive/5 p-4">
               <div className="flex items-center gap-2">
                 <XCircle className="h-5 w-5 text-destructive shrink-0" />
@@ -354,18 +344,10 @@ function VendaEditPanel({
                 Esta ação <strong>não pode ser desfeita</strong>. A venda será marcada como cancelada e o estorno contábil será lançado automaticamente.
               </p>
               <div className="grid grid-cols-2 gap-2 mt-1">
-                <Button
-                  variant="destructive"
-                  onClick={() => mutCancelar.mutate()}
-                  disabled={mutCancelar.isPending}
-                >
+                <Button variant="destructive" onClick={() => mutCancelar.mutate()} disabled={mutCancelar.isPending}>
                   {mutCancelar.isPending ? "Cancelando..." : "Sim, cancelar"}
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setConfirmandoCancelamento(false)}
-                  disabled={mutCancelar.isPending}
-                >
+                <Button variant="outline" onClick={() => setConfirmandoCancelamento(false)} disabled={mutCancelar.isPending}>
                   Não, voltar
                 </Button>
               </div>
@@ -374,11 +356,8 @@ function VendaEditPanel({
         </div>
       )}
 
-      {/* Botao fechar para vendas canceladas (sem edicao) */}
       {(isCancelada || !canEdit) && (
-        <Button variant="outline" onClick={onClose}>
-          Fechar
-        </Button>
+        <Button variant="outline" onClick={onClose}>Fechar</Button>
       )}
     </div>
   )
@@ -401,7 +380,6 @@ export function LivroVendasTable() {
 
   const { canUpdate } = usePermissions()
   const canEdit = canUpdate("vendas")
-
   const { showErrorToast } = useCustomToast()
 
   function handleBuscar() {
@@ -435,6 +413,20 @@ export function LivroVendasTable() {
       }),
   })
 
+  // Busca todos os cascos em aberto para cruzar com as vendas da tabela
+  const { data: cascosEmAberto } = useQuery({
+    queryKey: ["cascos", "em-aberto"],
+    queryFn: () => CascosService.readCascosEmAberto(),
+    retry: false,
+  })
+
+  // Set de venda_ids que têm casco em aberto (não devolvido)
+  const vendasComCascoAberto = new Set<string>(
+    (cascosEmAberto?.data ?? [])
+      .filter((c) => c.status !== "devolvido")
+      .map((c) => c.venda_id)
+  )
+
   const vendas = data?.data ?? []
   const count = data?.count ?? 0
   const totalPaginas = Math.max(1, Math.ceil(count / PAGE_SIZE))
@@ -447,23 +439,11 @@ export function LivroVendasTable() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
               <Label htmlFor="livro-data-inicio" className="text-xs">Início</Label>
-              <Input
-                id="livro-data-inicio"
-                type="date"
-                value={inicioInput}
-                onChange={(e) => setInicioInput(e.target.value)}
-                className="w-40"
-              />
+              <Input id="livro-data-inicio" type="date" value={inicioInput} onChange={(e) => setInicioInput(e.target.value)} className="w-40" />
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="livro-data-fim" className="text-xs">Fim</Label>
-              <Input
-                id="livro-data-fim"
-                type="date"
-                value={fimInput}
-                onChange={(e) => setFimInput(e.target.value)}
-                className="w-40"
-              />
+              <Input id="livro-data-fim" type="date" value={fimInput} onChange={(e) => setFimInput(e.target.value)} className="w-40" />
             </div>
             <Button type="button" onClick={handleBuscar} size="icon">
               <Search className="size-4" />
@@ -507,11 +487,7 @@ export function LivroVendasTable() {
                 </TableRow>
               ) : (
                 vendas.map((venda) => (
-                  <TableRow
-                    key={venda.id}
-                    className="cursor-pointer"
-                    onClick={() => handleRowClick(venda)}
-                  >
+                  <TableRow key={venda.id} className="cursor-pointer" onClick={() => handleRowClick(venda)}>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
                         <span className={venda.status === "cancelada" ? "line-through text-muted-foreground" : ""}>
@@ -529,17 +505,16 @@ export function LivroVendasTable() {
                         ? `${venda.endereco.rua_nome}, ${venda.endereco.numero} — ${venda.endereco.bairro_nome}`
                         : "—"}
                     </TableCell>
-                    <TableCell>
-                      {LABEL_FORMA_PAGAMENTO[venda.forma_pagamento] ?? venda.forma_pagamento}
-                    </TableCell>
+                    <TableCell>{LABEL_FORMA_PAGAMENTO[venda.forma_pagamento] ?? venda.forma_pagamento}</TableCell>
                     <TableCell>{formatDate(venda.data_venda)}</TableCell>
-                    <TableCell>
-                      {formatDate(venda.pago_em ?? venda.data_pagamento_vale)}
-                    </TableCell>
+                    <TableCell>{formatDate(venda.pago_em ?? venda.data_pagamento_vale)}</TableCell>
                     <TableCell className="text-right">{formatMoney(venda.valor_total)}</TableCell>
                     <TableCell className="text-right">{formatMoney(venda.valor_pago)}</TableCell>
                     <TableCell>
-                      <StatusBadge venda={venda} />
+                      <StatusBadge
+                        venda={venda}
+                        temCascoAberto={vendasComCascoAberto.has(venda.id)}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
@@ -581,11 +556,7 @@ export function LivroVendasTable() {
             </SheetTitle>
           </SheetHeader>
           {vendaSelecionada && (
-            <VendaEditPanel
-              venda={vendaSelecionada}
-              onClose={() => setVendaSelecionada(null)}
-              canEdit={canEdit}
-            />
+            <VendaEditPanel venda={vendaSelecionada} onClose={() => setVendaSelecionada(null)} canEdit={canEdit} />
           )}
         </SheetContent>
       </Sheet>
