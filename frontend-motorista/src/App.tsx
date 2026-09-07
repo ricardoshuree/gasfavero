@@ -1,9 +1,10 @@
-// [mcp-local harness] feature: recebimento-fiado-motorista | plano: 2701b061 | 2026-09-07 13:03:54
-// App.tsx: sub-navegação no módulo Financeiro (Livro de Vendas / Receber Fiado), adiciona RecebimentoFiadoTela
+// [mcp-local harness] feature: inadimplentes-motorista | plano: 458ed6ae | 2026-09-07 13:21:20
+// App.tsx: adiciona InadimplentesTola na sub-nav do Financeiro (Livro / Receber Fiado / Inadimplentes)
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
 import FinanceiroTela from "./components/FinanceiroTela"
+import InadimplentesTola from "./components/InadimplentesTola"
 import Login from "./components/Login"
 import MinhasDemandas from "./components/MinhasDemandas"
 import PerfilTela from "./components/PerfilTela"
@@ -20,8 +21,7 @@ type Estado =
   | { fase: "logado"; token: string; usuario: UserMe }
   | { fase: "erro"; mensagem: string }
 
-// Sub-abas do módulo Financeiro
-type SubAbaFinanceiro = "livro" | "fiado"
+type SubAbaFinanceiro = "livro" | "fiado" | "inadimplentes"
 
 const MOTORISTA_ID_KEY = "motorista_id"
 
@@ -84,14 +84,10 @@ function App() {
         )}
         {abaAtiva === "financeiro" && (
           <>
-            {/* Sub-navegação do módulo financeiro */}
             <SubNav aba={subAbaFinanceiro} onMudar={setSubAbaFinanceiro} />
-            {subAbaFinanceiro === "livro" && (
-              <FinanceiroTela token={token} usuario={usuario} />
-            )}
-            {subAbaFinanceiro === "fiado" && (
-              <RecebimentoFiadoTela token={token} usuario={usuario} />
-            )}
+            {subAbaFinanceiro === "livro" && <FinanceiroTela token={token} usuario={usuario} />}
+            {subAbaFinanceiro === "fiado" && <RecebimentoFiadoTela token={token} usuario={usuario} />}
+            {subAbaFinanceiro === "inadimplentes" && <InadimplentesTola token={token} usuario={usuario} />}
           </>
         )}
         {abaAtiva === "perfil" && (
@@ -104,17 +100,12 @@ function App() {
   )
 }
 
-// Sub-navegação horizontal dentro do módulo Financeiro
-function SubNav({
-  aba,
-  onMudar,
-}: {
-  aba: SubAbaFinanceiro
-  onMudar: (a: SubAbaFinanceiro) => void
-}) {
+// Sub-navegação horizontal do módulo Financeiro
+function SubNav({ aba, onMudar }: { aba: SubAbaFinanceiro; onMudar: (a: SubAbaFinanceiro) => void }) {
   const itens: { id: SubAbaFinanceiro; label: string }[] = [
-    { id: "livro", label: "Livro de Vendas" },
-    { id: "fiado", label: "Receber Fiado" },
+    { id: "livro",          label: "Livro" },
+    { id: "fiado",          label: "Receber Fiado" },
+    { id: "inadimplentes",  label: "Inadimplentes" },
   ]
   return (
     <div style={subNav.barra}>
@@ -132,29 +123,9 @@ function SubNav({
 }
 
 const subNav = {
-  barra: {
-    display: "flex",
-    background: "#f5f5f5",
-    borderBottom: "1px solid #e5e7eb",
-    padding: "8px 14px",
-    gap: "8px",
-  } as const,
-  btn: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: "8px",
-    padding: "6px 14px",
-    fontSize: "13px",
-    color: "#374151",
-    cursor: "pointer",
-    fontWeight: 400,
-  } as const,
-  ativo: {
-    background: "#606C38",
-    borderColor: "#606C38",
-    color: "#F8FAFC",
-    fontWeight: 600,
-  } as const,
+  barra: { display: "flex", background: "#f5f5f5", borderBottom: "1px solid #e5e7eb", padding: "8px 14px", gap: "6px", overflowX: "auto" as const } as const,
+  btn: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", color: "#374151", cursor: "pointer", fontWeight: 400, whiteSpace: "nowrap" as const, flexShrink: 0 } as const,
+  ativo: { background: "#606C38", borderColor: "#606C38", color: "#F8FAFC", fontWeight: 600 } as const,
 }
 
 function TelaCentral({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
