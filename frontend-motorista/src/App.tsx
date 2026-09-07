@@ -1,9 +1,5 @@
-// [mcp-local harness] feature: fcm-fix-registro-pos-login | plano: aca5f641 | 2026-08-09 18:53:49
-// Chama window.AndroidFCM.sincronizar() apos persistir motorista_id no login
-// [mcp-local harness] feature: fcm-fix-registro-pos-login | plano: aca5f641 | 2026-08-09
-// Chama window.AndroidFCM.sincronizar() apos persistir motorista_id -- forca o nativo a tentar registrar o token de novo agora que a sessao existe (onNewToken() sozinho nao cobre o caso "token gerado antes do login")
-// [mcp-local harness] feature: fcm-android-nativo | plano: 6356739b | 2026-08-09
-// Persiste motorista_id nas Preferences (mesmo storage do access_token) -- ponte pro service nativo de push registrar o token sem precisar de plugin novo
+// [mcp-local harness] feature: vendas-motorista | plano: d865e550 | 2026-09-07 12:15:55
+// App.tsx: passa usuario para VendasTela (motorista logado atribuído automaticamente)
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
@@ -23,20 +19,8 @@ type Estado =
   | { fase: "logado"; token: string; usuario: UserMe }
   | { fase: "erro"; mensagem: string }
 
-// Chave usada tanto aqui quanto pelo service nativo de push
-// (MotoristaFirebaseMessagingService.java / FcmTokenRegistrar.java,
-// PREFS_NOME/CHAVE_MOTORISTA_ID) -- ver comentário completo lá.
-// Mantida como constante nos dois lugares (não dá pra compartilhar
-// literalmente entre Java e TS), então qualquer mudança de nome
-// precisa ser feita nos dois arquivos ao mesmo tempo.
 const MOTORISTA_ID_KEY = "motorista_id"
 
-// Ponte JS -> nativo (Android) exposta por MainActivity via
-// WebView.addJavascriptInterface -- ver comentário completo lá.
-// Inexistente no browser (dev via `npm run dev`) e no iOS (não temos
-// build iOS) -- por isso sempre acessado com `?.`, nunca chamado
-// direto. Ausência silenciosa é o comportamento correto nesses
-// ambientes, não um erro.
 type JanelaComPonteAndroid = Window & {
   AndroidFCM?: { sincronizar?: () => void }
 }
@@ -54,26 +38,9 @@ function App() {
     try {
       const usuario = await fetchCurrentUser(token)
       setEstado({ fase: "logado", token, usuario })
-      // Persiste o motorista_id nas Preferences (mesmo storage
-      // nativo do access_token) -- é a partir daqui que o service
-      // nativo de push (Fase 4, sessão 09/08) consegue montar a
-      // chamada de registro de token FCM sem precisar de um plugin
-      // Capacitor customizado. Ver MotoristaFirebaseMessagingService.java.
       await Preferences.set({ key: MOTORISTA_ID_KEY, value: usuario.id })
-
-      // Força uma nova tentativa de registro do token FCM AGORA que
-      // a sessão existe -- bug real encontrado testando nesta sessão
-      // (09/08): o token normalmente já é gerado pelo Firebase assim
-      // que o app abre pela primeira vez, ANTES do motorista
-      // terminar o login. Nesse momento o onNewToken() nativo dispara
-      // mas não encontra sessão salva ainda, e como o token não
-      // rotaciona com frequência, o registro podia nunca mais ser
-      // tentado (motorista ficaria sem push por semanas, sem erro
-      // nenhum visível). Ver MainActivity.java / FcmTokenRegistrar.java.
       ;(window as JanelaComPonteAndroid).AndroidFCM?.sincronizar?.()
     } catch {
-      // Token invalido/expirado -- limpa e volta pro login, sem
-      // travar o usuario numa tela de erro
       await logout()
       setEstado({ fase: "deslogado" })
     }
@@ -83,12 +50,6 @@ function App() {
     carregarSessao()
   }, [])
 
-  // Desbloqueia o áudio do alarme na PRIMEIRA interação do usuário
-  // com o app inteiro (qualquer toque) -- navegador/WebView suspende
-  // o AudioContext até um gesto do usuário; sem isso, o alarme
-  // disparado depois pelo polling em segundo plano tocava mudo, sem
-  // erro nenhum. Ouve só uma vez (capture + remove) e não interfere
-  // em nada do resto do app.
   useEffect(() => {
     function aoPrimeiroToque() {
       desbloquearAudio()
@@ -113,16 +74,9 @@ function App() {
   }
 
   if (estado.fase === "erro") {
-    // Estado declarado no tipo mas ainda sem produtor real (nenhum
-    // fluxo atual seta "erro" -- reservado pra quando handleLogout
-    // ou carregarSessao precisarem distinguir falha de rede de
-    // deslogado de verdade). Fallback seguro: volta pro login.
     return <Login onSuccess={carregarSessao} />
   }
 
-  // A partir daqui TS sabe que estado.fase === "logado" (união
-  // exaustiva) -- estado.token e estado.usuario existem com
-  // segurança.
   const { token, usuario } = estado
 
   return (
@@ -137,7 +91,10 @@ function App() {
             aoConcluirChamado={() => setAbaAtiva("vendas")}
           />
         )}
-        {abaAtiva === "vendas" && <VendasTela />}
+        {/* VendasTela recebe token e usuario (motorista logado é atribuído automaticamente) */}
+        {abaAtiva === "vendas" && (
+          <VendasTela token={token} usuario={usuario} />
+        )}
         {abaAtiva === "financeiro" && <FinanceiroTela />}
         {abaAtiva === "perfil" && <PerfilTela usuario={usuario} onLogout={handleLogout} />}
       </main>
@@ -148,9 +105,6 @@ function App() {
 }
 
 function TelaCentral({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
-  // Splash pré-autenticação -- usa a paleta do Login de propósito
-  // (é o primeiro momento visual do app, antes de sabermos se vai
-  // cair no Login escuro ou no app claro estilo iFood).
   return (
     <div style={estilos.splash}>
       <h1 style={estilos.splashTitulo}>{titulo}</h1>
@@ -160,20 +114,16 @@ function TelaCentral({ titulo, subtitulo }: { titulo: string; subtitulo: string 
 }
 
 const estilos = {
-  // App logado -- paleta clara estilo iFood (CORES_APP).
   shell: {
     minHeight: "100vh",
     background: CORES_APP.fundo,
   },
-  // Espaço reservado pra TopBar (fixa, topo) e BottomNav (fixa,
-  // rodapé) não cobrirem o conteúdo rolável do meio.
   conteudo: {
     paddingTop: `calc(${ALTURA_TOPBAR_PX}px + env(safe-area-inset-top))`,
     paddingBottom: `calc(${ALTURA_BOTTOMNAV_PX}px + env(safe-area-inset-bottom))`,
     minHeight: "100vh",
     boxSizing: "border-box" as const,
   },
-  // Splash -- paleta escura do Login (CORES_LOGIN).
   splash: {
     minHeight: "100vh",
     display: "flex",
