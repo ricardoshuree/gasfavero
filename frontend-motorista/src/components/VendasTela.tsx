@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: fix-visual-steps-malote-hub | plano: 5083bdc4 | 2026-09-07 18:46:06
-// Steps no estilo iFood: fundo branco, step ativo vermelho #EA1D2C com texto branco, passados com check verde, futuros cinza claro
+// [mcp-local harness] feature: fix-steps-header-rbac-produtos | plano: be918930 | 2026-09-07 19:12:16
+// Fix steps: linha conectora e bolinha alinhadas no mesmo eixo vertical via alignItems center em todos os níveis
 // VendasTela: orquestrador do fluxo 4 etapas com indicador de progresso estilo iFood
 import { useState, type CSSProperties } from "react"
 import type { UserMe } from "../lib/auth"
@@ -53,7 +53,7 @@ export default function VendasTela({ token, usuario }: Props) {
     )
   }
 
-  const etapaAtualIdx = ETAPAS.indexOf(etapa as Etapa)
+  const etapaIdx = ETAPAS.indexOf(etapa as Etapa)
 
   return (
     <div style={s.pagina}>
@@ -61,40 +61,34 @@ export default function VendasTela({ token, usuario }: Props) {
       {/* ── Barra de steps estilo iFood ── */}
       <div style={s.stepsBar}>
         {ETAPAS.map((e, idx) => {
-          const ativo  = idx === etapaAtualIdx
-          const passado = idx < etapaAtualIdx
-          const futuro  = idx > etapaAtualIdx
-
-          // Separador entre steps (exceto antes do primeiro)
-          const separador = idx > 0 && (
-            <div style={{
-              ...s.separador,
-              background: idx <= etapaAtualIdx ? "#EA1D2C" : "#E5E7EB",
-            }} />
-          )
+          const ativo   = idx === etapaIdx
+          const passado = idx < etapaIdx
 
           return (
-            <div key={e} style={s.stepWrapper}>
-              {separador}
+            <div key={e} style={{ ...s.stepWrapper, ...(idx === 0 ? { paddingLeft: 0 } : {}) }}>
+              {/* Linha conectora — antes de cada step (exceto o primeiro) */}
+              {idx > 0 && (
+                <div style={{
+                  ...s.linha,
+                  background: idx <= etapaIdx ? "#EA1D2C" : "#E5E7EB",
+                }} />
+              )}
+
+              {/* Bolinha + label */}
               <div style={s.stepItem}>
-                {/* Bolinha */}
                 <div style={{
                   ...s.bolinha,
-                  background: ativo ? "#EA1D2C" : passado ? "#EA1D2C" : "#E5E7EB",
-                  border: ativo ? "2px solid #EA1D2C" : passado ? "2px solid #EA1D2C" : "2px solid #D1D5DB",
+                  background: (ativo || passado) ? "#EA1D2C" : "#E5E7EB",
                 }}>
                   {passado
-                    ? <span style={s.bolinhaCheck}>✓</span>
-                    : <span style={{ ...s.bolinhaNum, color: ativo ? "#fff" : "#9CA3AF" }}>
-                        {idx + 1}
-                      </span>
+                    ? <span style={s.check}>✓</span>
+                    : <span style={{ ...s.num, color: ativo ? "#fff" : "#9CA3AF" }}>{idx + 1}</span>
                   }
                 </div>
-                {/* Label */}
                 <span style={{
                   ...s.stepLabel,
-                  color: ativo ? "#EA1D2C" : passado ? "#374151" : "#9CA3AF",
-                  fontWeight: ativo ? 700 : futuro ? 400 : 500,
+                  color:      ativo ? "#EA1D2C" : passado ? "#6B7280" : "#9CA3AF",
+                  fontWeight: ativo ? 700 : 400,
                 }}>
                   {ETAPA_LABEL[e]}
                 </span>
@@ -104,7 +98,6 @@ export default function VendasTela({ token, usuario }: Props) {
         })}
       </div>
 
-      {/* Etapas */}
       {etapa === "produtos" && (
         <EtapaProdutos
           token={token}
@@ -152,10 +145,10 @@ export default function VendasTela({ token, usuario }: Props) {
 const s: Record<string, CSSProperties> = {
   pagina: { minHeight: "100%", background: "#fff" },
 
-  // ── Steps bar ──
+  // Steps
   stepsBar: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "center",       // alinha tudo no centro vertical
     background: "#fff",
     borderBottom: "1px solid #F3F4F6",
     padding: "12px 16px",
@@ -163,79 +156,54 @@ const s: Record<string, CSSProperties> = {
   },
   stepWrapper: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "center",       // linha e bolinha na mesma altura
     flex: 1,
   },
-  separador: {
-    height: "2px",
+  linha: {
     flex: 1,
-    minWidth: "8px",
+    height: "2px",
     borderRadius: "1px",
+    minWidth: "8px",
   },
   stepItem: {
     display: "flex",
     flexDirection: "column" as const,
     alignItems: "center",
-    gap: "3px",
+    gap: "4px",
     flexShrink: 0,
   },
   bolinha: {
-    width: "24px",
-    height: "24px",
+    width: "26px",
+    height: "26px",
     borderRadius: "50%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
   },
-  bolinhaCheck: {
-    fontSize: "13px",
-    color: "#fff",
-    fontWeight: 700,
-    lineHeight: 1,
-  },
-  bolinhaNum: {
-    fontSize: "12px",
-    fontWeight: 600,
-    lineHeight: 1,
-  },
+  check: { fontSize: "13px", color: "#fff", fontWeight: 700, lineHeight: 1 },
+  num:   { fontSize: "12px", fontWeight: 600, lineHeight: 1 },
   stepLabel: {
     fontSize: "10px",
     letterSpacing: "0.2px",
+    whiteSpace: "nowrap" as const,
   },
 
-  // ── Sucesso ──
+  // Sucesso
   sucesso: {
-    display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "60vh",
-    padding: "2rem",
-    gap: "0.75rem",
-    background: "#fff",
+    display: "flex", flexDirection: "column" as const,
+    alignItems: "center", justifyContent: "center",
+    minHeight: "60vh", padding: "2rem", gap: "0.75rem", background: "#fff",
   },
   sucessoIcone: {
-    width: "64px", height: "64px",
-    borderRadius: "50%",
-    background: "#EA1D2C",
-    color: "#fff",
-    fontSize: "28px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 700,
+    width: "64px", height: "64px", borderRadius: "50%",
+    background: "#EA1D2C", color: "#fff", fontSize: "28px",
+    display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700,
   },
   sucessoTitulo: { fontSize: "20px", fontWeight: 700, color: "#111827", margin: 0 },
   sucessoSub:    { fontSize: "14px", color: "#6B7280", margin: 0 },
   btnNova: {
-    marginTop: "1rem",
-    background: "#EA1D2C",
-    color: "#fff",
-    border: "none",
-    borderRadius: "12px",
-    padding: "14px 32px",
-    fontSize: "16px",
-    fontWeight: 600,
-    cursor: "pointer",
+    marginTop: "1rem", background: "#EA1D2C", color: "#fff",
+    border: "none", borderRadius: "12px", padding: "14px 32px",
+    fontSize: "16px", fontWeight: 600, cursor: "pointer",
   },
 }

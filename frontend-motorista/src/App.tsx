@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: devolucao-cascos-motorista | plano: 54267dc7 | 2026-09-07 18:28:37
-// App.tsx: substitui placeholder de cascos pelo DevolucaoCascosTela real
+// [mcp-local harness] feature: fix-steps-header-rbac-produtos | plano: be918930 | 2026-09-07 19:13:04
+// App.tsx: cabeçalho de sub-tela com título centralizado e botão ← no lado esquerdo para todas as sub-telas do Financeiro
 // App.tsx — navegação do Financeiro via hub de blocos (estilo v1.0 aprovada)
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
@@ -31,10 +31,18 @@ type JanelaComPonteAndroid = Window & {
   AndroidFCM?: { sincronizar?: () => void }
 }
 
+// Título exibido no cabeçalho de cada sub-tela do Financeiro
+const SUBTELA_TITULO: Record<SubTelaFinanceiro, string> = {
+  livro:            "Livro de Vendas",
+  recebimento_vale: "Recebimento de Fiado",
+  inadimplentes:    "Inadimplentes",
+  malote:           "Malote Motorista",
+  cascos:           "Devolução de Cascos",
+}
+
 function App() {
   const [estado, setEstado] = useState<Estado>({ fase: "verificando" })
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("demandas")
-  // null = exibir hub; string = sub-tela ativa
   const [subTelaFinanceiro, setSubTelaFinanceiro] = useState<SubTelaFinanceiro | null>(null)
 
   async function carregarSessao() {
@@ -62,7 +70,6 @@ function App() {
     return () => document.removeEventListener("pointerdown", aoPrimeiroToque)
   }, [])
 
-  // Ao trocar de aba principal, sempre volta ao hub do Financeiro
   function handleMudarAba(aba: AbaId) {
     setAbaAtiva(aba)
     if (aba !== "financeiro") setSubTelaFinanceiro(null)
@@ -76,38 +83,41 @@ function App() {
   }
 
   if (estado.fase === "verificando") return <TelaCentral titulo="Gás Favero Motorista" subtitulo="Carregando..." />
-  if (estado.fase === "deslogado") return <Login onSuccess={carregarSessao} />
-  if (estado.fase === "erro") return <Login onSuccess={carregarSessao} />
+  if (estado.fase === "deslogado")   return <Login onSuccess={carregarSessao} />
+  if (estado.fase === "erro")        return <Login onSuccess={carregarSessao} />
 
   const { token, usuario } = estado
 
   function renderFinanceiro() {
-    // Sem sub-tela ativa → hub de blocos
     if (!subTelaFinanceiro) {
       return <FinanceiroHub onNavegar={setSubTelaFinanceiro} />
     }
 
-    // Botão Voltar compartilhado por todas as sub-telas
-    const btnVoltar = (
-      <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>
-        ← Voltar
-      </button>
+    const cabecalho = (
+      <div style={estilos.subCabecalho}>
+        <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>
+          ←
+        </button>
+        <span style={estilos.subTitulo}>{SUBTELA_TITULO[subTelaFinanceiro]}</span>
+        {/* espaço vazio para centralizar o título */}
+        <div style={{ width: "36px" }} />
+      </div>
     )
 
     if (subTelaFinanceiro === "livro") {
-      return <>{btnVoltar}<FinanceiroTela token={token} usuario={usuario} /></>
+      return <>{cabecalho}<FinanceiroTela token={token} usuario={usuario} /></>
     }
     if (subTelaFinanceiro === "recebimento_vale") {
-      return <>{btnVoltar}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
+      return <>{cabecalho}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
     }
     if (subTelaFinanceiro === "inadimplentes") {
-      return <>{btnVoltar}<InadimplentesTola token={token} usuario={usuario} /></>
+      return <>{cabecalho}<InadimplentesTola token={token} usuario={usuario} /></>
     }
     if (subTelaFinanceiro === "malote") {
-      return <>{btnVoltar}<MaloteTela token={token} usuario={usuario} /></>
+      return <>{cabecalho}<MaloteTela token={token} usuario={usuario} /></>
     }
     if (subTelaFinanceiro === "cascos") {
-      return <>{btnVoltar}<DevolucaoCascosTela token={token} usuario={usuario} /></>
+      return <>{cabecalho}<DevolucaoCascosTela token={token} usuario={usuario} /></>
     }
     return null
   }
@@ -151,18 +161,33 @@ const estilos = {
     minHeight: "100vh",
     boxSizing: "border-box" as const,
   },
-  btnVoltar: {
+  // Cabeçalho das sub-telas do Financeiro
+  subCabecalho: {
     display: "flex",
     alignItems: "center",
-    gap: "4px",
+    justifyContent: "space-between",
+    padding: "10px 16px 8px",
+    background: "#fff",
+    borderBottom: "1px solid #F3F4F6",
+  } as const,
+  btnVoltar: {
     background: "transparent",
     border: "none",
     color: "#606C38",
-    fontSize: "14px",
-    fontWeight: 600,
+    fontSize: "20px",
+    fontWeight: 700,
     cursor: "pointer",
-    padding: "10px 16px 4px",
+    padding: "2px 6px",
+    lineHeight: 1,
+    width: "36px",
   } as const,
+  subTitulo: {
+    fontSize: "15px",
+    fontWeight: 700,
+    color: CORES_APP.texto,
+    flex: 1,
+    textAlign: "center" as const,
+  },
   splash: {
     minHeight: "100vh",
     display: "flex",
@@ -177,7 +202,7 @@ const estilos = {
     color: CORES_LOGIN.texto,
     boxSizing: "border-box" as const,
   },
-  splashTitulo: { fontSize: "1.5rem", fontWeight: 700, color: CORES_LOGIN.texto },
+  splashTitulo:    { fontSize: "1.5rem", fontWeight: 700, color: CORES_LOGIN.texto },
   splashSubtitulo: { color: CORES_LOGIN.texto, opacity: 0.75 },
 }
 
