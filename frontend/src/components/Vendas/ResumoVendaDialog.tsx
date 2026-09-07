@@ -1,5 +1,6 @@
-// [mcp-local harness] feature: fluxo-vendas-distribuidora-frontend | plano: b8adcd52 | 2026-08-05 10:41:42
-// Dialog de resumo/confirmacao da venda antes de gravar
+// [mcp-local harness] feature: emprestimo_casco | plano: ed5b9c43 | 2026-09-07 15:49:33
+// Adiciona prop cascos e bloco âmbar de empréstimo de casco no ResumoVendaDialog
+import { Package } from "lucide-react"
 
 import type { EnderecoPublic } from "@/client"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { LoadingButton } from "@/components/ui/loading-button"
+import type { CascoItem } from "./PainelCasco"
 import type { SacolaItem } from "./Sacola"
 
 function formatMoney(valor: number): string {
@@ -19,10 +21,13 @@ function formatMoney(valor: number): string {
 }
 
 const LABEL_PAGAMENTO: Record<string, string> = {
-  cartao: "Cartão",
+  cartao_debito: "Cartão Débito",
+  cartao_credito: "Cartão Crédito",
   pix: "Pix",
   dinheiro: "Dinheiro",
-  vale: "Vale",
+  vale: "Fiado",
+  vale_gas: "Vale Gás",
+  gas_povo: "Gás do Povo",
 }
 
 interface ResumoVendaDialogProps {
@@ -32,6 +37,7 @@ interface ResumoVendaDialogProps {
   endereco: EnderecoPublic | null
   motoristaNome: string
   itens: SacolaItem[]
+  cascos?: CascoItem[]
   formaPagamento: string
   valeNumero: string
   dataPagamentoVale: string
@@ -48,6 +54,7 @@ export function ResumoVendaDialog({
   endereco,
   motoristaNome,
   itens,
+  cascos = [],
   formaPagamento,
   valeNumero,
   dataPagamentoVale,
@@ -60,6 +67,10 @@ export function ResumoVendaDialog({
     (acc, item) => acc + Number(item.precoUnitario) * item.quantidade,
     0,
   )
+
+  // Mapa produtoId -> title para exibir nome no resumo de cascos
+  const tituloPorProduto = Object.fromEntries(itens.map((i) => [i.produtoId, i.title]))
+  const totalCascos = cascos.reduce((acc, c) => acc + c.quantidade, 0)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,12 +102,8 @@ export function ResumoVendaDialog({
           <div className="rounded-md border p-2">
             {itens.map((item) => (
               <div key={item.produtoId} className="flex justify-between">
-                <span>
-                  {item.quantidade}x {item.title}
-                </span>
-                <span>
-                  {formatMoney(Number(item.precoUnitario) * item.quantidade)}
-                </span>
+                <span>{item.quantidade}x {item.title}</span>
+                <span>{formatMoney(Number(item.precoUnitario) * item.quantidade)}</span>
               </div>
             ))}
             <div className="mt-1 flex justify-between border-t pt-1 font-semibold">
@@ -104,6 +111,24 @@ export function ResumoVendaDialog({
               <span>{formatMoney(total)}</span>
             </div>
           </div>
+
+          {/* Cascos emprestados */}
+          {totalCascos > 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-700 dark:bg-amber-950/30">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                  ⚠️ Empréstimo de casco — {totalCascos} unidade{totalCascos !== 1 ? "s" : ""}
+                </p>
+              </div>
+              {cascos.map((c) => (
+                <div key={c.produto_id} className="flex justify-between text-xs text-amber-700 dark:text-amber-300">
+                  <span>{tituloPorProduto[c.produto_id] ?? c.produto_id}</span>
+                  <span>{c.quantidade} casco{c.quantidade !== 1 ? "s" : ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div>
             <p className="text-muted-foreground">Pagamento</p>
@@ -120,11 +145,7 @@ export function ResumoVendaDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Voltar
           </Button>
           <LoadingButton onClick={onConfirm} loading={isPending}>

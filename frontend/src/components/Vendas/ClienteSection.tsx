@@ -1,11 +1,12 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: f507aa50 | 2026-09-07 15:17:10
-// Adiciona AvisoCascosCliente (banner âmbar) e ícone Package+⚠️ no histórico de vendas quando há casco em aberto
+// [mcp-local harness] feature: emprestimo_casco | plano: ed5b9c43 | 2026-09-07 15:49:06
+// Substitui fetch manual por CascosService.readCascosCliente — funciona em produção
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { MapPin, Package, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
   type ApiError,
+  CascosService,
   type ClienteCreate,
   type ClientePublic,
   ClientesService,
@@ -91,7 +92,7 @@ function formatTelefone(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Histórico de vendas com ícone de casco quando há empréstimo em aberto
+// Histórico com ícone de casco quando há empréstimo em aberto
 // ---------------------------------------------------------------------------
 
 function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
@@ -101,24 +102,13 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
       VendasService.readHistoricoVendasCliente({ clienteId, limit: 3 }),
   })
 
-  // Busca cascos em aberto deste cliente para cruzar com o histórico
   const { data: cascosData } = useQuery({
     queryKey: ["cascos", "cliente", clienteId],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/v1/cascos/cliente/${clienteId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
-          },
-        },
-      )
-      if (!res.ok) return null
-      return res.json() as Promise<{ cascos: Array<{ venda_id: string; quantidade: number; status: string }> }>
-    },
+    queryFn: () => CascosService.readCascosCliente({ clienteId }),
+    retry: false,
   })
 
-  // Mapa venda_id -> quantos cascos em aberto (não devolvidos)
+  // Mapa venda_id -> qtd cascos em aberto (não devolvidos)
   const cascosPorVenda = new Map<string, number>()
   if (cascosData?.cascos) {
     for (const c of cascosData.cascos) {
@@ -165,9 +155,7 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
                     ⚠️ {qtdCascoAberto}
                   </span>
                 )}
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${status.className}`}
-                >
+                <span className={`rounded-full px-2 py-0.5 text-xs ${status.className}`}>
                   {status.label}
                 </span>
               </div>
@@ -180,24 +168,14 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Aviso de cascos em aberto do cliente (exibido ao selecionar o cliente)
+// Aviso de cascos em aberto do cliente
 // ---------------------------------------------------------------------------
 
 function AvisoCascosCliente({ clienteId }: { clienteId: string }) {
   const { data } = useQuery({
     queryKey: ["cascos", "cliente", clienteId],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/v1/cascos/cliente/${clienteId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
-          },
-        },
-      )
-      if (!res.ok) return null
-      return res.json() as Promise<{ total_cascos_abertos: number }>
-    },
+    queryFn: () => CascosService.readCascosCliente({ clienteId }),
+    retry: false,
   })
 
   if (!data || data.total_cascos_abertos === 0) return null
@@ -275,16 +253,13 @@ export function ClienteSection({
           </Button>
         </div>
 
-        {/* Aviso de cascos em aberto */}
         <AvisoCascosCliente clienteId={cliente.id} />
 
         <div className="flex items-center gap-2 text-base">
           <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" />
           {enderecoSelecionado ? (
             <>
-              <span className="flex-1">
-                {formatEndereco(enderecoSelecionado)}
-              </span>
+              <span className="flex-1">{formatEndereco(enderecoSelecionado)}</span>
               <TrocarEnderecoDialog
                 cliente={cliente}
                 onSalvo={(clienteAtualizado) => {
@@ -389,11 +364,7 @@ interface QuickAddClienteProps {
   onError: (error: ApiError) => void
 }
 
-function QuickAddCliente({
-  onCancel,
-  onCreated,
-  onError,
-}: QuickAddClienteProps) {
+function QuickAddCliente({ onCancel, onCreated, onError }: QuickAddClienteProps) {
   const [nome, setNome] = useState("")
   const [cpf, setCpf] = useState("")
   const [telefone, setTelefone] = useState(() => formatTelefone("54"))
@@ -408,13 +379,10 @@ function QuickAddCliente({
     queryFn: () => GeografiaService.readBairros(),
     enabled: incluirEndereco,
   })
-  const { opcoes: ruasSugeridas } = useSugestoesRua(
-    incluirEndereco ? bairroId : undefined,
-  )
+  const { opcoes: ruasSugeridas } = useSugestoesRua(incluirEndereco ? bairroId : undefined)
 
   const mutation = useMutation({
-    mutationFn: (data: ClienteCreate) =>
-      ClientesService.createCliente({ requestBody: data }),
+    mutationFn: (data: ClienteCreate) => ClientesService.createCliente({ requestBody: data }),
     onSuccess: onCreated,
     onError,
   })
@@ -429,12 +397,7 @@ function QuickAddCliente({
       telefone: telefoneDigits.length > 2 ? telefone : undefined,
       endereco:
         incluirEndereco && bairroId && ruaNome && numero
-          ? {
-              bairro_id: bairroId,
-              rua_nome: ruaNome,
-              numero,
-              complemento: complemento || undefined,
-            }
+          ? { bairro_id: bairroId, rua_nome: ruaNome, numero, complemento: complemento || undefined }
           : undefined,
     })
   }
@@ -445,48 +408,23 @@ function QuickAddCliente({
         <Label htmlFor="qc-nome" className={LABEL_ACESSIVEL}>
           Nome <span className="text-destructive">*</span>
         </Label>
-        <Input
-          id="qc-nome"
-          className={CAMPO_ACESSIVEL}
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-        />
+        <Input id="qc-nome" className={CAMPO_ACESSIVEL} value={nome} onChange={(e) => setNome(e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
           <Label htmlFor="qc-cpf" className={LABEL_ACESSIVEL}>
             CPF/CNPJ <span className="text-destructive">*</span>
           </Label>
-          <Input
-            id="qc-cpf"
-            className={CAMPO_ACESSIVEL}
-            placeholder="000.000.000-00"
-            value={cpf}
-            onChange={(e) => setCpf(e.target.value)}
-          />
+          <Input id="qc-cpf" className={CAMPO_ACESSIVEL} placeholder="000.000.000-00" value={cpf} onChange={(e) => setCpf(e.target.value)} />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="qc-telefone" className={LABEL_ACESSIVEL}>
-            Telefone
-          </Label>
-          <Input
-            id="qc-telefone"
-            className={CAMPO_ACESSIVEL}
-            placeholder="(54) 99999-9999"
-            value={telefone}
-            onChange={(e) => setTelefone(formatTelefone(e.target.value))}
-          />
+          <Label htmlFor="qc-telefone" className={LABEL_ACESSIVEL}>Telefone</Label>
+          <Input id="qc-telefone" className={CAMPO_ACESSIVEL} placeholder="(54) 99999-9999" value={telefone} onChange={(e) => setTelefone(formatTelefone(e.target.value))} />
         </div>
       </div>
 
       {!incluirEndereco ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="default"
-          className="w-fit text-base"
-          onClick={() => setIncluirEndereco(true)}
-        >
+        <Button type="button" variant="ghost" size="default" className="w-fit text-base" onClick={() => setIncluirEndereco(true)}>
           <Plus className="mr-1 h-4 w-4" />
           Adicionar endereço (opcional)
         </Button>
@@ -494,90 +432,37 @@ function QuickAddCliente({
         <div className="grid gap-4 rounded-md bg-muted/40 p-3">
           <div className="grid gap-2">
             <Label className={LABEL_ACESSIVEL}>Bairro</Label>
-            <Select
-              value={bairroId}
-              onValueChange={(v) => {
-                setBairroId(v)
-                setRuaNome("")
-              }}
-            >
+            <Select value={bairroId} onValueChange={(v) => { setBairroId(v); setRuaNome("") }}>
               <SelectTrigger className={`w-full ${CAMPO_ACESSIVEL}`}>
                 <SelectValue placeholder="Selecione o bairro" />
               </SelectTrigger>
               <SelectContent>
                 {bairros?.data.map((b) => (
-                  <SelectItem
-                    key={b.id}
-                    value={b.id}
-                    className="py-2.5 text-base"
-                  >
-                    {b.nome}
-                  </SelectItem>
+                  <SelectItem key={b.id} value={b.id} className="py-2.5 text-base">{b.nome}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="qc-rua" className={LABEL_ACESSIVEL}>
-              Rua
-            </Label>
-            <RuaAutocomplete
-              id="qc-rua"
-              value={ruaNome}
-              onChange={setRuaNome}
-              opcoes={ruasSugeridas}
-              disabled={!bairroId}
-              className={CAMPO_ACESSIVEL}
-            />
+            <Label htmlFor="qc-rua" className={LABEL_ACESSIVEL}>Rua</Label>
+            <RuaAutocomplete id="qc-rua" value={ruaNome} onChange={setRuaNome} opcoes={ruasSugeridas} disabled={!bairroId} className={CAMPO_ACESSIVEL} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="qc-numero" className={LABEL_ACESSIVEL}>
-                Número
-              </Label>
-              <Input
-                id="qc-numero"
-                className={CAMPO_ACESSIVEL}
-                placeholder="123 ou s/n"
-                value={numero}
-                onChange={(e) => setNumero(e.target.value)}
-              />
+              <Label htmlFor="qc-numero" className={LABEL_ACESSIVEL}>Número</Label>
+              <Input id="qc-numero" className={CAMPO_ACESSIVEL} placeholder="123 ou s/n" value={numero} onChange={(e) => setNumero(e.target.value)} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="qc-complemento" className={LABEL_ACESSIVEL}>
-                Complemento
-              </Label>
-              <Input
-                id="qc-complemento"
-                className={CAMPO_ACESSIVEL}
-                placeholder="Apto, bloco... (opcional)"
-                value={complemento}
-                onChange={(e) => setComplemento(e.target.value)}
-              />
+              <Label htmlFor="qc-complemento" className={LABEL_ACESSIVEL}>Complemento</Label>
+              <Input id="qc-complemento" className={CAMPO_ACESSIVEL} placeholder="Apto, bloco... (opcional)" value={complemento} onChange={(e) => setComplemento(e.target.value)} />
             </div>
           </div>
         </div>
       )}
 
       <div className="flex justify-end gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          className="h-12 text-base"
-          onClick={onCancel}
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="button"
-          size="lg"
-          className="h-12 text-base"
-          disabled={!podeSalvar || mutation.isPending}
-          onClick={onSubmit}
-        >
-          Salvar Cliente
-        </Button>
+        <Button type="button" variant="outline" size="lg" className="h-12 text-base" onClick={onCancel}>Cancelar</Button>
+        <Button type="button" size="lg" className="h-12 text-base" disabled={!podeSalvar || mutation.isPending} onClick={onSubmit}>Salvar Cliente</Button>
       </div>
     </div>
   )

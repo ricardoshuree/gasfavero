@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: f507aa50 | 2026-09-07 15:15:54
-// Adiciona estado cascos, PainelCasco abaixo da Sacola e cascos no payload da mutation
+// [mcp-local harness] feature: emprestimo_casco | plano: fd76b143 | 2026-09-07 15:50:50
+// Passa cascos={cascos} para ResumoVendaDialog
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -142,7 +142,6 @@ function Vendas() {
     }
   }, [formaPagamento])
 
-  // Ao remover item da sacola, limpa cascos desse produto
   useEffect(() => {
     const idsNaSacola = new Set(sacola.map((i) => i.produtoId))
     setCascos((prev) => prev.filter((c) => idsNaSacola.has(c.produto_id)))
@@ -174,7 +173,6 @@ function Vendas() {
       if (i.quantidade <= 1) return []
       return [{ ...i, quantidade: i.quantidade - 1 }]
     }))
-    // Se decrementar abaixo da qtd de cascos, ajusta
     setCascos((prev) => prev.map((c) => {
       if (c.produto_id !== produtoId) return c
       const itemAtual = sacola.find((i) => i.produtoId === produtoId)
@@ -312,7 +310,6 @@ function Vendas() {
             onDecrementar={handleDecrementar}
             onRemover={handleRemover}
           />
-          {/* Painel de casco — aparece quando há itens na sacola */}
           <PainelCasco
             itens={sacola}
             cascos={cascos}
@@ -404,6 +401,7 @@ function Vendas() {
         endereco={endereco}
         motoristaNome={motoristaNome}
         itens={sacola}
+        cascos={cascos}
         formaPagamento={formaPagamento ?? ""}
         valeNumero={valeNumero}
         dataPagamentoVale={dataPagamentoVale}
