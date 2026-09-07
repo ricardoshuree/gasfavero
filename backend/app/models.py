@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: emprestimo_casco | plano: 1c0b80ad | 2026-09-07 15:09:56
-# Adiciona modelo EmprestimoCasco, schemas Public/Create/Receber/Confirmar e CascoItem em VendaCreate
+# [mcp-local harness] feature: emprestimo_casco_historico | plano: 45b87eee | 2026-09-07 16:44:30
+# Adiciona EmprestimoCascoLog (tabela), EmprestimoCascoLogPublic, logs em EmprestimoCascoPublic, requests de desfazer
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -493,7 +493,6 @@ class VendaItem(SQLModel, table=True):
 
 
 class VendaLog(SQLModel, table=True):
-    """Auditoria de edicoes de venda."""
     __tablename__ = "venda_log"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
@@ -505,17 +504,10 @@ class VendaLog(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Emprestimo de Casco
+# Emprestimo de Casco + Log de Auditoria
 # ---------------------------------------------------------------------------
 
 class EmprestimoCasco(SQLModel, table=True):
-    """
-    Registra cascos emprestados ao cliente em uma venda.
-
-    Fluxo de devolução (dupla checagem — mesmo padrão do Fiado):
-      recebido_em  -> motorista ou gerente registra devolução física
-      confirmado_em -> gerente confirma e dá baixa formal
-    """
     __tablename__ = "emprestimo_casco"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="RESTRICT")
@@ -530,10 +522,31 @@ class EmprestimoCasco(SQLModel, table=True):
     created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
+class EmprestimoCascoLog(SQLModel, table=True):
+    """
+    Auditoria de eventos de empréstimo de casco.
+    Eventos: recebido | recebimento_desfeito | confirmado | confirmacao_desfeita
+    """
+    __tablename__ = "emprestimo_casco_log"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    emprestimo_id: uuid.UUID = Field(foreign_key="emprestimo_casco.id", ondelete="CASCADE")
+    evento: str = Field(max_length=50)
+    usuario_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    observacao: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+
+
 class CascoItemCreate(SQLModel):
-    """Item de casco emprestado dentro de uma VendaCreate."""
     produto_id: uuid.UUID
     quantidade: int = Field(gt=0)
+
+
+class EmprestimoCascoLogPublic(SQLModel):
+    id: uuid.UUID
+    evento: str
+    usuario_nome: str | None = None
+    observacao: str | None = None
+    created_at: datetime
 
 
 class EmprestimoCascoPublic(SQLModel):
@@ -546,14 +559,13 @@ class EmprestimoCascoPublic(SQLModel):
     motorista_nome: str | None = None
     cliente_id: uuid.UUID
     cliente_nome: str
-    # Status de devolucao
     recebido_em: datetime | None = None
     recebido_por_nome: str | None = None
     confirmado_em: datetime | None = None
     confirmado_por_nome: str | None = None
-    # Campos calculados
     dias_em_aberto: int = 0
     status: str  # "emprestado" | "recebido_aguardando" | "devolvido"
+    logs: list[EmprestimoCascoLogPublic] = []
     created_at: datetime
 
 
@@ -564,25 +576,22 @@ class EmprestimosCascoPublic(SQLModel):
 
 
 class EmprestimoCascoReceberRequest(SQLModel):
-    """Payload para motorista/gerente registrar devolucao fisica do casco."""
-    quantidade_devolvida: int | None = Field(default=None, gt=0)
+    observacao: str | None = Field(default=None, max_length=500)
 
 
 class EmprestimoCascoConfirmarRequest(SQLModel):
-    """Payload para gerente confirmar e dar baixa formal (dupla checagem)."""
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class EmprestimoCascoDesfazerRequest(SQLModel):
     observacao: str | None = Field(default=None, max_length=500)
 
 
 class CascosClientePublic(SQLModel):
-    """Resumo de cascos em aberto de um cliente — exibido no historico de vendas."""
     cliente_id: uuid.UUID
     total_cascos_abertos: int
     cascos: list[EmprestimoCascoPublic]
 
-
-# ---------------------------------------------------------------------------
-# VendaCreate — com campo opcional de cascos
-# ---------------------------------------------------------------------------
 
 class VendaItemCreate(SQLModel):
     produto_id: uuid.UUID
@@ -602,7 +611,6 @@ class VendaCreate(SQLModel):
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
     data_venda: date | None = None
     itens: list[VendaItemCreate] = Field(min_length=1)
-    # Cascos emprestados nesta venda (opcional — lista vazia = sem emprestimo)
     cascos: list[CascoItemCreate] = Field(default_factory=list)
 
 
@@ -659,7 +667,6 @@ class VendaPublic(SQLModel):
     criado_por_id: uuid.UUID
     created_at: datetime
     itens: list[VendaItemPublic] = []
-    # Cascos emprestados nesta venda (preenchido pelo endpoint de venda)
     cascos_emprestados: list[EmprestimoCascoPublic] = []
 
 
