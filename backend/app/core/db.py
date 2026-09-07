@@ -1,8 +1,9 @@
-# [mcp-local harness] feature: fix-steps-header-rbac-produtos | plano: be918930 | 2026-09-07 19:13:34
-# Seed RBAC: motorista recebe read-only no módulo produtos para poder listar produtos na tela de Vendas do app
+# [mcp-local harness] feature: fix-seed-motorista-ilike | plano: 494954ab | 2026-09-07 20:35:09
+# db.py: seed RBAC com ilike para motorista, todos os módulos gasfavero com permissões explícitas por role
 import uuid
 
 from sqlmodel import Session, create_engine, select
+from sqlalchemy import func as sa_func
 
 from app import crud
 from app.core.config import settings
@@ -23,25 +24,25 @@ DEFAULT_MODULES = [
 ]
 
 # ---------------------------------------------------------------------------
-# Módulos extras do erp-gasfavero
+# Módulos extras do erp-gasfavero com permissões por role
 #
-# cascos:
-#   gerente   -> CRUD completo (recebe E confirma a devolucao — dupla checagem)
-#   motorista -> create+read+update (registra emprestimo e recebe casco, mas NAO confirma)
-#               can_delete=False -> nao acessa PATCH /cascos/{id}/confirmar
-#
-# produtos (módulo de catálogo/preços):
-#   motorista -> read only (necessário para listar produtos na tela de Vendas do app)
+# Formato: {"name": "modulo", "gerente": (C,R,U,D), "motorista": (C,R,U,D)}
 # ---------------------------------------------------------------------------
 
-GASFAVERO_EXTRA_MODULES = [
-    {"name": "gas_povo", "description": "Programa Gás do Povo — vendas e recebimento"},
-    {"name": "cascos",   "description": "Controle de empréstimo e devolução de cascos"},
-]
-
-# Módulos onde motorista precisa de permissão de leitura (read-only)
-MOTORISTA_READ_ONLY_MODULES = [
-    {"name": "produtos", "description": "Catálogo de produtos e preços vigentes"},
+GASFAVERO_MODULES_RBAC = [
+    # Módulo          gerente            motorista
+    {"name": "cascos",       "gerente": (True, True, True, True),  "motorista": (True,  True, True,  False)},
+    {"name": "gas_povo",     "gerente": (True, True, True, True),  "motorista": (True,  True, True,  False)},
+    {"name": "vendas",       "gerente": (True, True, True, True),  "motorista": (True,  True, True,  False)},
+    {"name": "produtos",     "gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
+    {"name": "clientes",     "gerente": (True, True, True, True),  "motorista": (True,  True, True,  False)},
+    {"name": "delegacao",    "gerente": (True, True, True, True),  "motorista": (False, True, True,  False)},
+    {"name": "vale_gas",     "gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
+    {"name": "vales",        "gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
+    {"name": "livro_vendas", "gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
+    {"name": "inadimplencia","gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
+    {"name": "fechamento",   "gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
+    {"name": "mapa",         "gerente": (True, True, True, True),  "motorista": (False, True, False, False)},
 ]
 
 
@@ -87,6 +88,7 @@ def _ensure_role_permission(
             can_delete=can_delete,
         )
         session.add(perm)
+    # Se já existe, não sobrescreve (permissões podem ter sido ajustadas manualmente)
 
 
 def _ensure_user_role(session: Session, user: User, role: Role) -> None:
@@ -120,55 +122,33 @@ def init_db(session: Session) -> None:
         modules[m["name"]] = _get_or_create_module(session, m["name"], m["description"])
 
     for module in modules.values():
-        _ensure_role_permission(
-            session, roles["admin"], module,
-            can_create=True, can_read=True, can_update=True, can_delete=True,
-        )
-        _ensure_role_permission(
-            session, roles["editor"], module,
-            can_create=True, can_read=True, can_update=True, can_delete=False,
-        )
-        _ensure_role_permission(
-            session, roles["viewer"], module,
-            can_create=False, can_read=True, can_update=False, can_delete=False,
-        )
+        _ensure_role_permission(session, roles["admin"], module, True, True, True, True)
+        _ensure_role_permission(session, roles["editor"], module, True, True, True, False)
+        _ensure_role_permission(session, roles["viewer"], module, False, True, False, False)
 
     _ensure_user_role(session, user, roles["admin"])
 
-    role_gerente  = session.exec(select(Role).where(Role.name == "gerente")).first()
-    role_motorista = session.exec(select(Role).where(Role.name == "motorista")).first()
+    # Busca case-insensitive — o role pode ter sido criado como "Motorista" ou "motorista"
+    role_gerente = session.exec(
+        select(Role).where(sa_func.lower(Role.name) == "gerente")
+    ).first()
+    role_motorista = session.exec(
+        select(Role).where(sa_func.lower(Role.name) == "motorista")
+    ).first()
 
-    # ── Módulos extras (gas_povo, cascos) ──
-    for m in GASFAVERO_EXTRA_MODULES:
-        mod = _get_or_create_module(session, m["name"], m["description"])
+    for entry in GASFAVERO_MODULES_RBAC:
+        mod_name = entry["name"]
+        mod = _get_or_create_module(session, mod_name, mod_name)
 
-        _ensure_role_permission(
-            session, roles["admin"], mod,
-            can_create=True, can_read=True, can_update=True, can_delete=True,
-        )
+        # admin sempre tem tudo
+        _ensure_role_permission(session, roles["admin"], mod, True, True, True, True)
 
         if role_gerente:
-            _ensure_role_permission(
-                session, role_gerente, mod,
-                can_create=True, can_read=True, can_update=True, can_delete=True,
-            )
+            c, r, u, d = entry["gerente"]
+            _ensure_role_permission(session, role_gerente, mod, c, r, u, d)
 
         if role_motorista:
-            # Motorista NAO pode confirmar devolucao de casco (can_delete=False)
-            can_delete = m["name"] != "cascos"
-            _ensure_role_permission(
-                session, role_motorista, mod,
-                can_create=True, can_read=True, can_update=True, can_delete=can_delete,
-            )
-
-    # ── Módulos onde motorista precisa apenas de leitura ──
-    # Ex: produtos — necessário para listar produtos na tela de Vendas do app motorista
-    if role_motorista:
-        for m in MOTORISTA_READ_ONLY_MODULES:
-            mod = _get_or_create_module(session, m["name"], m["description"])
-            _ensure_role_permission(
-                session, role_motorista, mod,
-                can_create=False, can_read=True, can_update=False, can_delete=False,
-            )
+            c, r, u, d = entry["motorista"]
+            _ensure_role_permission(session, role_motorista, mod, c, r, u, d)
 
     session.commit()
