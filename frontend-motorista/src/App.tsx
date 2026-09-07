@@ -1,8 +1,11 @@
-// [mcp-local harness] feature: malote-motorista | plano: e2831dfc | 2026-09-07 13:42:35
-// App.tsx: adiciona MaloteTela na sub-nav do Financeiro como 4a aba
+// [mcp-local harness] feature: devolucao-cascos-motorista | plano: 54267dc7 | 2026-09-07 18:28:37
+// App.tsx: substitui placeholder de cascos pelo DevolucaoCascosTela real
+// App.tsx — navegação do Financeiro via hub de blocos (estilo v1.0 aprovada)
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
+import DevolucaoCascosTela from "./components/DevolucaoCascosTela"
+import FinanceiroHub, { type SubTelaFinanceiro } from "./components/FinanceiroHub"
 import FinanceiroTela from "./components/FinanceiroTela"
 import InadimplentesTola from "./components/InadimplentesTola"
 import Login from "./components/Login"
@@ -22,8 +25,6 @@ type Estado =
   | { fase: "logado"; token: string; usuario: UserMe }
   | { fase: "erro"; mensagem: string }
 
-type SubAbaFinanceiro = "livro" | "fiado" | "inadimplentes" | "malote"
-
 const MOTORISTA_ID_KEY = "motorista_id"
 
 type JanelaComPonteAndroid = Window & {
@@ -33,7 +34,8 @@ type JanelaComPonteAndroid = Window & {
 function App() {
   const [estado, setEstado] = useState<Estado>({ fase: "verificando" })
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("demandas")
-  const [subAbaFinanceiro, setSubAbaFinanceiro] = useState<SubAbaFinanceiro>("livro")
+  // null = exibir hub; string = sub-tela ativa
+  const [subTelaFinanceiro, setSubTelaFinanceiro] = useState<SubTelaFinanceiro | null>(null)
 
   async function carregarSessao() {
     const token = await getToken()
@@ -60,9 +62,16 @@ function App() {
     return () => document.removeEventListener("pointerdown", aoPrimeiroToque)
   }, [])
 
+  // Ao trocar de aba principal, sempre volta ao hub do Financeiro
+  function handleMudarAba(aba: AbaId) {
+    setAbaAtiva(aba)
+    if (aba !== "financeiro") setSubTelaFinanceiro(null)
+  }
+
   async function handleLogout() {
     await logout()
     setAbaAtiva("demandas")
+    setSubTelaFinanceiro(null)
     setEstado({ fase: "deslogado" })
   }
 
@@ -72,62 +81,57 @@ function App() {
 
   const { token, usuario } = estado
 
+  function renderFinanceiro() {
+    // Sem sub-tela ativa → hub de blocos
+    if (!subTelaFinanceiro) {
+      return <FinanceiroHub onNavegar={setSubTelaFinanceiro} />
+    }
+
+    // Botão Voltar compartilhado por todas as sub-telas
+    const btnVoltar = (
+      <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>
+        ← Voltar
+      </button>
+    )
+
+    if (subTelaFinanceiro === "livro") {
+      return <>{btnVoltar}<FinanceiroTela token={token} usuario={usuario} /></>
+    }
+    if (subTelaFinanceiro === "recebimento_vale") {
+      return <>{btnVoltar}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
+    }
+    if (subTelaFinanceiro === "inadimplentes") {
+      return <>{btnVoltar}<InadimplentesTola token={token} usuario={usuario} /></>
+    }
+    if (subTelaFinanceiro === "malote") {
+      return <>{btnVoltar}<MaloteTela token={token} usuario={usuario} /></>
+    }
+    if (subTelaFinanceiro === "cascos") {
+      return <>{btnVoltar}<DevolucaoCascosTela token={token} usuario={usuario} /></>
+    }
+    return null
+  }
+
   return (
     <div style={estilos.shell}>
       <TopBar token={token} motoristaId={usuario.id} />
 
       <main style={estilos.conteudo}>
         {abaAtiva === "demandas" && (
-          <MinhasDemandas token={token} meuId={usuario.id} aoConcluirChamado={() => setAbaAtiva("vendas")} />
+          <MinhasDemandas token={token} meuId={usuario.id} aoConcluirChamado={() => handleMudarAba("vendas")} />
         )}
         {abaAtiva === "vendas" && (
           <VendasTela token={token} usuario={usuario} />
         )}
-        {abaAtiva === "financeiro" && (
-          <>
-            <SubNav aba={subAbaFinanceiro} onMudar={setSubAbaFinanceiro} />
-            {subAbaFinanceiro === "livro"         && <FinanceiroTela token={token} usuario={usuario} />}
-            {subAbaFinanceiro === "fiado"         && <RecebimentoFiadoTela token={token} usuario={usuario} />}
-            {subAbaFinanceiro === "inadimplentes" && <InadimplentesTola token={token} usuario={usuario} />}
-            {subAbaFinanceiro === "malote"        && <MaloteTela token={token} usuario={usuario} />}
-          </>
-        )}
+        {abaAtiva === "financeiro" && renderFinanceiro()}
         {abaAtiva === "perfil" && (
           <PerfilTela usuario={usuario} onLogout={handleLogout} />
         )}
       </main>
 
-      <BottomNav abaAtiva={abaAtiva} onMudarAba={setAbaAtiva} />
+      <BottomNav abaAtiva={abaAtiva} onMudarAba={handleMudarAba} />
     </div>
   )
-}
-
-function SubNav({ aba, onMudar }: { aba: SubAbaFinanceiro; onMudar: (a: SubAbaFinanceiro) => void }) {
-  const itens: { id: SubAbaFinanceiro; label: string }[] = [
-    { id: "livro",          label: "Livro" },
-    { id: "fiado",          label: "Receber Fiado" },
-    { id: "inadimplentes",  label: "Inadimplentes" },
-    { id: "malote",         label: "Malote" },
-  ]
-  return (
-    <div style={subNav.barra}>
-      {itens.map(item => (
-        <button
-          key={item.id}
-          style={{ ...subNav.btn, ...(aba === item.id ? subNav.ativo : {}) }}
-          onClick={() => onMudar(item.id)}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-const subNav = {
-  barra: { display: "flex", background: "#f5f5f5", borderBottom: "1px solid #e5e7eb", padding: "8px 14px", gap: "6px", overflowX: "auto" as const } as const,
-  btn: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", color: "#374151", cursor: "pointer", fontWeight: 400, whiteSpace: "nowrap" as const, flexShrink: 0 } as const,
-  ativo: { background: "#606C38", borderColor: "#606C38", color: "#F8FAFC", fontWeight: 600 } as const,
 }
 
 function TelaCentral({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
@@ -147,6 +151,18 @@ const estilos = {
     minHeight: "100vh",
     boxSizing: "border-box" as const,
   },
+  btnVoltar: {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    background: "transparent",
+    border: "none",
+    color: "#606C38",
+    fontSize: "14px",
+    fontWeight: 600,
+    cursor: "pointer",
+    padding: "10px 16px 4px",
+  } as const,
   splash: {
     minHeight: "100vh",
     display: "flex",
