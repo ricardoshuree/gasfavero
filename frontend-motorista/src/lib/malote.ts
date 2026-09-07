@@ -1,47 +1,54 @@
-// [mcp-local harness] feature: malote-motorista-fix | plano: c756f0d7 | 2026-09-07 13:44:23
-// Remove const vendido nao utilizado na funcao gerarTextoMalote
-// API helpers para o Malote do motorista
+// [mcp-local harness] feature: fix-malote-tipos-e-tela | plano: 1c62f81b | 2026-09-07 19:44:52
+// lib/malote.ts reescrito com tipos corretos baseados na resposta real do backend
+// lib/malote.ts — tipos e API do Malote do Motorista
+// Estrutura baseada na resposta real de GET /api/v1/fechamento/resumo/{motorista_id}/{data}
 import { request } from "./api"
 
+export type VendaMalote = {
+  id: string
+  cliente_nome: string
+  forma_pagamento: string
+  valor_pago: number
+  data_venda: string
+}
+
+export type CascoMalote = {
+  id: string
+  produto_nome: string
+  quantidade: number
+  cliente_nome: string
+  endereco: string
+  emprestado_em: string | null
+  recebido_em: string | null
+}
+
+export type CascosDodia = {
+  emprestados_hoje: CascoMalote[]
+  devolvidos_hoje: CascoMalote[]
+  total_emprestados_hoje: number
+  total_devolvidos_hoje: number
+  total_aberto_acumulado: number
+  qtd_registros_abertos: number
+}
+
 export type ResumoMalote = {
-  fundo_troco: number
+  abertura_id: string
   carga_produtos: Array<{
     produto_id: string
     produto_nome: string
     carregado: number
   }>
+  fundo_troco: number
   total_dinheiro: number
   total_pix: number
   total_debito: number
   total_credito: number
-  total_fiado_recebido: number
+  total_fiado: number
+  total_esperado: number
   total_geral: number
-  qtd_vendas: number
-  fiados_recebidos: Array<{
-    id: string
-    cliente_nome: string
-    vale_numero: number | null
-    itens: Array<{ produto_title: string; quantidade: number }>
-    valor_pago: string
-    recebido_em: string
-  }>
-  fiados_em_aberto: Array<{
-    id: string
-    cliente_nome: string
-    vale_numero: number | null
-    valor_total: string
-    data_venda: string
-  }>
-  vale_gas_aberto: Array<{
-    id: string
-    cliente_nome: string
-    valor_total: string
-  }>
-  gas_povo_aberto: Array<{
-    id: string
-    cliente_nome: string
-    valor_total: string
-  }>
+  ja_fechado: boolean
+  vendas: VendaMalote[]
+  cascos_do_dia: CascosDodia
 }
 
 function hojeISO() {
@@ -53,7 +60,20 @@ export async function buscarResumoMalote(
   motoristaId: string
 ): Promise<ResumoMalote> {
   const hoje = hojeISO()
-  return request(`/api/v1/fechamento/resumo/${motoristaId}/${hoje}`, { token })
+  return request<ResumoMalote>(
+    `/api/v1/fechamento/resumo/${motoristaId}/${hoje}`,
+    { token }
+  )
+}
+
+const LABEL_FORMA: Record<string, string> = {
+  cartao_debito:  "Débito",
+  cartao_credito: "Crédito",
+  pix:            "Pix",
+  dinheiro:       "Dinheiro",
+  vale:           "Fiado",
+  vale_gas:       "Vale Gás",
+  gas_povo:       "Gás do Povo",
 }
 
 export function gerarTextoMalote(resumo: ResumoMalote, nomeMotorista: string): string {
@@ -61,17 +81,15 @@ export function gerarTextoMalote(resumo: ResumoMalote, nomeMotorista: string): s
   const fmt = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`
 
   const linhasProdutos = resumo.carga_produtos
-    .map(p => `  ${p.produto_nome}: saiu ${p.carregado}`)
+    .map(p => `  ${p.produto_nome}: ${p.carregado} unid.`)
     .join("\n")
 
-  const pendFiado = resumo.fiados_em_aberto.length > 0
-    ? `\n⏳ Fiados em aberto: ${resumo.fiados_em_aberto.length} (${fmt(resumo.fiados_em_aberto.reduce((a, f) => a + Number(f.valor_total), 0))})`
-    : ""
-  const pendValeGas = resumo.vale_gas_aberto.length > 0
-    ? `\n⏳ Vale Gás: ${resumo.vale_gas_aberto.length} venda(s)`
-    : ""
-  const pendGasPovo = resumo.gas_povo_aberto.length > 0
-    ? `\n⏳ Gás do Povo: ${resumo.gas_povo_aberto.length} venda(s) (governo paga depois)`
+  const linhasVendas = resumo.vendas
+    .map(v => `  ${v.cliente_nome} · ${LABEL_FORMA[v.forma_pagamento] ?? v.forma_pagamento} · ${fmt(v.valor_pago)}`)
+    .join("\n")
+
+  const linhaCascos = resumo.cascos_do_dia.total_aberto_acumulado > 0
+    ? `\n⚠️ Cascos em aberto acumulado: ${resumo.cascos_do_dia.total_aberto_acumulado}`
     : ""
 
   return [
@@ -79,17 +97,20 @@ export function gerarTextoMalote(resumo: ResumoMalote, nomeMotorista: string): s
     `📅 ${hoje}`,
     "",
     `*Total a entregar: ${fmt(resumo.total_geral)}*`,
-    `(${resumo.qtd_vendas} vendas)`,
+    `(${resumo.vendas.length} vendas)`,
     "",
     "💵 *Dinheiro a entregar:*",
     `  Espécie: ${fmt(resumo.total_dinheiro)}`,
     `  Pix: ${fmt(resumo.total_pix)}`,
     `  Débito (maquininha): ${fmt(resumo.total_debito)}`,
     `  Crédito (maquininha): ${fmt(resumo.total_credito)}`,
-    `  Fiados recebidos hoje: ${fmt(resumo.total_fiado_recebido)}`,
+    `  Fiado: ${fmt(resumo.total_fiado)}`,
     "",
     "🛢 *Produtos (carga):*",
     linhasProdutos || "  Sem carga registrada",
-    pendFiado + pendValeGas + pendGasPovo,
-  ].join("\n")
+    "",
+    "📋 *Vendas do dia:*",
+    linhasVendas || "  Nenhuma venda",
+    linhaCascos,
+  ].filter(l => l !== undefined).join("\n")
 }

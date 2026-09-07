@@ -1,8 +1,7 @@
-// [mcp-local harness] feature: fix-visual-steps-malote-hub | plano: 5083bdc4 | 2026-09-07 18:47:28
-// Fix tela branca: remover return null silencioso, garantir que loading e erro sempre renderizam conteúdo visível
-// Tela Malote do Motorista
-// Visão consolidada do dia para apresentar ao gerente no fechamento presencial.
-// Somente leitura — a conferência de diferenças e o fechamento são feitos pelo gerente no web.
+// [mcp-local harness] feature: fix-malote-tipos-e-tela | plano: 1c62f81b | 2026-09-07 19:45:43
+// MaloteTela reescrito com estrutura real do backend: total_fiado, vendas[], cascos_do_dia. Remove campos inexistentes que causavam crash silencioso.
+// MaloteTela — resumo do dia para apresentar ao gerente no fechamento presencial
+// Usa a estrutura real de GET /api/v1/fechamento/resumo/{motorista_id}/{data}
 import { useEffect, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../theme"
 import type { UserMe } from "../lib/auth"
@@ -10,10 +9,6 @@ import { buscarResumoMalote, gerarTextoMalote, type ResumoMalote } from "../lib/
 
 function fmt(v: number) {
   return `R$ ${v.toFixed(2).replace(".", ",")}`
-}
-
-function fmtHora(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
 }
 
 interface Props {
@@ -42,7 +37,7 @@ function Linha({ label, valor, cor, sub }: { label: string; valor: string; cor?:
   )
 }
 
-function LinhaTotalSecao({ label, valor }: { label: string; valor: string }) {
+function LinhaTotal({ label, valor }: { label: string; valor: string }) {
   return (
     <div style={s.linhaTotal}>
       <span>{label}</span>
@@ -51,11 +46,17 @@ function LinhaTotalSecao({ label, valor }: { label: string; valor: string }) {
   )
 }
 
+const LABEL_FORMA: Record<string, string> = {
+  cartao_debito: "Débito", cartao_credito: "Crédito",
+  pix: "Pix", dinheiro: "Dinheiro",
+  vale: "Fiado", vale_gas: "Vale Gás", gas_povo: "Gás do Povo",
+}
+
 export default function MaloteTela({ token, usuario }: Props) {
   const [resumo, setResumo] = useState<ResumoMalote | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState("")
-  const [mostrarFiados, setMostrarFiados] = useState(false)
+  const [mostrarVendas, setMostrarVendas] = useState(false)
 
   const hoje = new Date().toLocaleDateString("pt-BR")
   const nomeMotorista = usuario.full_name ?? usuario.email
@@ -72,11 +73,9 @@ export default function MaloteTela({ token, usuario }: Props) {
   function compartilhar() {
     if (!resumo) return
     const texto = gerarTextoMalote(resumo, nomeMotorista)
-    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`
-    window.open(url, "_blank")
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank")
   }
 
-  // ── Loading ──
   if (carregando) {
     return (
       <div style={s.centralizado}>
@@ -85,15 +84,12 @@ export default function MaloteTela({ token, usuario }: Props) {
     )
   }
 
-  // ── Erro (inclui abertura do dia não registrada) ──
   if (erro || !resumo) {
     return (
       <div style={s.erroBox}>
         <div style={s.erroIcone}>📋</div>
         <p style={s.erroTitulo}>Malote indisponível</p>
-        <p style={s.erroSub}>
-          {erro || "Não foi possível carregar os dados."}
-        </p>
+        <p style={s.erroSub}>{erro || "Não foi possível carregar os dados."}</p>
         <p style={s.erroSub}>
           Verifique se o gerente já registrou a <strong>abertura do dia</strong> no sistema web.
         </p>
@@ -101,30 +97,28 @@ export default function MaloteTela({ token, usuario }: Props) {
     )
   }
 
-  // ── Conteúdo ──
-  const totalEntrega = resumo.total_geral
-  const pendFiados   = resumo.fiados_em_aberto.length
-  const pendValeGas  = resumo.vale_gas_aberto.length
-  const pendGasPovo  = resumo.gas_povo_aberto.length
-  const totalPend    = resumo.fiados_em_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
-    + resumo.vale_gas_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
-    + resumo.gas_povo_aberto.reduce((a, f) => a + Number(f.valor_total), 0)
+  const cascos = resumo.cascos_do_dia
+  const temCascos = cascos.total_aberto_acumulado > 0 || cascos.total_emprestados_hoje > 0
 
   return (
     <div style={s.pagina}>
+
+      {/* Cabeçalho total */}
       <div style={s.totalBox}>
         <div>
           <div style={s.totalLabel}>Total a entregar ao gerente</div>
-          <div style={s.totalValor}>{fmt(totalEntrega)}</div>
+          <div style={s.totalValor}>{fmt(resumo.total_geral)}</div>
         </div>
         <div style={{ textAlign: "right" as const }}>
-          <div style={s.totalSub}>{resumo.qtd_vendas} vendas</div>
+          <div style={s.totalSub}>{resumo.vendas.length} venda{resumo.vendas.length !== 1 ? "s" : ""}</div>
           <div style={s.totalSub}>{hoje}</div>
+          {resumo.ja_fechado && <div style={s.badgeFechado}>✓ Fechado</div>}
         </div>
       </div>
 
       <div style={s.corpo}>
 
+        {/* Carga de produtos */}
         <Secao titulo="🛢 Cilindros — conferir no caminhão">
           {resumo.carga_produtos.length === 0 ? (
             <div style={s.semDados}>Sem carga registrada na abertura do dia.</div>
@@ -134,95 +128,81 @@ export default function MaloteTela({ token, usuario }: Props) {
                 <tr>
                   <th style={s.th}>Produto</th>
                   <th style={{ ...s.th, textAlign: "center" as const }}>Saiu</th>
-                  <th style={{ ...s.th, textAlign: "center" as const }}>Retornou</th>
-                  <th style={{ ...s.th, textAlign: "center" as const, color: "#3a5c1a" }}>Vendido</th>
                 </tr>
               </thead>
               <tbody>
                 {resumo.carga_produtos.map((p, i) => (
                   <tr key={p.produto_id} style={{ background: i % 2 === 0 ? "#fafafa" : "#fff" }}>
                     <td style={s.td}>{p.produto_nome}</td>
-                    <td style={{ ...s.td, textAlign: "center" as const }}>{p.carregado}</td>
-                    <td style={{ ...s.td, textAlign: "center" as const, color: C.textoSecundario }}>—</td>
-                    <td style={{ ...s.td, textAlign: "center" as const, color: "#3a5c1a", fontWeight: 700 }}>
-                      {p.carregado}
-                    </td>
+                    <td style={{ ...s.td, textAlign: "center" as const, fontWeight: 700 }}>{p.carregado}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          <div style={s.avisoTabela}>
-            O retorno de cilindros é registrado pelo gerente no fechamento.
-          </div>
+          <div style={s.avisoTabela}>O retorno de cilindros é registrado pelo gerente no fechamento.</div>
         </Secao>
 
+        {/* Dinheiro */}
         <Secao titulo="💵 Dinheiro a entregar">
-          <Linha label="Espécie (dinheiro)"      valor={fmt(resumo.total_dinheiro)}       cor="#3a5c1a" />
-          <Linha label="Pix"                     valor={fmt(resumo.total_pix)}            cor="#3a5c1a" />
-          <Linha label="Débito (maquininha)"     valor={fmt(resumo.total_debito)}         cor="#b45309" sub="apresentar recibos" />
-          <Linha label="Crédito (maquininha)"    valor={fmt(resumo.total_credito)}        cor="#b45309" sub="apresentar recibos" />
-          <Linha
-            label="Fiados recebidos hoje"
-            valor={fmt(resumo.total_fiado_recebido)}
-            cor="#3a5c1a"
-            sub={resumo.fiados_recebidos.length > 0 ? `${resumo.fiados_recebidos.length} cliente(s)` : undefined}
-          />
-          <LinhaTotalSecao label="Subtotal" valor={fmt(totalEntrega)} />
+          <Linha label="Espécie"             valor={fmt(resumo.total_dinheiro)}  cor="#3a5c1a" />
+          <Linha label="Pix"                 valor={fmt(resumo.total_pix)}        cor="#3a5c1a" />
+          <Linha label="Débito (maquininha)" valor={fmt(resumo.total_debito)}     cor="#b45309" sub="apresentar recibos" />
+          <Linha label="Crédito (maquininha)"valor={fmt(resumo.total_credito)}    cor="#b45309" sub="apresentar recibos" />
+          <Linha label="Fiado"               valor={fmt(resumo.total_fiado)}      cor="#92400e" sub="não entra em caixa hoje" />
+          <LinhaTotal label="Total em caixa" valor={fmt(resumo.total_dinheiro + resumo.total_pix + resumo.total_debito + resumo.total_credito)} />
         </Secao>
 
-        {resumo.fiados_recebidos.length > 0 && (
+        {/* Vendas do dia — expansível */}
+        {resumo.vendas.length > 0 && (
           <div style={s.secao}>
-            <button style={s.btnExpandir} onClick={() => setMostrarFiados(p => !p)}>
-              {mostrarFiados ? "▲" : "▼"} Fiados recebidos hoje ({resumo.fiados_recebidos.length})
+            <button style={s.btnExpandir} onClick={() => setMostrarVendas(p => !p)}>
+              {mostrarVendas ? "▲" : "▼"} Vendas do dia ({resumo.vendas.length})
             </button>
-            {mostrarFiados && (
+            {mostrarVendas && (
               <div style={s.secaoCard}>
-                {resumo.fiados_recebidos.map(f => (
-                  <div key={f.id} style={s.linha}>
+                {resumo.vendas.map(v => (
+                  <div key={v.id} style={s.linha}>
                     <div>
-                      <div style={s.linhaLabel}>{f.cliente_nome}</div>
-                      <div style={s.linhaSub}>
-                        Vale nº {f.vale_numero ?? "—"} · {f.itens.map(i => `${i.quantidade}× ${i.produto_title}`).join(", ")} · {fmtHora(f.recebido_em)}
-                      </div>
+                      <div style={s.linhaLabel}>{v.cliente_nome}</div>
+                      <div style={s.linhaSub}>{LABEL_FORMA[v.forma_pagamento] ?? v.forma_pagamento}</div>
                     </div>
-                    <span style={{ ...s.linhaValor, color: "#3a5c1a" }}>{fmt(Number(f.valor_pago))}</span>
+                    <span style={{ ...s.linhaValor, color: v.forma_pagamento === "vale" ? "#92400e" : "#3a5c1a" }}>
+                      {fmt(v.valor_pago)}
+                    </span>
                   </div>
                 ))}
-                <LinhaTotalSecao label="Total" valor={fmt(resumo.total_fiado_recebido)} />
-                <div style={s.avisoTabela}>Aguardando baixa do gerente no sistema web.</div>
+                <LinhaTotal label="Total" valor={fmt(resumo.total_geral)} />
               </div>
             )}
           </div>
         )}
 
-        {(pendFiados > 0 || pendValeGas > 0 || pendGasPovo > 0) && (
-          <Secao titulo="⏳ Pendências — não entrega hoje">
-            {pendFiados > 0 && (
+        {/* Cascos */}
+        {temCascos && (
+          <Secao titulo="📦 Cascos">
+            {cascos.total_emprestados_hoje > 0 && (
               <Linha
-                label="Fiados em aberto"
-                valor={fmt(resumo.fiados_em_aberto.reduce((a, f) => a + Number(f.valor_total), 0))}
+                label="Emprestados hoje"
+                valor={`${cascos.total_emprestados_hoje} casco${cascos.total_emprestados_hoje !== 1 ? "s" : ""}`}
                 cor="#92400e"
-                sub={`${pendFiados} cliente(s)`}
               />
             )}
-            {pendValeGas > 0 && (
+            {cascos.total_devolvidos_hoje > 0 && (
               <Linha
-                label="Vale Gás em aberto"
-                valor={fmt(resumo.vale_gas_aberto.reduce((a, f) => a + Number(f.valor_total), 0))}
-                cor="#92400e"
-                sub={`${pendValeGas} venda(s)`}
+                label="Devolvidos hoje"
+                valor={`${cascos.total_devolvidos_hoje} casco${cascos.total_devolvidos_hoje !== 1 ? "s" : ""}`}
+                cor="#3a5c1a"
               />
             )}
-            {pendGasPovo > 0 && (
+            {cascos.total_aberto_acumulado > 0 && (
               <Linha
-                label="Gás do Povo (gov. paga)"
-                valor={fmt(resumo.gas_povo_aberto.reduce((a, f) => a + Number(f.valor_total), 0))}
-                cor="#92400e"
-                sub={`${pendGasPovo} venda(s)`}
+                label="Em aberto acumulado"
+                valor={`${cascos.total_aberto_acumulado} casco${cascos.total_aberto_acumulado !== 1 ? "s" : ""}`}
+                cor="#dc2626"
+                sub="aguardando devolução"
               />
             )}
-            <LinhaTotalSecao label="Total pendente" valor={fmt(totalPend)} />
           </Secao>
         )}
 
@@ -236,31 +216,32 @@ export default function MaloteTela({ token, usuario }: Props) {
 }
 
 const s: Record<string, CSSProperties> = {
-  pagina:        { background: C.fundo, minHeight: "100%", paddingBottom: "80px" },
-  centralizado:  { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh" },
-  totalBox:      { background: "#283618", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  totalLabel:    { color: "#C5C9A4", fontSize: "12px", marginBottom: "4px" },
-  totalValor:    { color: "#F8FAFC", fontSize: "22px", fontWeight: 700 },
-  totalSub:      { color: "#C5C9A4", fontSize: "11px" },
-  corpo:         { padding: "10px 14px 16px" },
-  secao:         { marginBottom: "14px" },
-  secaoTitulo:   { fontSize: "10px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.6px", marginBottom: "6px" },
-  secaoCard:     { background: "#f5f5f5", borderRadius: "10px", overflow: "hidden" },
-  linha:         { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 12px", borderBottom: `0.5px solid #e5e7eb` },
-  linhaLabel:    { fontSize: "13px", color: "#374151" },
-  linhaSub:      { fontSize: "11px", color: C.textoSecundario, marginTop: "1px" },
-  linhaValor:    { fontSize: "13px", fontWeight: 700, flexShrink: 0, marginLeft: "8px" },
-  linhaTotal:    { display: "flex", justifyContent: "space-between", padding: "9px 12px", fontSize: "14px", fontWeight: 700, color: C.texto, background: "#fff", borderTop: `0.5px solid #e5e7eb` },
-  tabela:        { width: "100%", borderCollapse: "collapse" as const, fontSize: "13px" },
-  th:            { padding: "8px 10px", fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.4px", borderBottom: `1px solid #e5e7eb`, textAlign: "left" as const },
-  td:            { padding: "9px 10px", color: C.texto, borderBottom: `0.5px solid #f0f0f0`, fontSize: "14px" },
-  avisoTabela:   { fontSize: "11px", color: C.textoSecundario, padding: "6px 12px", background: "#f5f5f5" },
-  semDados:      { padding: "12px", fontSize: "13px", color: C.textoSecundario, textAlign: "center" as const },
-  info:          { textAlign: "center" as const, color: C.textoSecundario, fontSize: "14px", padding: "2rem" },
-  erroBox:       { padding: "3rem 2rem", textAlign: "center" as const },
-  erroIcone:     { fontSize: "40px", marginBottom: "12px" },
-  erroTitulo:    { fontSize: "16px", fontWeight: 700, color: C.texto, margin: "0 0 8px" },
-  erroSub:       { fontSize: "13px", color: C.textoSecundario, margin: "4px 0", lineHeight: "1.5" },
-  btnExpandir:   { width: "100%", background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "9px 14px", fontSize: "13px", color: "#606C38", fontWeight: 600, cursor: "pointer", textAlign: "left" as const, marginBottom: "6px" },
+  pagina:       { background: C.fundo, minHeight: "100%", paddingBottom: "80px" },
+  centralizado: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh" },
+  totalBox:     { background: "#283618", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  totalLabel:   { color: "#C5C9A4", fontSize: "12px", marginBottom: "4px" },
+  totalValor:   { color: "#F8FAFC", fontSize: "22px", fontWeight: 700 },
+  totalSub:     { color: "#C5C9A4", fontSize: "11px" },
+  badgeFechado: { fontSize: "11px", background: "#606C38", color: "#F8FAFC", padding: "2px 8px", borderRadius: "8px", marginTop: "4px", display: "inline-block" },
+  corpo:        { padding: "10px 14px 16px" },
+  secao:        { marginBottom: "14px" },
+  secaoTitulo:  { fontSize: "10px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.6px", marginBottom: "6px" },
+  secaoCard:    { background: "#f5f5f5", borderRadius: "10px", overflow: "hidden" },
+  linha:        { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 12px", borderBottom: `0.5px solid #e5e7eb` },
+  linhaLabel:   { fontSize: "13px", color: "#374151" },
+  linhaSub:     { fontSize: "11px", color: C.textoSecundario, marginTop: "1px" },
+  linhaValor:   { fontSize: "13px", fontWeight: 700, flexShrink: 0, marginLeft: "8px" },
+  linhaTotal:   { display: "flex", justifyContent: "space-between", padding: "9px 12px", fontSize: "14px", fontWeight: 700, color: C.texto, background: "#fff", borderTop: `0.5px solid #e5e7eb` },
+  tabela:       { width: "100%", borderCollapse: "collapse" as const, fontSize: "13px" },
+  th:           { padding: "8px 10px", fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.4px", borderBottom: `1px solid #e5e7eb`, textAlign: "left" as const },
+  td:           { padding: "9px 10px", color: C.texto, borderBottom: `0.5px solid #f0f0f0`, fontSize: "14px" },
+  avisoTabela:  { fontSize: "11px", color: C.textoSecundario, padding: "6px 12px" },
+  semDados:     { padding: "12px", fontSize: "13px", color: C.textoSecundario, textAlign: "center" as const },
+  info:         { textAlign: "center" as const, color: C.textoSecundario, fontSize: "14px", padding: "2rem" },
+  erroBox:      { padding: "3rem 2rem", textAlign: "center" as const },
+  erroIcone:    { fontSize: "40px", marginBottom: "12px" },
+  erroTitulo:   { fontSize: "16px", fontWeight: 700, color: C.texto, margin: "0 0 8px" },
+  erroSub:      { fontSize: "13px", color: C.textoSecundario, margin: "4px 0", lineHeight: "1.5" },
+  btnExpandir:  { width: "100%", background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "9px 14px", fontSize: "13px", color: "#606C38", fontWeight: 600, cursor: "pointer", textAlign: "left" as const, marginBottom: "6px" },
   btnCompartilhar: { display: "block", width: "100%", background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "12px", padding: "14px", fontSize: "15px", fontWeight: 600, cursor: "pointer", textAlign: "center" as const, boxSizing: "border-box" as const, marginTop: "4px" },
 }
