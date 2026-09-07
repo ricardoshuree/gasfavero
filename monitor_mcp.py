@@ -47,7 +47,7 @@ _HIST_W   = 80
 _LINE_W   = 120
 _BAR_W    = 22
 _PATH_W   = 50    # chars do path exibidos inline (só o nome relativo curto)
-_ROWS     = 12
+_ROWS     = 22
 _BLOCKS   = " \u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
 _ANSI_RE  = re.compile(r'\x1b\[[0-9;]*m')
 _JOIN_WIN = 2.0
@@ -330,6 +330,7 @@ def _legend_calls():
     db_st = f"{_G}ok{_R}" if db_ok else f"{_RD}ausente{_R}"
     jl_st = f"{_G}ok{_R}" if jl_ok else f"{_RD}ausente{_R}"
     return (
+        f"{_R}{_DIM}  ....................................................................................................................{_R}\n"
         f"  {_DIM}tool calls: banco {db_st}  ·  "
         f"\u2713{_R}{_DIM}=ok  "
         f"\u2717{_R}{_DIM}=erro  "
