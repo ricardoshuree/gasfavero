@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: etapa-cliente-fix | plano: 0b0b7867 | 2026-09-07 13:58:52
-// Remove enderecoAtual da interface e destructuring de TrocarEndereco
+// [mcp-local harness] feature: historico-vendas-cliente-layout | plano: 69cff08b | 2026-09-07 19:37:52
+// EtapaCliente: histórico com 2 linhas (data+valor+status / produtos+forma+endereço), aviso de casco em aberto, vale_numero na sublinha
 // Etapa 2 — Busca de cliente, cadastro rápido, troca de endereço e histórico de vendas
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
@@ -24,18 +24,44 @@ interface Props {
 
 type ModoCliente = "busca" | "novo"
 
+// Tipo completo retornado pelo endpoint /historico (VendaPublic)
 type VendaHistorico = {
   id: string
   data_venda: string
   valor_pago: string
   forma_pagamento: string
+  vale_numero: number | null
   pago_em: string | null
   recebido_em: string | null
+  status: string
+  itens: Array<{ produto_title: string; quantidade: number }>
+  endereco: {
+    rua_nome: string
+    numero: string
+    bairro_nome: string
+    complemento?: string | null
+  } | null
+}
+
+type CascoCliente = {
+  count: number
+  total_cascos_abertos: number
 }
 
 const DIAS_ATRASO = 30
 
+const LABEL_FORMA: Record<string, string> = {
+  cartao_debito:  "Débito",
+  cartao_credito: "Crédito",
+  pix:            "Pix",
+  dinheiro:       "Dinheiro",
+  vale:           "Fiado",
+  vale_gas:       "Vale Gás",
+  gas_povo:       "Gás do Povo",
+}
+
 function statusVenda(v: VendaHistorico): { label: string; bg: string; text: string } {
+  if (v.status === "cancelada") return { label: "Cancelada", bg: "#fee2e2", text: "#991b1b" }
   if (v.forma_pagamento !== "vale") return { label: "Pago", bg: "#f0f4eb", text: "#3a5c1a" }
   if (v.pago_em) return { label: "Baixado", bg: "#f0f4eb", text: "#3a5c1a" }
   if (v.recebido_em) return { label: "Aguard. baixa", bg: "#e0f2fe", text: "#0369a1" }
@@ -46,15 +72,43 @@ function statusVenda(v: VendaHistorico): { label: string; bg: string; text: stri
 }
 
 function formatData(iso: string) {
-  const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`
+  const [, m, d] = iso.split("-")
+  return `${d}/${m}`
 }
 
 function formatMoney(v: string | number) {
   return `R$ ${Number(v).toFixed(2).replace(".", ",")}`
 }
 
+function enderecoStr(end: VendaHistorico["endereco"]): string {
+  if (!end) return ""
+  const comp = end.complemento ? ` (${end.complemento})` : ""
+  return `${end.rua_nome}, ${end.numero}${comp}`
+}
+
 // ---------------------------------------------------------------------------
-// Últimas 3 vendas do cliente
+// Aviso de casco em aberto
+// ---------------------------------------------------------------------------
+function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) {
+  const [total, setTotal] = useState(0)
+
+  useEffect(() => {
+    request<CascoCliente>(`/api/v1/cascos/cliente/${clienteId}`, { token })
+      .then(r => setTotal(r.total_cascos_abertos))
+      .catch(() => {})
+  }, [clienteId, token])
+
+  if (total === 0) return null
+
+  return (
+    <div style={sh.avisoCasco}>
+      📦 ⚠️ Este cliente tem <strong>{total} casco{total > 1 ? "s" : ""} emprestado{total > 1 ? "s" : ""} em aberto</strong>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Histórico de vendas — 2 linhas por venda
 // ---------------------------------------------------------------------------
 function HistoricoVendas({ clienteId, token }: { clienteId: string; token: string }) {
   const [vendas, setVendas] = useState<VendaHistorico[]>([])
@@ -70,14 +124,27 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
 
   return (
     <div style={sh.box}>
-      <p style={sh.titulo}>Últimas vendas</p>
+      <p style={sh.titulo}>Histórico de vendas (últimas 3)</p>
       {vendas.map(v => {
         const st = statusVenda(v)
+        const produtos = v.itens.map(i => `${i.quantidade}× ${i.produto_title}`).join(", ")
+        const forma = LABEL_FORMA[v.forma_pagamento] ?? v.forma_pagamento
+        const numeroVale = v.vale_numero ? ` · Folha ${v.vale_numero}` : ""
+        const end = enderecoStr(v.endereco)
+        const subLinha = [produtos, forma + numeroVale, end].filter(Boolean).join(" · ")
+
         return (
-          <div key={v.id} style={sh.row}>
-            <span style={sh.data}>{formatData(v.data_venda)}</span>
-            <span style={sh.valor}>{formatMoney(v.valor_pago)}</span>
-            <span style={{ ...sh.badge, background: st.bg, color: st.text }}>{st.label}</span>
+          <div key={v.id} style={sh.card}>
+            {/* Linha 1: data · valor · status */}
+            <div style={sh.linha1}>
+              <span style={sh.data}>{formatData(v.data_venda)}</span>
+              <span style={sh.valor}>{formatMoney(v.valor_pago)}</span>
+              <span style={{ ...sh.badge, background: st.bg, color: st.text }}>{st.label}</span>
+            </div>
+            {/* Linha 2: produtos · forma · endereço */}
+            <div style={sh.linha2} title={subLinha}>
+              {subLinha}
+            </div>
           </div>
         )
       })}
@@ -86,22 +153,22 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
 }
 
 const sh: Record<string, CSSProperties> = {
-  box: { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
-  titulo: { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 8px" },
-  row: { display: "flex", alignItems: "center", gap: "8px", padding: "5px 0", borderTop: `0.5px solid ${C.borda}`, fontSize: "13px" },
-  data: { color: C.textoSecundario, minWidth: "60px", flexShrink: 0 },
-  valor: { fontWeight: 600, color: C.texto, minWidth: "70px", flexShrink: 0 },
-  badge: { fontSize: "11px", fontWeight: 600, padding: "2px 7px", borderRadius: "8px", marginLeft: "auto", whiteSpace: "nowrap" as const },
+  box:       { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
+  titulo:    { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
+  card:      { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 4px" },
+  linha1:    { display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" },
+  data:      { fontSize: "12px", color: C.textoSecundario, flexShrink: 0, minWidth: "36px" },
+  valor:     { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
+  badge:     { fontSize: "10px", fontWeight: 600, padding: "2px 6px", borderRadius: "6px", marginLeft: "auto", whiteSpace: "nowrap" as const },
+  linha2:    { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
+  avisoCasco:{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#92400e", marginTop: "8px", lineHeight: "1.4" },
 }
 
 // ---------------------------------------------------------------------------
 // Troca de endereço inline
 // ---------------------------------------------------------------------------
 function TrocarEndereco({
-  token,
-  clienteId,
-  onEnderecoCriado,
-  onFechar,
+  token, clienteId, onEnderecoCriado, onFechar,
 }: {
   token: string
   clienteId: string
@@ -116,17 +183,14 @@ function TrocarEndereco({
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState("")
 
-  useEffect(() => {
-    buscarBairros(token).then(setBairros).catch(() => {})
-  }, [token])
+  useEffect(() => { buscarBairros(token).then(setBairros).catch(() => {}) }, [token])
 
   async function salvar() {
     if (!bairroId || !rua.trim() || !numero.trim()) { setErro("Bairro, rua e número são obrigatórios."); return }
     setSalvando(true); setErro("")
     try {
       const atualizado = await request<Cliente>(`/api/v1/clientes/${clienteId}`, {
-        method: "PATCH",
-        token,
+        method: "PATCH", token,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           endereco: { bairro_id: bairroId, rua_nome: rua.trim(), numero: numero.trim(), complemento: complemento.trim() || undefined }
@@ -139,9 +203,7 @@ function TrocarEndereco({
       onEnderecoCriado(endId, endStr)
     } catch (e: any) {
       setErro(e.message ?? "Erro ao salvar endereço.")
-    } finally {
-      setSalvando(false)
-    }
+    } finally { setSalvando(false) }
   }
 
   return (
@@ -176,12 +238,12 @@ function TrocarEndereco({
 }
 
 const se: Record<string, CSSProperties> = {
-  box: { background: "#f0f4eb", border: "1.5px solid #606C38", borderRadius: "10px", padding: "12px", marginTop: "8px" },
-  titulo: { fontSize: "13px", fontWeight: 700, color: "#3a5c1a", margin: "0 0 8px" },
-  label: { fontSize: "12px", color: C.textoSecundario, display: "block", marginBottom: "3px", marginTop: "6px" },
-  input: { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", border: `1px solid ${C.borda}`, borderRadius: "8px", fontSize: "14px", color: C.texto, background: "#fff", marginBottom: "2px" },
-  btnCancelar: { flex: 1, background: "transparent", border: `1px solid ${C.borda}`, color: C.texto, borderRadius: "8px", padding: "10px", fontSize: "13px", cursor: "pointer" },
-  btnSalvar: { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "8px", padding: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer" },
+  box:        { background: "#f0f4eb", border: "1.5px solid #606C38", borderRadius: "10px", padding: "12px", marginTop: "8px" },
+  titulo:     { fontSize: "13px", fontWeight: 700, color: "#3a5c1a", margin: "0 0 8px" },
+  label:      { fontSize: "12px", color: C.textoSecundario, display: "block", marginBottom: "3px", marginTop: "6px" },
+  input:      { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", border: `1px solid ${C.borda}`, borderRadius: "8px", fontSize: "14px", color: C.texto, background: "#fff", marginBottom: "2px" },
+  btnCancelar:{ flex: 1, background: "transparent", border: `1px solid ${C.borda}`, color: C.texto, borderRadius: "8px", padding: "10px", fontSize: "13px", cursor: "pointer" },
+  btnSalvar:  { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "8px", padding: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer" },
 }
 
 // ---------------------------------------------------------------------------
@@ -211,15 +273,12 @@ export default function EtapaCliente({
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    buscarBairros(token).then(setBairros).catch(() => {})
-  }, [token])
+  useEffect(() => { buscarBairros(token).then(setBairros).catch(() => {}) }, [token])
 
   useEffect(() => {
     if (!clienteSelecionado) { setEnderecoStr(""); return }
     request<{ rua_nome: string; numero: string; bairro_nome: string; id: string } | null>(
-      `/api/v1/vendas/cliente/${clienteSelecionado.id}/ultimo-endereco`,
-      { token }
+      `/api/v1/vendas/cliente/${clienteSelecionado.id}/ultimo-endereco`, { token }
     ).then(end => {
       if (end) {
         onEnderecoChange(end.id)
@@ -228,8 +287,7 @@ export default function EtapaCliente({
         onEnderecoChange(clienteSelecionado.endereco.id)
         setEnderecoStr(`${clienteSelecionado.endereco.rua_nome}, ${clienteSelecionado.endereco.numero} — ${clienteSelecionado.endereco.bairro_nome}`)
       } else {
-        onEnderecoChange(null)
-        setEnderecoStr("")
+        onEnderecoChange(null); setEnderecoStr("")
       }
     }).catch(() => {
       if (clienteSelecionado.endereco) {
@@ -245,8 +303,7 @@ export default function EtapaCliente({
     debounceRef.current = setTimeout(() => {
       setBuscando(true)
       buscarClientes(token, busca.trim())
-        .then(setResultados)
-        .catch(() => setResultados([]))
+        .then(setResultados).catch(() => setResultados([]))
         .finally(() => setBuscando(false))
     }, 500)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
@@ -269,9 +326,7 @@ export default function EtapaCliente({
       setModo("busca")
     } catch (e: any) {
       setErroCadastro(e.message ?? "Erro ao cadastrar cliente.")
-    } finally {
-      setSalvando(false)
-    }
+    } finally { setSalvando(false) }
   }
 
   function selecionarCliente(c: Cliente) {
@@ -291,6 +346,9 @@ export default function EtapaCliente({
             <div style={s.clienteCard}>
               <div style={s.clienteNome}>{clienteSelecionado.nome}</div>
               <div style={s.clienteSub}>CPF {clienteSelecionado.cpf}</div>
+
+              {/* Aviso casco em aberto */}
+              <AvisoCasco clienteId={clienteSelecionado.id} token={token} />
 
               <div style={s.enderecoRow}>
                 <span style={s.enderecoTxt}>📍 {enderecoStr || "Sem endereço"}</span>
@@ -399,32 +457,32 @@ export default function EtapaCliente({
 }
 
 const s: Record<string, CSSProperties> = {
-  pagina: { padding: "0.75rem 1rem 1.5rem" },
-  info: { color: C.textoSecundario, fontSize: "0.85rem", textAlign: "center", padding: "0.75rem 0" },
-  searchBox: { display: "flex", alignItems: "center", gap: "8px", background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginBottom: "8px" },
-  searchIcon: { fontSize: "16px" },
+  pagina:      { padding: "0.75rem 1rem 1.5rem" },
+  info:        { color: C.textoSecundario, fontSize: "0.85rem", textAlign: "center", padding: "0.75rem 0" },
+  searchBox:   { display: "flex", alignItems: "center", gap: "8px", background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginBottom: "8px" },
+  searchIcon:  { fontSize: "16px" },
   searchInput: { border: "none", background: "transparent", fontSize: "15px", color: C.texto, flex: 1, outline: "none" },
-  clearBtn: { background: "none", border: "none", fontSize: "14px", color: C.textoSecundario, cursor: "pointer", padding: 0 },
-  resultado: { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "12px", marginBottom: "6px", cursor: "pointer" },
-  resNome: { fontSize: "14px", fontWeight: 600, color: C.texto },
-  resSub: { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
+  clearBtn:    { background: "none", border: "none", fontSize: "14px", color: C.textoSecundario, cursor: "pointer", padding: 0 },
+  resultado:   { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "12px", marginBottom: "6px", cursor: "pointer" },
+  resNome:     { fontSize: "14px", fontWeight: 600, color: C.texto },
+  resSub:      { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
   clienteCard: { background: "#f0f4eb", border: "2px solid #606C38", borderRadius: "12px", padding: "12px 14px", marginBottom: "12px" },
   clienteNome: { fontSize: "15px", fontWeight: 700, color: C.texto },
-  clienteSub: { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
+  clienteSub:  { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
   enderecoRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px" },
   enderecoTxt: { fontSize: "12px", color: C.textoSecundario, flex: 1 },
-  btnTrocarEnd: { background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "6px", padding: "3px 10px", fontSize: "12px", cursor: "pointer", flexShrink: 0 },
-  btnTrocar: { marginTop: "10px", background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", cursor: "pointer", display: "block", width: "100%", textAlign: "center" as const },
-  separator: { borderTop: `1px solid ${C.borda}`, margin: "12px 0" },
-  btnNovo: { width: "100%", background: "transparent", border: `1.5px solid ${C.borda}`, borderRadius: "12px", padding: "12px", fontSize: "15px", color: C.texto, cursor: "pointer", textAlign: "center" as const },
-  rodape: { display: "flex", gap: "10px", marginTop: "16px" },
-  btnVoltar: { flex: 1, background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "12px", padding: "13px", fontSize: "15px", color: C.texto, cursor: "pointer" },
-  btnProximo: { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 600, cursor: "pointer" },
-  form: { display: "flex", flexDirection: "column", gap: "4px" },
-  formTitulo: { fontSize: "16px", fontWeight: 700, color: C.texto, margin: "0 0 8px" },
-  secao: { fontSize: "13px", fontWeight: 600, color: C.textoSecundario, margin: "8px 0 4px" },
-  label: { fontSize: "13px", color: C.textoSecundario, marginBottom: "2px" },
-  input: { width: "100%", boxSizing: "border-box" as const, padding: "10px 12px", border: `1px solid ${C.borda}`, borderRadius: "10px", fontSize: "15px", color: C.texto, background: C.fundoCardInterno, marginBottom: "6px", outline: "none" },
-  rowDois: { display: "flex", gap: "8px" },
-  erro: { color: C.erro, fontSize: "13px", margin: "4px 0" },
+  btnTrocarEnd:{ background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "6px", padding: "3px 10px", fontSize: "12px", cursor: "pointer", flexShrink: 0 },
+  btnTrocar:   { marginTop: "10px", background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", cursor: "pointer", display: "block", width: "100%", textAlign: "center" as const },
+  separator:   { borderTop: `1px solid ${C.borda}`, margin: "12px 0" },
+  btnNovo:     { width: "100%", background: "transparent", border: `1.5px solid ${C.borda}`, borderRadius: "12px", padding: "12px", fontSize: "15px", color: C.texto, cursor: "pointer", textAlign: "center" as const },
+  rodape:      { display: "flex", gap: "10px", marginTop: "16px" },
+  btnVoltar:   { flex: 1, background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "12px", padding: "13px", fontSize: "15px", color: C.texto, cursor: "pointer" },
+  btnProximo:  { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 600, cursor: "pointer" },
+  form:        { display: "flex", flexDirection: "column", gap: "4px" },
+  formTitulo:  { fontSize: "16px", fontWeight: 700, color: C.texto, margin: "0 0 8px" },
+  secao:       { fontSize: "13px", fontWeight: 600, color: C.textoSecundario, margin: "8px 0 4px" },
+  label:       { fontSize: "13px", color: C.textoSecundario, marginBottom: "2px" },
+  input:       { width: "100%", boxSizing: "border-box" as const, padding: "10px 12px", border: `1px solid ${C.borda}`, borderRadius: "10px", fontSize: "15px", color: C.texto, background: C.fundoCardInterno, marginBottom: "6px", outline: "none" },
+  rowDois:     { display: "flex", gap: "8px" },
+  erro:        { color: C.erro, fontSize: "13px", margin: "4px 0" },
 }
