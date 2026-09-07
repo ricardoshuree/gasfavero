@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: emprestimo_casco | plano: 1c0b80ad | 2026-09-07 15:11:12
-# Adiciona módulo cascos no seed RBAC: gerente CRUD completo, motorista sem can_delete (não confirma)
+# [mcp-local harness] feature: fix-steps-header-rbac-produtos | plano: be918930 | 2026-09-07 19:13:34
+# Seed RBAC: motorista recebe read-only no módulo produtos para poder listar produtos na tela de Vendas do app
 import uuid
 
 from sqlmodel import Session, create_engine, select
@@ -26,14 +26,22 @@ DEFAULT_MODULES = [
 # Módulos extras do erp-gasfavero
 #
 # cascos:
-#   gerente  -> CRUD completo (recebe E confirma a devolucao — dupla checagem)
+#   gerente   -> CRUD completo (recebe E confirma a devolucao — dupla checagem)
 #   motorista -> create+read+update (registra emprestimo e recebe casco, mas NAO confirma)
-#                can_delete=False -> nao acessa PATCH /cascos/{id}/confirmar
+#               can_delete=False -> nao acessa PATCH /cascos/{id}/confirmar
+#
+# produtos (módulo de catálogo/preços):
+#   motorista -> read only (necessário para listar produtos na tela de Vendas do app)
 # ---------------------------------------------------------------------------
 
 GASFAVERO_EXTRA_MODULES = [
     {"name": "gas_povo", "description": "Programa Gás do Povo — vendas e recebimento"},
     {"name": "cascos",   "description": "Controle de empréstimo e devolução de cascos"},
+]
+
+# Módulos onde motorista precisa de permissão de leitura (read-only)
+MOTORISTA_READ_ONLY_MODULES = [
+    {"name": "produtos", "description": "Catálogo de produtos e preços vigentes"},
 ]
 
 
@@ -127,9 +135,10 @@ def init_db(session: Session) -> None:
 
     _ensure_user_role(session, user, roles["admin"])
 
-    role_gerente = session.exec(select(Role).where(Role.name == "gerente")).first()
+    role_gerente  = session.exec(select(Role).where(Role.name == "gerente")).first()
     role_motorista = session.exec(select(Role).where(Role.name == "motorista")).first()
 
+    # ── Módulos extras (gas_povo, cascos) ──
     for m in GASFAVERO_EXTRA_MODULES:
         mod = _get_or_create_module(session, m["name"], m["description"])
 
@@ -145,12 +154,21 @@ def init_db(session: Session) -> None:
             )
 
         if role_motorista:
-            # Motorista NAO pode confirmar devolucao (can_delete=False)
-            # Isso bloqueia PATCH /cascos/{id}/confirmar que exige can_delete
+            # Motorista NAO pode confirmar devolucao de casco (can_delete=False)
             can_delete = m["name"] != "cascos"
             _ensure_role_permission(
                 session, role_motorista, mod,
                 can_create=True, can_read=True, can_update=True, can_delete=can_delete,
+            )
+
+    # ── Módulos onde motorista precisa apenas de leitura ──
+    # Ex: produtos — necessário para listar produtos na tela de Vendas do app motorista
+    if role_motorista:
+        for m in MOTORISTA_READ_ONLY_MODULES:
+            mod = _get_or_create_module(session, m["name"], m["description"])
+            _ensure_role_permission(
+                session, role_motorista, mod,
+                can_create=False, can_read=True, can_update=False, can_delete=False,
             )
 
     session.commit()
