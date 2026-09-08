@@ -1,7 +1,8 @@
-// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:03:04
-// TopBar: recebe nomeMotorista prop e exibe primeiro nome no lugar de Gás Favero
+// [mcp-local harness] feature: foreground-service-localizacao | plano: 973c2472 | 2026-09-08 12:08:30
+// TopBar: usa AndroidLocalizacao (Foreground Service nativo) com fallback para ping JS
 // TopBar — barra superior fixa do app motorista
-// Exibe o nome do motorista logado (prop nomeMotorista) + toggle de disponibilidade
+// Localização: usa Foreground Service nativo (AndroidLocalizacao) no Android.
+// Fallback para ping JS quando fora do ambiente nativo (ex: browser dev).
 import { type CSSProperties, useEffect, useRef, useState } from "react"
 import { atualizarDisponibilidade, buscarMinhaDisponibilidade } from "../lib/disponibilidade"
 import { iniciarPing, pararPing } from "../lib/localizacao"
@@ -9,6 +10,42 @@ import { CORES_APP as CORES } from "../theme"
 
 const ALTURA_TOPBAR_PX = 52
 const INTERVALO_POLLING_MS = 15_000
+
+// Ponte nativa — exposta pela MainActivity via addJavascriptInterface
+type JanelaAndroid = Window & {
+  AndroidLocalizacao?: {
+    ligar: (token: string, motoristaId: string) => void
+    desligar: () => void
+  }
+  AndroidFCM?: { sincronizar?: () => void }
+}
+
+/** Liga o rastreamento: usa Foreground Service nativo se disponível, senão JS */
+function ligarRastreamento(
+  token: string,
+  motoristaId: string,
+  aoErroJs: () => void,
+  pingIdRef: React.MutableRefObject<number | null>
+) {
+  const ponte = (window as JanelaAndroid).AndroidLocalizacao
+  if (ponte?.ligar) {
+    ponte.ligar(token, motoristaId)
+  } else {
+    // Fallback: ping JS (funciona no browser de dev)
+    pingIdRef.current = iniciarPing(token, motoristaId, aoErroJs)
+  }
+}
+
+/** Desliga o rastreamento */
+function desligarRastreamento(pingIdRef: React.MutableRefObject<number | null>) {
+  const ponte = (window as JanelaAndroid).AndroidLocalizacao
+  if (ponte?.desligar) {
+    ponte.desligar()
+  } else if (pingIdRef.current !== null) {
+    pararPing(pingIdRef.current)
+    pingIdRef.current = null
+  }
+}
 
 function TopBar({
   token,
@@ -24,17 +61,18 @@ function TopBar({
   const [erro, setErro] = useState<string | null>(null)
   const pingIdRef = useRef<number | null>(null)
 
+  function aoErroLocalizacao() {
+    setErro("Falha ao enviar localização")
+  }
+
+  // Carrega disponibilidade inicial e liga rastreamento se já estava ativo
   useEffect(() => {
     let cancelado = false
     buscarMinhaDisponibilidade(token, motoristaId)
       .then((valor) => {
         if (!cancelado && valor !== null) {
           setDisponivel(valor)
-          if (valor) {
-            pingIdRef.current = iniciarPing(token, motoristaId, () =>
-              setErro("Falha ao enviar localização"),
-            )
-          }
+          if (valor) ligarRastreamento(token, motoristaId, aoErroLocalizacao, pingIdRef)
         }
       })
       .catch(() => {})
@@ -43,6 +81,7 @@ function TopBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Polling de disponibilidade (sincroniza mudanças feitas de outro dispositivo)
   useEffect(() => {
     if (carregandoInicial) return
     let cancelado = false
@@ -52,13 +91,10 @@ function TopBar({
           if (cancelado || valor === null) return
           setDisponivel((atual) => {
             if (valor === atual) return atual
-            if (valor && pingIdRef.current === null) {
-              pingIdRef.current = iniciarPing(token, motoristaId, () =>
-                setErro("Falha ao enviar localização"),
-              )
-            } else if (!valor && pingIdRef.current !== null) {
-              pararPing(pingIdRef.current)
-              pingIdRef.current = null
+            if (valor) {
+              ligarRastreamento(token, motoristaId, aoErroLocalizacao, pingIdRef)
+            } else {
+              desligarRastreamento(pingIdRef)
             }
             return valor
           })
@@ -69,8 +105,9 @@ function TopBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carregandoInicial, token, motoristaId])
 
+  // Garante que o serviço para ao desmontar
   useEffect(() => {
-    return () => { if (pingIdRef.current !== null) pararPing(pingIdRef.current) }
+    return () => { desligarRastreamento(pingIdRef) }
   }, [])
 
   async function alternar() {
@@ -83,20 +120,14 @@ function TopBar({
       return
     }
     if (novoValor) {
-      pingIdRef.current = iniciarPing(token, motoristaId, () =>
-        setErro("Falha ao enviar localização"),
-      )
-    } else if (pingIdRef.current !== null) {
-      pararPing(pingIdRef.current)
-      pingIdRef.current = null
+      ligarRastreamento(token, motoristaId, aoErroLocalizacao, pingIdRef)
+    } else {
+      desligarRastreamento(pingIdRef)
     }
     setDisponivel(novoValor)
   }
 
-  // Exibe só o primeiro nome para caber na barra
-  const primeiroNome = nomeMotorista
-    ? nomeMotorista.split(" ")[0]
-    : "Motorista"
+  const primeiroNome = nomeMotorista ? nomeMotorista.split(" ")[0] : "Motorista"
 
   return (
     <div style={estilos.barra}>
@@ -127,10 +158,7 @@ function estiloToggle(ativo: boolean): CSSProperties {
 }
 
 function estiloPontinho(ativo: boolean): CSSProperties {
-  return {
-    width: 8, height: 8, borderRadius: "50%",
-    background: ativo ? CORES.statusOn : CORES.statusOff,
-  }
+  return { width: 8, height: 8, borderRadius: "50%", background: ativo ? CORES.statusOn : CORES.statusOff }
 }
 
 const estilos: Record<string, CSSProperties> = {
