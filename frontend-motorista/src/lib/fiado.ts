@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: recebimento-fiado-motorista | plano: 2701b061 | 2026-09-07 13:01:37
-// API helpers para recebimento de fiado: busca fiados do motorista, busca clientes, marca recebido
+// [mcp-local harness] feature: fix-fiado-sheet-endereco | plano: c45fa1e1 | 2026-09-08 12:26:01
+// Adiciona campo endereco opcional ao tipo FiadoEmAberto
 // API helpers para Recebimento de Fiado no app motorista
 import { request } from "./api"
 
@@ -20,6 +20,13 @@ export type FiadoEmAberto = {
     quantidade: number
     subtotal: string
   }>
+  // Endereço onde a venda foi realizada
+  endereco?: {
+    rua_nome: string
+    numero: string
+    bairro_nome: string
+    complemento?: string | null
+  } | null
   created_at: string
 }
 
@@ -47,24 +54,15 @@ export function diasEmAberto(dataVendaISO: string): number {
   return Math.floor((hoje.getTime() - dataVenda.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-/** Busca os fiados em aberto do motorista logado (pago_em == null) */
-export async function buscarMeusFiados(
-  token: string,
-  motoristaId: string
-): Promise<FiadoEmAberto[]> {
+export async function buscarMeusFiados(token: string, motoristaId: string): Promise<FiadoEmAberto[]> {
   const res = await request<{ data: FiadoEmAberto[]; count: number }>(
     `/api/v1/vendas/vales-recebimento?status=todos&limit=100`,
     { token }
   )
-  // Filtra somente os fiados do motorista logado
   return res.data.filter(v => v.motorista_id === motoristaId)
 }
 
-/** Busca clientes por nome ou CPF */
-export async function buscarClientesFiado(
-  token: string,
-  q: string
-): Promise<ClienteBusca[]> {
+export async function buscarClientesFiado(token: string, q: string): Promise<ClienteBusca[]> {
   const res = await request<{ data: ClienteBusca[]; count: number }>(
     `/api/v1/clientes/?q=${encodeURIComponent(q)}&limit=10`,
     { token }
@@ -72,12 +70,7 @@ export async function buscarClientesFiado(
   return res.data
 }
 
-/** Registra que o motorista recebeu o pagamento do fiado */
-export async function marcarFiadoRecebido(
-  token: string,
-  vendaId: string,
-  valorPago: string
-): Promise<FiadoEmAberto> {
+export async function marcarFiadoRecebido(token: string, vendaId: string, valorPago: string): Promise<FiadoEmAberto> {
   return request(`/api/v1/vendas/${vendaId}/marcar-pago`, {
     method: "PATCH",
     token,
