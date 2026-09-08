@@ -1,5 +1,7 @@
-// [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222 | 2026-09-08 09:29:09
-// EtapaCliente: btnNovo vermelho iFood, btnVoltar texto e borda escuros #111/#374151
+// [mcp-local harness] feature: fix-cores-vermelhas-cliente | plano: c604a622 | 2026-09-08 09:40:27
+// resultado busca borda vermelha; btnTrocarEnd e btnTrocar vermelhos iFood
+// [mcp-local harness] feature: fix-cores-vermelhas-cliente | plano: c604a622
+// resultado busca borda vermelha; btnTrocarEnd e btnTrocar vermelhos
 // [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222
 // Etapa 2 — botão Cadastrar novo cliente em vermelho iFood, Voltar texto escuro
 import { useEffect, useRef, useState, type CSSProperties } from "react"
@@ -62,12 +64,8 @@ function statusVenda(v: VendaHistorico): { label: string; bg: string; text: stri
   return { label: "Em aberto", bg: "#fef3c7", text: "#92400e" }
 }
 
-function formatData(iso: string) {
-  const [, m, d] = iso.split("-"); return `${d}/${m}`
-}
-function formatMoney(v: string | number) {
-  return `R$ ${Number(v).toFixed(2).replace(".", ",")}`
-}
+function formatData(iso: string) { const [, m, d] = iso.split("-"); return `${d}/${m}` }
+function formatMoney(v: string | number) { return `R$ ${Number(v).toFixed(2).replace(".", ",")}` }
 
 function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) {
   const [total, setTotal] = useState(0)
@@ -86,14 +84,12 @@ function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) 
 function HistoricoVendas({ clienteId, token }: { clienteId: string; token: string }) {
   const [vendas, setVendas] = useState<VendaHistorico[]>([])
   const [carregando, setCarregando] = useState(true)
-
   useEffect(() => {
     setCarregando(true)
     request<{ data: VendaHistorico[] }>(
       `/api/v1/vendas/cliente/${clienteId}/historico?limit=3`, { token }
     ).then(r => setVendas(r.data)).catch(() => {}).finally(() => setCarregando(false))
   }, [clienteId, token])
-
   return (
     <div style={sh.box}>
       <p style={sh.titulo}>Histórico de vendas (últimas 3)</p>
@@ -153,9 +149,7 @@ function TrocarEndereco({
   const [complemento, setComplemento] = useState("")
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState("")
-
   useEffect(() => { buscarBairros(token).then(setBairros).catch(() => {}) }, [token])
-
   async function salvar() {
     if (!bairroId || !rua.trim() || !numero.trim()) { setErro("Bairro, rua e número são obrigatórios."); return }
     setSalvando(true); setErro("")
@@ -168,11 +162,9 @@ function TrocarEndereco({
       const endStr = atualizado.endereco
         ? `${atualizado.endereco.rua_nome}, ${atualizado.endereco.numero} — ${atualizado.endereco.bairro_nome}` : ""
       onEnderecoCriado(endId, endStr)
-    } catch (e: any) {
-      setErro(e.message ?? "Erro ao salvar endereço.")
-    } finally { setSalvando(false) }
+    } catch (e: any) { setErro(e.message ?? "Erro ao salvar endereço.") }
+    finally { setSalvando(false) }
   }
-
   return (
     <div style={se.box}>
       <p style={se.titulo}>Novo endereço</p>
@@ -196,9 +188,7 @@ function TrocarEndereco({
       {erro && <p style={{ color: C.erro, fontSize: "12px", margin: "4px 0" }}>{erro}</p>}
       <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
         <button style={se.btnCancelar} onClick={onFechar}>Cancelar</button>
-        <button style={se.btnSalvar} onClick={salvar} disabled={salvando}>
-          {salvando ? "Salvando..." : "Salvar endereço"}
-        </button>
+        <button style={se.btnSalvar} onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : "Salvar endereço"}</button>
       </div>
     </div>
   )
@@ -259,7 +249,9 @@ export default function EtapaCliente({
     if (busca.trim().length < 2) { setResultados([]); return }
     debounceRef.current = setTimeout(() => {
       setBuscando(true)
-      buscarClientes(token, busca.trim()).then(setResultados).catch(() => setResultados([]).finally(() => setBuscando(false)))
+      buscarClientes(token, busca.trim())
+        .then(setResultados).catch(() => setResultados([]))
+        .finally(() => setBuscando(false))
     }, 500)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [busca, token])
@@ -278,9 +270,8 @@ export default function EtapaCliente({
       onClienteChange(c)
       if (c.endereco?.id) onEnderecoChange(c.endereco.id)
       setModo("busca")
-    } catch (e: any) {
-      setErroCadastro(e.message ?? "Erro ao cadastrar cliente.")
-    } finally { setSalvando(false) }
+    } catch (e: any) { setErroCadastro(e.message ?? "Erro ao cadastrar cliente.") }
+    finally { setSalvando(false) }
   }
 
   function selecionarCliente(c: Cliente) { onClienteChange(c); setBusca(""); setResultados([]) }
@@ -292,7 +283,6 @@ export default function EtapaCliente({
   return (
     <div style={s.pagina}>
       <style>{spinnerStyle}</style>
-
       {modo === "busca" && (
         <>
           {clienteSelecionado && (
@@ -319,7 +309,6 @@ export default function EtapaCliente({
               </button>
             </div>
           )}
-
           {!clienteSelecionado && (
             <>
               <div style={s.searchBox}>
@@ -342,12 +331,9 @@ export default function EtapaCliente({
               )}
             </>
           )}
-
           <div style={s.separator} />
-          {/* Botão cadastrar em vermelho iFood */}
           <button style={s.btnNovo} onClick={() => setModo("novo")}>+ Cadastrar novo cliente</button>
           <div style={s.rodape}>
-            {/* Voltar com texto escuro e borda visível */}
             <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
             <button
               style={{ ...s.btnProximo, opacity: clienteSelecionado ? 1 : 0.4 }}
@@ -356,7 +342,6 @@ export default function EtapaCliente({
           </div>
         </>
       )}
-
       {modo === "novo" && (
         <div style={s.form}>
           <p style={s.formTitulo}>Novo cliente</p>
@@ -404,21 +389,23 @@ const s: Record<string, CSSProperties> = {
   searchIcon:  { fontSize: "16px" },
   searchInput: { border: "none", background: "transparent", fontSize: "15px", color: C.texto, flex: 1, outline: "none" },
   clearBtn:    { background: "none", border: "none", fontSize: "14px", color: C.textoSecundario, cursor: "pointer", padding: 0 },
-  resultado:   { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "12px", marginBottom: "6px", cursor: "pointer" },
+  // Resultado da busca — borda vermelha iFood
+  resultado:   { background: C.fundoCard, border: `1.5px solid ${VERMELHO}`, borderRadius: "10px", padding: "12px", marginBottom: "6px", cursor: "pointer" },
   resNome:     { fontSize: "14px", fontWeight: 600, color: C.texto },
   resSub:      { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
+  // Card cliente selecionado — mantém verde (confirmação de seleção)
   clienteCard: { background: "#f0f4eb", border: "2px solid #606C38", borderRadius: "12px", padding: "12px 14px", marginBottom: "12px" },
   clienteNome: { fontSize: "15px", fontWeight: 700, color: C.texto },
   clienteSub:  { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
   enderecoRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px" },
   enderecoTxt: { fontSize: "12px", color: C.textoSecundario, flex: 1 },
-  btnTrocarEnd:{ background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "6px", padding: "3px 10px", fontSize: "12px", cursor: "pointer", flexShrink: 0 },
-  btnTrocar:   { marginTop: "10px", background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", cursor: "pointer", display: "block", width: "100%", textAlign: "center" as const },
+  // Botão Trocar (endereço) — vermelho
+  btnTrocarEnd:{ background: "transparent", border: `1px solid ${VERMELHO}`, color: VERMELHO, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", cursor: "pointer", flexShrink: 0 },
+  // Botão Trocar cliente — vermelho
+  btnTrocar:   { marginTop: "10px", background: "transparent", border: `1.5px solid ${VERMELHO}`, color: VERMELHO, borderRadius: "8px", padding: "6px 12px", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "block", width: "100%", textAlign: "center" as const },
   separator:   { borderTop: `1px solid ${C.borda}`, margin: "12px 0" },
-  // Vermelho iFood — destaque para ação de cadastro
   btnNovo:     { width: "100%", background: "transparent", border: `2px solid ${VERMELHO}`, borderRadius: "12px", padding: "12px", fontSize: "15px", fontWeight: 600, color: VERMELHO, cursor: "pointer", textAlign: "center" as const },
   rodape:      { display: "flex", gap: "10px", marginTop: "16px" },
-  // Voltar com texto e borda escuros
   btnVoltar:   { flex: 1, background: "transparent", border: "1.5px solid #374151", borderRadius: "12px", padding: "13px", fontSize: "15px", color: "#111111", fontWeight: 600, cursor: "pointer" },
   btnProximo:  { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 600, cursor: "pointer" },
   form:        { display: "flex", flexDirection: "column", gap: "4px" },
