@@ -1,32 +1,43 @@
-// [mcp-local harness] feature: fase4-motorista-disponibilidade-cancelamento | plano: ab68610c | 2026-08-08 11:43:52
-// Adiciona tocarSomCancelamento() -- som distinto (sintetizado) do ding-dong, dispara uma vez so (nao loop)
-// Sons do app do motorista -- gerados via Web Audio API (ding-dong
-// pro alerta de chamado novo) ou tocados via arquivo de verdade
-// (public/sounds/alerta-chamado.mp3, baixado de
-// notificationsounds.com). Funciona só com o app em primeiro plano
-// (ver comentário em AlertaChamado.tsx sobre a diferença pra push
-// notification de verdade).
+// [mcp-local harness] feature: selecao-som-alerta | plano: b142e4e6 | 2026-09-08 14:49:40
+// Lê som selecionado do localStorage; recria elemento de áudio ao trocar
+// Sons do app do motorista.
+// O alerta de chamado novo toca o arquivo MP3 selecionado pelo motorista
+// (salvo em localStorage sob a chave CHAVE_SOM). Padrão: Padrao.mp3.
+// O som de cancelamento é sintetizado via Web Audio API (uma vez só, sem loop).
 //
-// IMPORTANTE -- política de autoplay do navegador/WebView: um
-// elemento <audio> (ou AudioContext) não tem permissão de tocar
-// sozinho até o usuário interagir com a página pelo menos uma vez
-// (toque/clique). Como o alerta é disparado pelo polling em segundo
-// plano (sem toque do usuário naquele momento exato), o som
-// simplesmente não tocaria -- sem erro nenhum, só silêncio. A
-// correção é "destravar" o áudio na PRIMEIRA interação do usuário com
-// o app (ver desbloquearAudio(), chamado uma vez no App.tsx), bem
-// antes de qualquer alarme precisar tocar.
+// Política de autoplay: desbloquearAudio() deve ser chamado na primeira
+// interação do usuário (ver App.tsx) para destravá-lo antes do primeiro alarme.
 
-const CAMINHO_SOM_CHAMADO = "/sounds/alerta-chamado.mp3"
+export const CHAVE_SOM = "alerta_som_selecionado"
+export const SOM_PADRAO = "/sounds/Padrao.mp3"
+
+export const SONS_DISPONIVEIS = [
+  { label: "Padrão",       arquivo: "/sounds/Padrao.mp3" },
+  { label: "Sem Problema", arquivo: "/sounds/Sem Problema.mp3" },
+  { label: "Toque Suave",  arquivo: "/sounds/Toque Suave.mp3" },
+  { label: "Guitarra",     arquivo: "/sounds/Guitarra.mp3" },
+]
+
+function somAtual(): string {
+  return localStorage.getItem(CHAVE_SOM) ?? SOM_PADRAO
+}
 
 let elementoAudioChamado: HTMLAudioElement | null = null
+let caminhoCarregado: string | null = null
 let audioCtx: AudioContext | null = null
 
 function obterElementoChamado(): HTMLAudioElement {
-  if (!elementoAudioChamado) {
-    elementoAudioChamado = new Audio(CAMINHO_SOM_CHAMADO)
+  const caminho = somAtual()
+  // Recria o elemento se o som tiver mudado desde a última vez
+  if (!elementoAudioChamado || caminhoCarregado !== caminho) {
+    if (elementoAudioChamado) {
+      elementoAudioChamado.pause()
+      elementoAudioChamado.src = ""
+    }
+    elementoAudioChamado = new Audio(caminho)
     elementoAudioChamado.loop = true
     elementoAudioChamado.preload = "auto"
+    caminhoCarregado = caminho
   }
   return elementoAudioChamado
 }
@@ -35,67 +46,47 @@ function obterContextoSintetizado(): AudioContext {
   if (!audioCtx) {
     const Ctor =
       window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     audioCtx = new Ctor()
   }
   return audioCtx
 }
 
-/** Chamar uma vez, na primeira interação do usuário com o app
- * (ver App.tsx) -- toca e pausa imediatamente (volume real, duração
- * ~0) só pra "destravar" o elemento de áudio pra alarmes futuros
- * disparados sem toque direto (ex: pelo polling em segundo plano).
- * Também "acorda" o AudioContext sintetizado usado no som de
- * cancelamento. */
-function desbloquearAudio(): void {
+/** Chamar uma vez na primeira interação do usuário (App.tsx) para
+ *  destravar o autoplay antes do primeiro alarme. */
+export function desbloquearAudio(): void {
   const audio = obterElementoChamado()
-  audio
-    .play()
-    .then(() => {
-      audio.pause()
-      audio.currentTime = 0
-    })
-    .catch(() => {
-      // Sem problema se falhar aqui -- iniciarAlarme() tenta de novo
-    })
-
+  audio.play().then(() => { audio.pause(); audio.currentTime = 0 }).catch(() => {})
   const ctx = obterContextoSintetizado()
-  if (ctx.state === "suspended") {
-    ctx.resume().catch(() => {})
-  }
+  if (ctx.state === "suspended") ctx.resume().catch(() => {})
 }
 
-/** Começa a tocar o alerta de CHAMADO NOVO em loop até pararAlarme()
- * ser chamado. */
-function iniciarAlarme(): void {
+/** Toca o som de alerta de chamado novo em loop até pararAlarme(). */
+export function iniciarAlarme(): void {
   const audio = obterElementoChamado()
   audio.currentTime = 0
-  audio.play().catch(() => {
-    // Se o autoplay ainda estiver bloqueado (desbloquearAudio nunca
-    // rodou), o alerta visual continua funcionando mesmo sem som.
-  })
+  audio.play().catch(() => {})
 }
 
-function pararAlarme(): void {
+export function pararAlarme(): void {
   if (!elementoAudioChamado) return
   elementoAudioChamado.pause()
   elementoAudioChamado.currentTime = 0
 }
 
-/** Som de CANCELAMENTO -- distinto do ding-dong de chamado novo de
- * propósito (Ricardo pediu "característico ao evento"). Toca só UMA
- * vez (não é loop -- cancelamento não exige ação imediata como um
- * chamado novo, só avisa). Sintetizado (duas notas descendentes,
- * tom mais "seco") em vez de arquivo -- pode virar um MP3 de verdade
- * depois, mesmo padrão do alerta de chamado, se o Ricardo escolher
- * um som específico em notificationsounds.com. */
-function tocarSomCancelamento(): void {
+/** Preview de um som específico (para a tela de configurações).
+ *  Toca uma vez e para automaticamente no fim. */
+export function previewSom(arquivo: string): void {
+  const audio = new Audio(arquivo)
+  audio.loop = false
+  audio.play().catch(() => {})
+}
+
+/** Som de cancelamento — sintetizado, distinto do alerta de chamado. */
+export function tocarSomCancelamento(): void {
   try {
     const ctx = obterContextoSintetizado()
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {})
-    }
+    if (ctx.state === "suspended") ctx.resume().catch(() => {})
     const tocarNota = (freq: number, inicioRelativoS: number, duracaoS: number) => {
       const osc = ctx.createOscillator()
       const ganho = ctx.createGain()
@@ -110,13 +101,9 @@ function tocarSomCancelamento(): void {
       osc.start(inicio)
       osc.stop(inicio + duracaoS)
     }
-    // Duas notas descendentes, tom "square" mais seco -- propositalmente
-    // diferente do "ding-dong" sino do chamado novo.
     tocarNota(440, 0, 0.18)
     tocarNota(293.66, 0.16, 0.28)
   } catch {
-    // Sem suporte a Web Audio -- segue sem som, o visual já avisa.
+    // Sem suporte a Web Audio — segue sem som.
   }
 }
-
-export { iniciarAlarme, pararAlarme, desbloquearAudio, tocarSomCancelamento }

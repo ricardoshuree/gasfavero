@@ -1,10 +1,13 @@
-// [mcp-local harness] feature: perfil-config-debug-gps | plano: fa7002dc | 2026-09-08 10:18:58
-// PerfilTela: adiciona ⚙️ no canto superior direito que abre ConfiguracoesTela. Passa token como prop.
+// [mcp-local harness] feature: versao-128 | plano: 05fc292d | 2026-09-08 16:30:22
+// Atualiza APP_VERSAO para 1.2.8
 // PerfilTela — com ⚙️ no canto superior direito abrindo ConfiguracoesTela
+// e versão do app exibida entre o card do usuário e o botão Sair.
 import { useState, type CSSProperties } from "react"
 import type { UserMe } from "../lib/auth"
 import { CORES_APP as CORES } from "../theme"
 import ConfiguracoesTela from "./ConfiguracoesTela"
+
+const APP_VERSAO = "1.2.8"
 
 interface Props {
   usuario: UserMe
@@ -39,6 +42,12 @@ function PerfilTela({ usuario, token, onLogout }: Props) {
         <span style={estilos.email}>{usuario.email}</span>
       </div>
 
+      {/* Versão do app */}
+      <div style={estilos.versaoContainer}>
+        <span style={estilos.versaoLabel}>Versão</span>
+        <span style={estilos.versaoValor}>{APP_VERSAO}</span>
+      </div>
+
       <button style={estilos.botaoSair} onClick={onLogout}>
         Sair
       </button>
@@ -62,10 +71,19 @@ const estilos: Record<string, CSSProperties> = {
     background: CORES.fundoCard, border: `1px solid ${CORES.borda}`,
     borderRadius: "0.75rem", padding: "1rem",
     display: "flex", flexDirection: "column",
-    gap: "0.2rem", marginBottom: "1.25rem",
+    gap: "0.2rem", marginBottom: "1rem",
   },
-  nome:    { fontWeight: 700, fontSize: "1.05rem", color: CORES.texto },
-  email:   { fontSize: "0.85rem", color: CORES.textoSecundario },
+  nome:  { fontWeight: 700, fontSize: "1.05rem", color: CORES.texto },
+  email: { fontSize: "0.85rem", color: CORES.textoSecundario },
+
+  versaoContainer: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "0.6rem 0.25rem", marginBottom: "1rem",
+    borderBottom: `1px solid ${CORES.borda}`,
+  },
+  versaoLabel: { fontSize: "0.85rem", color: CORES.textoSecundario },
+  versaoValor: { fontSize: "0.85rem", fontWeight: 700, color: CORES.textoSecundario },
+
   botaoSair: {
     width: "100%", padding: "0.85rem",
     borderRadius: "0.5rem", border: `1px solid ${CORES.borda}`,
