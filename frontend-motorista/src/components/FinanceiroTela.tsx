@@ -1,9 +1,7 @@
-// [mcp-local harness] feature: fix-sheet-fechar-endereco | plano: a1c3180e | 2026-09-08 11:09:17
-// Sheet com safe-area-inset-bottom, btnFechar largura total e vermelho, endereço no detalhe da venda
+// [mcp-local harness] feature: fix-cosmetico-livro-vendas | plano: d1f3d354 | 2026-09-08 12:20:47
+// FinanceiroTela: padding reduzido, filtros mais compactos no topo
 // Livro de Vendas do motorista — lista filtrada por período
-// Sheet: paddingBottom com safe-area para não sobrepor barra Android
-// btnFechar: largura total, fonte vermelha
-// Detalhe: mostra endereço da venda quando disponível
+// paddingTop reduzido — cabeçalho compacto sem espaço vazio
 import { useCallback, useEffect, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../theme"
 import type { UserMe } from "../lib/auth"
@@ -112,7 +110,6 @@ function VendaSheet({
               <div style={ss.linha}><span style={ss.lLabel}>Produtos</span><span style={ss.lValor}>{venda.itens.map(i => `${i.quantidade}× ${i.produto_title}`).join(", ")}</span></div>
               <div style={ss.linha}><span style={ss.lLabel}>Pagamento</span><span style={ss.lValor}>{LABEL_FORMA[venda.forma_pagamento] ?? venda.forma_pagamento}</span></div>
               <div style={ss.linha}><span style={ss.lLabel}>Valor</span><span style={ss.lValor}>{formatMoney(venda.valor_pago)}</span></div>
-              {/* Endereço onde a venda foi realizada */}
               {enderecoStr && (
                 <div style={ss.linha}><span style={ss.lLabel}>Endereço</span><span style={ss.lValor}>📍 {enderecoStr}</span></div>
               )}
@@ -133,7 +130,6 @@ function VendaSheet({
                 <button style={ss.btnCancelar} onClick={() => setModo("confirmar_cancel")}>✕ Cancelar venda</button>
               </div>
             )}
-            {/* Fechar: largura total, vermelho, espaço extra para não sobrepor barra Android */}
             <button style={ss.btnFechar} onClick={onFechar}>Fechar</button>
           </>
         )}
@@ -146,7 +142,7 @@ function VendaSheet({
               <select style={ss.campoInput} value={novaForma} onChange={e => setNovaForma(e.target.value)} disabled={!formaAtualSimples}>
                 {Object.entries(LABEL_FORMA).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
-              {!formaAtualSimples && <p style={ss.avisoSmall}>⚠️ {LABEL_FORMA[venda.forma_pagamento]} não permite troca de forma. Cancele e registre nova venda.</p>}
+              {!formaAtualSimples && <p style={ss.avisoSmall}>⚠️ {LABEL_FORMA[venda.forma_pagamento]} não permite troca. Cancele e registre nova venda.</p>}
               {trocouParaComplexo && <p style={ss.avisoSmall}>⚠️ Para {LABEL_FORMA[novaForma]}, cancele e registre nova venda.</p>}
             </div>
             <div style={ss.campo}>
@@ -167,7 +163,7 @@ function VendaSheet({
           <>
             <p style={ss.titulo}>Confirmar cancelamento</p>
             <div style={ss.avisoPerigo}>
-              A venda de <strong>{venda.cliente_nome}</strong> ({formatMoney(venda.valor_pago)}) será cancelada e o estorno contábil será lançado. Esta ação não pode ser desfeita.
+              A venda de <strong>{venda.cliente_nome}</strong> ({formatMoney(venda.valor_pago)}) será cancelada. Esta ação não pode ser desfeita.
             </div>
             {erro && <p style={ss.erro}>{erro}</p>}
             <div style={ss.acoes}>
@@ -198,13 +194,10 @@ export default function FinanceiroTela({ token, usuario }: Props) {
       const res = await buscarMinhasVendas(token, inicio, fim)
       const minhas = res.data.filter(v => v.motorista_id === usuario.id)
       setVendas(minhas)
-      const soma = minhas
-        .filter(v => v.status !== "cancelada")
-        .reduce((acc, v) => acc + Number(v.valor_pago), 0)
+      const soma = minhas.filter(v => v.status !== "cancelada").reduce((acc, v) => acc + Number(v.valor_pago), 0)
       setSomaPago(soma.toFixed(2))
-    } catch {
-      setErro("Não foi possível carregar as vendas.")
-    } finally { setCarregando(false) }
+    } catch { setErro("Não foi possível carregar as vendas.") }
+    finally { setCarregando(false) }
   }, [token, usuario.id, periodo])
 
   useEffect(() => { carregar() }, [carregar])
@@ -217,6 +210,7 @@ export default function FinanceiroTela({ token, usuario }: Props) {
 
   return (
     <div style={s.pagina}>
+      {/* Filtros colados ao topo — sem padding superior extra */}
       <div style={s.filtros}>
         {PERIODOS.map(p => (
           <button key={p.id} style={{ ...s.filtroBt, ...(periodo === p.id ? s.filtroAtivo : {}) }} onClick={() => setPeriodo(p.id)}>
@@ -280,8 +274,7 @@ export default function FinanceiroTela({ token, usuario }: Props) {
 
       {vendaSelecionada && (
         <VendaSheet
-          venda={vendaSelecionada}
-          token={token}
+          venda={vendaSelecionada} token={token}
           onFechar={() => setVendaSelecionada(null)}
           onAtualizar={v => { atualizarVenda(v); setVendaSelecionada(null) }}
         />
@@ -291,11 +284,12 @@ export default function FinanceiroTela({ token, usuario }: Props) {
 }
 
 const s: Record<string, CSSProperties> = {
+  // Sem paddingTop — o cabeçalho do subCabecalho já faz a separação
   pagina:      { background: C.fundo, minHeight: "100%" },
-  filtros:     { display: "flex", gap: "6px", padding: "10px 14px", background: C.fundoCard, borderBottom: `1px solid ${C.borda}` },
+  filtros:     { display: "flex", gap: "6px", padding: "8px 14px", background: C.fundoCard, borderBottom: `1px solid ${C.borda}` },
   filtroBt:    { background: "#fff", border: `1px solid ${C.borda}`, borderRadius: "8px", padding: "5px 12px", fontSize: "13px", color: C.texto, cursor: "pointer" },
   filtroAtivo: { background: "#606C38", borderColor: "#606C38", color: "#F8FAFC", fontWeight: 600 },
-  resumo:      { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", padding: "10px 14px" },
+  resumo:      { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", padding: "8px 14px" },
   resumoCard:  { background: C.fundoCard, borderRadius: "10px", padding: "10px 12px" },
   resumoLabel: { fontSize: "11px", color: C.textoSecundario, marginBottom: "3px" },
   resumoValor: { fontSize: "18px", fontWeight: 700, color: C.texto },
@@ -321,7 +315,6 @@ const s: Record<string, CSSProperties> = {
 
 const ss: Record<string, CSSProperties> = {
   overlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", zIndex: 100 },
-  // paddingBottom com safe-area para não sobrepor barra de navegação do Android
   sheet: {
     background: "#fff", borderRadius: "16px 16px 0 0",
     padding: "16px 16px 0", width: "100%", boxSizing: "border-box" as const,
@@ -341,22 +334,12 @@ const ss: Record<string, CSSProperties> = {
   acoes:        { display: "flex", gap: "8px", marginTop: "12px", marginBottom: "8px" },
   btnEditar:    { flex: 1, background: "#f0f4eb", border: "1.5px solid #606C38", color: "#3a5c1a", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 500, cursor: "pointer", textAlign: "center" as const },
   btnCancelar:  { flex: 1, background: "#fff", border: "1.5px solid #e5e7eb", color: "#dc2626", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 500, cursor: "pointer", textAlign: "center" as const },
-  // Fechar: largura total, vermelho, margem extra para não sobrepor a barra Android
   btnFechar: {
-    display: "block",
-    width: "100%",
-    background: "transparent",
-    border: `1.5px solid #EA1D2C`,
-    color: "#EA1D2C",
-    borderRadius: "10px",
-    padding: "13px",
-    fontSize: "15px",
-    fontWeight: 700,
-    cursor: "pointer",
-    textAlign: "center" as const,
-    boxSizing: "border-box" as const,
-    marginTop: "8px",
-    marginBottom: "8px",
+    display: "block", width: "100%", background: "transparent",
+    border: "1.5px solid #EA1D2C", color: "#EA1D2C",
+    borderRadius: "10px", padding: "13px", fontSize: "15px",
+    fontWeight: 700, cursor: "pointer", textAlign: "center" as const,
+    boxSizing: "border-box" as const, marginTop: "8px", marginBottom: "8px",
   },
   campo:        { marginBottom: "12px" },
   campoLabel:   { fontSize: "13px", color: C.textoSecundario, display: "block", marginBottom: "4px" },

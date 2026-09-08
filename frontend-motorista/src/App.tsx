@@ -1,6 +1,8 @@
-// [mcp-local harness] feature: perfil-config-debug-gps | plano: 34436423 | 2026-09-08 10:19:46
-// App.tsx: passa token para PerfilTela
-// App.tsx — navegação principal + token passado ao PerfilTela
+// [mcp-local harness] feature: fix-cosmetico-livro-vendas | plano: d1f3d354 | 2026-09-08 12:19:22
+// App.tsx: botão voltar estilo iFood, espaço reduzido no cabeçalho, financeiro volta ao hub ao clicar na aba ativa
+// App.tsx — navegação principal
+// Botão voltar estilo iFood (bolinha cinza com < dentro)
+// Clicar em Financeiro quando já está numa sub-tela volta ao hub
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
@@ -70,8 +72,12 @@ function App() {
   }, [])
 
   function handleMudarAba(aba: AbaId) {
+    if (aba === "financeiro") {
+      // Se já está no financeiro: volta ao hub (reseta sub-tela)
+      // Se estava em outra aba: abre financeiro no hub
+      setSubTelaFinanceiro(null)
+    }
     setAbaAtiva(aba)
-    if (aba !== "financeiro") setSubTelaFinanceiro(null)
   }
 
   async function handleLogout() {
@@ -91,13 +97,18 @@ function App() {
     if (!subTelaFinanceiro) {
       return <FinanceiroHub onNavegar={setSubTelaFinanceiro} />
     }
+
     const cabecalho = (
       <div style={estilos.subCabecalho}>
-        <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>←</button>
+        {/* Botão voltar estilo iFood — bolinha cinza com < */}
+        <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>
+          ‹
+        </button>
         <span style={estilos.subTitulo}>{SUBTELA_TITULO[subTelaFinanceiro]}</span>
         <div style={{ width: "36px" }} />
       </div>
     )
+
     if (subTelaFinanceiro === "livro")            return <>{cabecalho}<FinanceiroTela token={token} usuario={usuario} /></>
     if (subTelaFinanceiro === "recebimento_vale") return <>{cabecalho}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
     if (subTelaFinanceiro === "inadimplentes")    return <>{cabecalho}<InadimplentesTola token={token} usuario={usuario} /></>
@@ -140,9 +151,24 @@ const estilos = {
     paddingBottom: `calc(${ALTURA_BOTTOMNAV_PX}px + env(safe-area-inset-bottom))`,
     minHeight: "100vh", boxSizing: "border-box" as const,
   },
-  subCabecalho: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 8px", background: "#fff", borderBottom: "1px solid #F3F4F6" } as const,
-  btnVoltar:    { background: "transparent", border: "none", color: "#606C38", fontSize: "20px", fontWeight: 700, cursor: "pointer", padding: "2px 6px", lineHeight: 1, width: "36px" } as const,
-  subTitulo:    { fontSize: "15px", fontWeight: 700, color: CORES_APP.texto, flex: 1, textAlign: "center" as const },
+  subCabecalho: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "6px 12px 6px",  // reduzido — menos espaço vazio no topo
+    background: "#fff", borderBottom: "1px solid #F3F4F6",
+  } as const,
+  // Botão voltar estilo iFood: bolinha cinza clara com ‹ grande
+  btnVoltar: {
+    width: "36px", height: "36px", borderRadius: "50%",
+    background: "#F3F4F6", border: "none",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: "22px", fontWeight: 700, color: "#111111",
+    cursor: "pointer", lineHeight: 1, flexShrink: 0,
+    paddingBottom: "2px",  // ajuste ótico do ‹
+  } as const,
+  subTitulo: {
+    fontSize: "15px", fontWeight: 700, color: CORES_APP.texto,
+    flex: 1, textAlign: "center" as const,
+  },
   splash: {
     minHeight: "100vh", display: "flex", flexDirection: "column" as const,
     alignItems: "center", justifyContent: "center", gap: "0.75rem",
