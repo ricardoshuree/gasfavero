@@ -303,10 +303,18 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
         "WHERE v.motorista_id = :mid AND v.data_venda = :data ORDER BY v.created_at"
     ), {"mid": motorista_id, "data": data}).fetchall()
     carga = conn.execute(sa.text(
-        "SELECT adp.produto_id, i.title, adp.quantidade "
-        "FROM abertura_dia_produto adp JOIN item i ON i.id = adp.produto_id "
-        "WHERE adp.abertura_id = :abertura_id"
-    ), {"abertura_id": str(abertura[0])}).fetchall()
+        "SELECT adp.produto_id, i.title, adp.quantidade, "
+        "COALESCE(SUM(vi.quantidade), 0) AS vendidos "
+        "FROM abertura_dia_produto adp "
+        "JOIN item i ON i.id = adp.produto_id "
+        "LEFT JOIN venda_item vi ON vi.produto_id = adp.produto_id "
+        "  AND vi.venda_id IN ( "
+        "    SELECT id FROM venda "
+        "    WHERE motorista_id = :mid AND data_venda = :data AND status != 'cancelada' "
+        "  ) "
+        "WHERE adp.abertura_id = :abertura_id "
+        "GROUP BY adp.produto_id, i.title, adp.quantidade"
+    ), {"abertura_id": str(abertura[0]), "mid": motorista_id, "data": data}).fetchall()
 
     # ---------------------------------------------------------------------------
     # Cascos do dia — emprestados e devolvidos por este motorista nesta data
@@ -382,7 +390,7 @@ def read_resumo_fechamento(session: SessionDep, motorista_id: str, data: date) -
 
     return {
         "abertura_id": str(abertura[0]),
-        "carga_produtos": [{"produto_id": str(c[0]), "produto_nome": c[1], "carregado": c[2]} for c in carga],
+        "carga_produtos": [{"produto_id": str(c[0]), "produto_nome": c[1], "carregado": c[2], "vendidos": int(c[3])} for c in carga],
         "fundo_troco": float(fundo_troco), "total_dinheiro": float(t["dinheiro"]),
         "total_pix": float(t["pix"]), "total_debito": float(t["cartao_debito"]),
         "total_credito": float(t["cartao_credito"]), "total_fiado": float(t["vale"]),
@@ -567,3 +575,4 @@ def read_dashboard(session: SessionDep, periodo: str = "hoje") -> Any:
             for l in lancamentos
         ],
     }
+
