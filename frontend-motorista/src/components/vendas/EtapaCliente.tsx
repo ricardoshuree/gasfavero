@@ -1,8 +1,7 @@
-// [mcp-local harness] feature: fix-historico-remove-ico-casco | plano: 0b5bbfab | 2026-09-07 20:14:43
-// Remove ícone 📦 e variável temCasco do histórico de vendas
-// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:06:07
-// EtapaCliente: spinner no histórico + 3 linhas por venda. Ícone casco removido (aviso já existe no card).
-// Etapa 2 — Busca de cliente, cadastro rápido, troca de endereço e histórico de vendas
+// [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222 | 2026-09-08 09:29:09
+// EtapaCliente: btnNovo vermelho iFood, btnVoltar texto e borda escuros #111/#374151
+// [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222
+// Etapa 2 — botão Cadastrar novo cliente em vermelho iFood, Voltar texto escuro
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
 import {
@@ -44,6 +43,7 @@ type VendaHistorico = {
 type CascoCliente = { count: number; total_cascos_abertos: number }
 
 const DIAS_ATRASO = 30
+const VERMELHO = "#EA1D2C"
 
 const LABEL_FORMA: Record<string, string> = {
   cartao_debito: "Débito", cartao_credito: "Crédito",
@@ -65,20 +65,15 @@ function statusVenda(v: VendaHistorico): { label: string; bg: string; text: stri
 function formatData(iso: string) {
   const [, m, d] = iso.split("-"); return `${d}/${m}`
 }
-
 function formatMoney(v: string | number) {
   return `R$ ${Number(v).toFixed(2).replace(".", ",")}`
 }
 
-// ---------------------------------------------------------------------------
-// Aviso de casco em aberto
-// ---------------------------------------------------------------------------
 function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) {
   const [total, setTotal] = useState(0)
   useEffect(() => {
     request<CascoCliente>(`/api/v1/cascos/cliente/${clienteId}`, { token })
-      .then(r => setTotal(r.total_cascos_abertos))
-      .catch(() => {})
+      .then(r => setTotal(r.total_cascos_abertos)).catch(() => {})
   }, [clienteId, token])
   if (total === 0) return null
   return (
@@ -88,9 +83,6 @@ function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) 
   )
 }
 
-// ---------------------------------------------------------------------------
-// Histórico de vendas — 3 linhas por venda + spinner de loading
-// ---------------------------------------------------------------------------
 function HistoricoVendas({ clienteId, token }: { clienteId: string; token: string }) {
   const [vendas, setVendas] = useState<VendaHistorico[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -99,46 +91,29 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
     setCarregando(true)
     request<{ data: VendaHistorico[] }>(
       `/api/v1/vendas/cliente/${clienteId}/historico?limit=3`, { token }
-    )
-      .then(r => setVendas(r.data))
-      .catch(() => {})
-      .finally(() => setCarregando(false))
+    ).then(r => setVendas(r.data)).catch(() => {}).finally(() => setCarregando(false))
   }, [clienteId, token])
 
   return (
     <div style={sh.box}>
       <p style={sh.titulo}>Histórico de vendas (últimas 3)</p>
-
-      {carregando && (
-        <div style={sh.spinnerBox}>
-          <div style={sh.spinner} />
-        </div>
-      )}
-
-      {!carregando && vendas.length === 0 && (
-        <p style={sh.vazio}>Nenhuma venda anterior.</p>
-      )}
-
+      {carregando && <div style={sh.spinnerBox}><div style={sh.spinner} /></div>}
+      {!carregando && vendas.length === 0 && <p style={sh.vazio}>Nenhuma venda anterior.</p>}
       {!carregando && vendas.map(v => {
         const st = statusVenda(v)
         const produtos = v.itens.map(i => `${i.quantidade}× ${i.produto_title}`).join(", ")
         const forma = LABEL_FORMA[v.forma_pagamento] ?? v.forma_pagamento
         const folha = v.vale_numero ? ` · Folha ${v.vale_numero}` : ""
         const end = v.endereco
-          ? `${v.endereco.rua_nome}, ${v.endereco.numero}${v.endereco.complemento ? ` (${v.endereco.complemento})` : ""}`
-          : ""
-
+          ? `${v.endereco.rua_nome}, ${v.endereco.numero}${v.endereco.complemento ? ` (${v.endereco.complemento})` : ""}` : ""
         return (
           <div key={v.id} style={sh.card}>
-            {/* Linha 1: data · valor · badge status */}
             <div style={sh.linha1}>
               <span style={sh.data}>{formatData(v.data_venda)}</span>
               <span style={sh.valor}>{formatMoney(v.valor_pago)}</span>
               <span style={{ ...sh.badge, background: st.bg, color: st.text }}>{st.label}</span>
             </div>
-            {/* Linha 2: produtos · forma · folha */}
             <div style={sh.linha2}>{produtos} · {forma}{folha}</div>
-            {/* Linha 3: endereço */}
             {end && <div style={sh.linha3}>📍 {end}</div>}
           </div>
         )
@@ -165,9 +140,6 @@ const sh: Record<string, CSSProperties> = {
   avisoCasco:{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#92400e", marginTop: "8px", lineHeight: "1.4" },
 }
 
-// ---------------------------------------------------------------------------
-// Troca de endereço inline
-// ---------------------------------------------------------------------------
 function TrocarEndereco({
   token, clienteId, onEnderecoCriado, onFechar,
 }: {
@@ -241,9 +213,6 @@ const se: Record<string, CSSProperties> = {
   btnSalvar:  { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "8px", padding: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer" },
 }
 
-// ---------------------------------------------------------------------------
-// EtapaCliente principal
-// ---------------------------------------------------------------------------
 export default function EtapaCliente({
   token, clienteSelecionado, onClienteChange, onEnderecoChange, onProximo, onVoltar,
 }: Props) {
@@ -254,7 +223,6 @@ export default function EtapaCliente({
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [enderecoStr, setEnderecoStr] = useState("")
   const [mostrarTrocarEnd, setMostrarTrocarEnd] = useState(false)
-
   const [nome, setNome] = useState("")
   const [cpf, setCpf] = useState("")
   const [tel, setTel] = useState("")
@@ -264,7 +232,6 @@ export default function EtapaCliente({
   const [complemento, setComplemento] = useState("")
   const [salvando, setSalvando] = useState(false)
   const [erroCadastro, setErroCadastro] = useState("")
-
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { buscarBairros(token).then(setBairros).catch(() => {}) }, [token])
@@ -292,9 +259,7 @@ export default function EtapaCliente({
     if (busca.trim().length < 2) { setResultados([]); return }
     debounceRef.current = setTimeout(() => {
       setBuscando(true)
-      buscarClientes(token, busca.trim())
-        .then(setResultados).catch(() => setResultados([]))
-        .finally(() => setBuscando(false))
+      buscarClientes(token, busca.trim()).then(setResultados).catch(() => setResultados([]).finally(() => setBuscando(false)))
     }, 500)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [busca, token])
@@ -318,10 +283,7 @@ export default function EtapaCliente({
     } finally { setSalvando(false) }
   }
 
-  function selecionarCliente(c: Cliente) {
-    onClienteChange(c); setBusca(""); setResultados([])
-  }
-
+  function selecionarCliente(c: Cliente) { onClienteChange(c); setBusca(""); setResultados([]) }
   function formatarEndereco(c: Cliente) {
     if (!c.endereco) return "Sem endereço"
     return `${c.endereco.rua_nome}, ${c.endereco.numero} — ${c.endereco.bairro_nome}`
@@ -382,8 +344,10 @@ export default function EtapaCliente({
           )}
 
           <div style={s.separator} />
+          {/* Botão cadastrar em vermelho iFood */}
           <button style={s.btnNovo} onClick={() => setModo("novo")}>+ Cadastrar novo cliente</button>
           <div style={s.rodape}>
+            {/* Voltar com texto escuro e borda visível */}
             <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
             <button
               style={{ ...s.btnProximo, opacity: clienteSelecionado ? 1 : 0.4 }}
@@ -451,9 +415,11 @@ const s: Record<string, CSSProperties> = {
   btnTrocarEnd:{ background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "6px", padding: "3px 10px", fontSize: "12px", cursor: "pointer", flexShrink: 0 },
   btnTrocar:   { marginTop: "10px", background: "transparent", border: `1px solid #606C38`, color: "#606C38", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", cursor: "pointer", display: "block", width: "100%", textAlign: "center" as const },
   separator:   { borderTop: `1px solid ${C.borda}`, margin: "12px 0" },
-  btnNovo:     { width: "100%", background: "transparent", border: `1.5px solid ${C.borda}`, borderRadius: "12px", padding: "12px", fontSize: "15px", color: C.texto, cursor: "pointer", textAlign: "center" as const },
+  // Vermelho iFood — destaque para ação de cadastro
+  btnNovo:     { width: "100%", background: "transparent", border: `2px solid ${VERMELHO}`, borderRadius: "12px", padding: "12px", fontSize: "15px", fontWeight: 600, color: VERMELHO, cursor: "pointer", textAlign: "center" as const },
   rodape:      { display: "flex", gap: "10px", marginTop: "16px" },
-  btnVoltar:   { flex: 1, background: "transparent", border: `1px solid ${C.borda}`, borderRadius: "12px", padding: "13px", fontSize: "15px", color: C.texto, cursor: "pointer" },
+  // Voltar com texto e borda escuros
+  btnVoltar:   { flex: 1, background: "transparent", border: "1.5px solid #374151", borderRadius: "12px", padding: "13px", fontSize: "15px", color: "#111111", fontWeight: 600, cursor: "pointer" },
   btnProximo:  { flex: 2, background: "#606C38", color: "#F8FAFC", border: "none", borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 600, cursor: "pointer" },
   form:        { display: "flex", flexDirection: "column", gap: "4px" },
   formTitulo:  { fontSize: "16px", fontWeight: 700, color: C.texto, margin: "0 0 8px" },

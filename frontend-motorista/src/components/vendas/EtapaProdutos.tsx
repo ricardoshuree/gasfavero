@@ -1,6 +1,7 @@
-// [mcp-local harness] feature: vendas-motorista | plano: d865e550 | 2026-09-07 12:12:50
-// Etapa 1: grid de produtos 2 colunas com sacola inline e badge de quantidade
+// [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222 | 2026-09-08 09:27:24
+// EtapaProdutos: instrução e preços em #111, borda cards #9CA3AF, sacola com borda #374151 e texto escuro
 // Etapa 1 — Seleção de produtos com sacola inline
+// Ajustes de contraste: instrução, preços e sacola mais escuros; bordas mais visíveis
 import { useEffect, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
 import { buscarProdutos, type ItemSacola, type Produto } from "../../lib/vendas"
@@ -52,6 +53,7 @@ export default function EtapaProdutos({ token, sacola, onSacolaChange, onProximo
 
   return (
     <div style={s.pagina}>
+      {/* Instrução em preto para máximo contraste */}
       <p style={s.instrucao}>Toque para adicionar à sacola</p>
 
       {carregando && <p style={s.info}>Carregando produtos...</p>}
@@ -66,10 +68,9 @@ export default function EtapaProdutos({ token, sacola, onSacolaChange, onProximo
               style={{ ...s.card, ...(qtd > 0 ? s.cardSel : {}) }}
               onClick={() => adicionar(produto)}
             >
-              {qtd > 0 && (
-                <div style={s.badge}>{qtd}</div>
-              )}
+              {qtd > 0 && <div style={s.badge}>{qtd}</div>}
               <div style={s.prodNome}>{produto.title}</div>
+              {/* Preço em preto — fácil de ler para motoristas com dificuldade visual */}
               <div style={s.prodPreco}>
                 R$ {Number(produto.preco_atual).toFixed(2).replace(".", ",")}
               </div>
@@ -88,6 +89,7 @@ export default function EtapaProdutos({ token, sacola, onSacolaChange, onProximo
 
       {totalItens > 0 && (
         <>
+          {/* Sacola com texto e borda escuros */}
           <div style={s.sacola}>
             <span style={s.sacolaInfo}>🛒 {totalItens} {totalItens === 1 ? "item" : "itens"}</span>
             <span style={s.sacolaValor}>R$ {total.toFixed(2).replace(".", ",")}</span>
@@ -102,14 +104,15 @@ export default function EtapaProdutos({ token, sacola, onSacolaChange, onProximo
 }
 
 const s: Record<string, CSSProperties> = {
-  pagina: { padding: "0.75rem 1rem 1.5rem" },
-  instrucao: { fontSize: "0.8rem", color: C.textoSecundario, margin: "0 0 0.75rem" },
-  info: { color: C.textoSecundario, fontSize: "0.9rem", textAlign: "center", padding: "2rem 0" },
-  erro: { color: C.erro, fontSize: "0.875rem", textAlign: "center", padding: "1rem 0" },
-  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
+  pagina:    { padding: "0.75rem 1rem 1.5rem" },
+  // Instrução em preto sólido para máximo contraste
+  instrucao: { fontSize: "0.85rem", color: "#111111", fontWeight: 500, margin: "0 0 0.75rem" },
+  info:      { color: C.textoSecundario, fontSize: "0.9rem", textAlign: "center", padding: "2rem 0" },
+  erro:      { color: C.erro, fontSize: "0.875rem", textAlign: "center", padding: "1rem 0" },
+  grid:      { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
   card: {
-    background: C.fundoCard,
-    border: `1.5px solid ${C.borda}`,
+    background: "#fff",
+    border: "1.5px solid #9CA3AF",   // borda cinza médio — mais visível que antes
     borderRadius: "12px",
     padding: "14px 12px",
     cursor: "pointer",
@@ -118,7 +121,7 @@ const s: Record<string, CSSProperties> = {
     minHeight: "72px",
   },
   cardSel: {
-    border: "2px solid #606C38",
+    border: "2.5px solid #606C38",
     background: "#f0f4eb",
   },
   badge: {
@@ -136,13 +139,14 @@ const s: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
   },
-  prodNome: { fontSize: "15px", fontWeight: 600, color: C.texto, marginBottom: "4px" },
-  prodPreco: { fontSize: "13px", color: C.textoSecundario },
+  prodNome:  { fontSize: "15px", fontWeight: 700, color: "#111111", marginBottom: "4px" },
+  // Preço em preto para contraste máximo
+  prodPreco: { fontSize: "14px", fontWeight: 600, color: "#111111" },
   btnRemover: {
     position: "absolute",
     bottom: "8px",
     right: "8px",
-    background: C.borda,
+    background: "#E5E7EB",
     border: "none",
     borderRadius: "50%",
     width: "24px",
@@ -152,21 +156,21 @@ const s: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: C.texto,
+    color: "#111111",
     padding: 0,
   },
   sacola: {
     marginTop: "1rem",
-    background: C.fundoCard,
-    border: `1px solid ${C.borda}`,
+    background: "#fff",
+    border: "1.5px solid #374151",   // borda escura — área bem delimitada
     borderRadius: "12px",
     padding: "12px 14px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  sacolaInfo: { fontSize: "14px", color: C.textoSecundario },
-  sacolaValor: { fontSize: "16px", fontWeight: 700, color: C.texto },
+  sacolaInfo:  { fontSize: "14px", color: "#111111", fontWeight: 600 },
+  sacolaValor: { fontSize: "16px", fontWeight: 700, color: "#111111" },
   btnProximo: {
     display: "block",
     width: "100%",

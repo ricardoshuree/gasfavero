@@ -1,6 +1,6 @@
-// [mcp-local harness] feature: recebimento-fiado-motorista | plano: 2701b061 | 2026-09-07 13:03:20
-// BottomNav sem alterações funcionais
-// BottomNav — sem alterações, apenas re-exportando AbaId atualizado
+// [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222 | 2026-09-08 09:26:53
+// BottomNav: ícone Vendas trocado para 📦
+// BottomNav — ícone Vendas atualizado para 📦
 import type { CSSProperties } from "react"
 import { CORES_APP as CORES } from "../theme"
 
@@ -9,10 +9,10 @@ const ALTURA_BOTTOMNAV_PX = 58
 type AbaId = "demandas" | "vendas" | "financeiro" | "perfil"
 
 const ABAS: { id: AbaId; label: string; icone: string }[] = [
-  { id: "demandas", label: "Chamadas", icone: "📋" },
-  { id: "vendas",   label: "Vendas",   icone: "🧾" },
+  { id: "demandas",   label: "Chamadas",   icone: "📋" },
+  { id: "vendas",     label: "Vendas",     icone: "📦" },
   { id: "financeiro", label: "Financeiro", icone: "💰" },
-  { id: "perfil",   label: "Perfil",   icone: "👤" },
+  { id: "perfil",     label: "Perfil",     icone: "👤" },
 ]
 
 function BottomNav({
