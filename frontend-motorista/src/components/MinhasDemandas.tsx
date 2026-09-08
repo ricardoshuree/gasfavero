@@ -1,9 +1,19 @@
-// [mcp-local harness] feature: deeplink-google-maps | plano: c4f195c2 | 2026-08-09 13:43:13
-// Adiciona botao Abrir no Google Maps no card do chamado aceito, com deep-link google.navigation
-// [mcp-local harness] feature: deeplink-google-maps | plano: c4f195c2 | 2026-08-09
-// Adiciona botao "Abrir no Google Maps" no card do chamado aceito -- deep-link via window.open(url, "_system")
-// [mcp-local harness] feature: ajuste-cinza-cancelado-35 | plano: 12363cb8 | 2026-08-08 12:23:39
-// Cinza do card Cancelado ajustado de #5C5C5C (60%) para #A6A6A6 (35%)
+// [mcp-local harness] feature: alarme-background-fix | plano: a4e5a53c | 2026-09-08 16:21:54
+// Substitui idsVistosRef por timestamp persistido no Preferences para detectar chamados novos após background
+// MinhasDemandas — tela de chamados do motorista.
+// ALARME: usa timestamp persistido no Preferences (SharedPreferences nativo via
+// @capacitor/preferences) em vez de Set em memória. Isso garante que ao reabrir
+// o app após ficar em background (WebView congelada), chamados pendentes criados
+// enquanto o app estava fechado ainda disparam o alarme corretamente.
+//
+// Lógica de detecção de chamado novo:
+//   - Ao carregar, lê "ultimo_chamado_visto_em" do Preferences
+//   - Qualquer chamado pendente (aberto ou convite direto) criado APÓS esse
+//     timestamp é considerado novo → dispara alarme
+//   - Ao registrar os chamados como "vistos", salva o created_at mais recente
+//     deles no Preferences
+//   - Isso funciona mesmo com o app fechado/background entre polls
+import { Preferences } from "@capacitor/preferences"
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
 import { iniciarAlarme, pararAlarme, tocarSomCancelamento } from "../lib/alarme"
 import { ApiError } from "../lib/api"
@@ -19,16 +29,9 @@ import { CORES_APP as CORES } from "../theme"
 import AlertaChamado from "./AlertaChamado"
 import ConfirmDialog from "./ConfirmDialog"
 
-// Ping de atualização da fila -- mesmo espírito do polling de 12s
-// usado no Mapa do atendente (ver MapaMotoristas.tsx do frontend
-// principal), aqui um pouco mais espaçado (15s) porque não há
-// elemento visual (mapa) exigindo atualização fluida, só a lista.
 const INTERVALO_POLLING_MS = 15_000
-
-// Quanto tempo o card "Chamada cancelada" (botão preto) fica visível
-// na aba Agora antes de sumir sozinho -- pedido do Ricardo. Some
-// antes disso se o motorista tocar nele manualmente.
 const LINGER_CANCELADO_MS = 15_000
+const CHAVE_ULTIMO_VISTO = "ultimo_chamado_visto_em"
 
 type SubAba = "agora" | "atendidas"
 
@@ -43,8 +46,6 @@ function formatarItens(d: DemandaVendaPublic): string {
   return d.itens.map((i) => `${i.quantidade}x ${i.produto_title}`).join(", ")
 }
 
-/** "8 min" / "1h20" desde um timestamp ISO -- estilo "Despachado há
- * 8min" do iFood. */
 function formatarTempoDecorrido(isoDate: string): string {
   const minutos = Math.max(
     0,
@@ -56,57 +57,27 @@ function formatarTempoDecorrido(isoDate: string): string {
   return resto === 0 ? `${horas}h` : `${horas}h${resto}`
 }
 
-/** Deep-link pro app nativo do Google Maps, já em modo de navegação
- * turn-by-turn (não só um pin) -- esquema `google.navigation:`
- * reconhecido pelo próprio app do Maps no Android. Usa as
- * coordenadas que já vêm no payload do endereço (geocodificadas na
- * criação do chamado, ver delegacao.py); zero custo de API adicional
- * aqui, nenhuma chamada nova ao Google.
- *
- * `window.open(url, "_system")` -- dentro da WebView do Capacitor,
- * o target "_system" delega pro handler nativo do Android (abre o
- * Google Maps se só um app de navegação estiver instalado, ou o
- * seletor do sistema se houver mais de um). Não precisa de nenhum
- * plugin do Capacitor pra isso. */
 function abrirNoGoogleMaps(endereco: EnderecoPublic) {
   if (endereco.latitude == null || endereco.longitude == null) return
   const url = `google.navigation:q=${endereco.latitude},${endereco.longitude}&mode=d`
   window.open(url, "_system")
 }
 
-/** Chamados que "precisam de ação" -- abertos (qualquer um aceita)
- * ou convites diretos pendentes pra mim. É essa lista que alimenta a
- * detecção de "chamado novo" pro alarme. */
-function idsPrecisandoAcao(agora: DemandaVendaPublic[], meuId: string): Set<string> {
-  return new Set(
-    agora
-      .filter((d) => d.motorista_id === null || (d.motorista_id === meuId && d.status === "pendente"))
-      .map((d) => d.id),
+/** Chamados que precisam de ação: abertos ou convite direto pendente */
+function chamadosPrecisandoAcao(agora: DemandaVendaPublic[], meuId: string): DemandaVendaPublic[] {
+  return agora.filter(
+    (d) => d.motorista_id === null || (d.motorista_id === meuId && d.status === "pendente")
   )
 }
 
-/** Chamados que são "meus e ativos" AGORA (pendente ou aceita, e
- * motorista_id sou eu) -- usado pra detectar cancelamento (estava
- * aqui, não está mais / virou 'cancelada') e reatribuição (estava
- * aqui, motorista_id mudou pra outra pessoa). */
-function mapaMeusAtivos(
-  todas: DemandaVendaPublic[],
-  meuId: string,
-): Map<string, DemandaVendaPublic> {
+function mapaMeusAtivos(todas: DemandaVendaPublic[], meuId: string): Map<string, DemandaVendaPublic> {
   return new Map(
     todas
-      .filter(
-        (d) => d.motorista_id === meuId && (d.status === "pendente" || d.status === "aceita"),
-      )
+      .filter((d) => d.motorista_id === meuId && (d.status === "pendente" || d.status === "aceita"))
       .map((d) => [d.id, d]),
   )
 }
 
-// Pequena pausa depois de "Cheguei" -- só o suficiente pro flash
-// verde de confirmação ser percebido antes de navegar pra Vendas.
-// NÃO espera o recarregamento da lista (esse roda em paralelo, em
-// segundo plano) -- é isso que antes travava a navegação por vários
-// segundos.
 const PAUSA_CONFIRMACAO_MS = 500
 
 function MinhasDemandas({
@@ -116,7 +87,6 @@ function MinhasDemandas({
 }: {
   token: string
   meuId: string
-  /** Chamado no App.tsx pra navegar pra aba Vendas depois de "Cheguei" */
   aoConcluirChamado?: () => void
 }) {
   const [subAba, setSubAba] = useState<SubAba>("agora")
@@ -128,14 +98,17 @@ function MinhasDemandas({
   const [confirmandoChegadaId, setConfirmandoChegadaId] = useState<string | null>(null)
   const [confirmadoId, setConfirmadoId] = useState<string | null>(null)
   const [alertaChamado, setAlertaChamado] = useState<DemandaVendaPublic | null>(null)
-  const [canceladosRecentes, setCanceladosRecentes] = useState<
-    Map<string, DemandaVendaPublic>
-  >(new Map())
+  const [canceladosRecentes, setCanceladosRecentes] = useState<Map<string, DemandaVendaPublic>>(new Map())
 
-  const idsVistosRef = useRef<Set<string> | null>(null)
+  // Timestamp da última vez que registramos chamados como "vistos"
+  // Persistido no Preferences — sobrevive ao app ir para background
+  const ultimoVistoRef = useRef<number | null>(null)
   const meusAtivosAnterioresRef = useRef<Map<string, DemandaVendaPublic> | null>(null)
   const canceladosRecentesIdsRef = useRef<Set<string>>(new Set())
   const alarmeTocandoRef = useRef(false)
+  // Controla se é a primeira carga (para não tocar alarme de chamados
+  // já existentes antes do app abrir pela primeira vez nesta sessão)
+  const primeiraVezRef = useRef(true)
 
   const pararAlarmeSonoro = useCallback(() => {
     if (alarmeTocandoRef.current) {
@@ -169,7 +142,21 @@ function MinhasDemandas({
     [removerCanceladoRecente],
   )
 
+  /** Salva o timestamp mais recente dos chamados pendentes como "visto" */
+  async function marcarComoVistos(chamados: DemandaVendaPublic[]) {
+    if (chamados.length === 0) return
+    const maisRecente = Math.max(...chamados.map(d => new Date(d.created_at).getTime()))
+    ultimoVistoRef.current = maisRecente
+    await Preferences.set({ key: CHAVE_ULTIMO_VISTO, value: String(maisRecente) })
+  }
+
   const carregar = useCallback(async () => {
+    // Na primeira carga, lê o timestamp salvo do Preferences
+    if (primeiraVezRef.current && ultimoVistoRef.current === null) {
+      const { value } = await Preferences.get({ key: CHAVE_ULTIMO_VISTO })
+      ultimoVistoRef.current = value ? Number(value) : 0
+    }
+
     try {
       const todas = await listarDemandas(token)
       const separadas = separarChamadas(todas, meuId)
@@ -177,13 +164,7 @@ function MinhasDemandas({
       setAtendidas(separadas.atendidas)
       setErro(null)
 
-      // Detecção de CANCELAMENTO -- compara "meus ativos" desta
-      // leitura com a anterior. Se um chamado que era meu (pendente
-      // ou aceita) agora está 'cancelada', é o atendente que
-      // cancelou -- avisa com som distinto + card preto lingering.
-      // Se sumiu de "meus ativos" por outro motivo (motorista_id
-      // mudou pra outra pessoa = reatribuído), fica em silêncio de
-      // propósito -- nunca foi meu de verdade.
+      // Detecção de CANCELAMENTO
       if (meusAtivosAnterioresRef.current !== null) {
         for (const [id] of meusAtivosAnterioresRef.current) {
           const atual = todas.find((d) => d.id === id)
@@ -194,22 +175,31 @@ function MinhasDemandas({
       }
       meusAtivosAnterioresRef.current = mapaMeusAtivos(todas, meuId)
 
-      // Detecção de "chamado novo" -- compara com a leitura
-      // anterior. Na primeira carga só registra o estado atual (sem
-      // disparar alarme pro que já existia antes de abrir o app).
-      const idsAtuais = idsPrecisandoAcao(separadas.agora, meuId)
-      if (idsVistosRef.current !== null) {
-        const novos = [...idsAtuais].filter((id) => !idsVistosRef.current!.has(id))
-        if (novos.length > 0 && !alarmeTocandoRef.current) {
-          const chamadoNovo = separadas.agora.find((d) => d.id === novos[0])
-          if (chamadoNovo) {
-            setAlertaChamado(chamadoNovo)
-            iniciarAlarme()
-            alarmeTocandoRef.current = true
-          }
-        }
+      // Detecção de chamado NOVO via timestamp persistido
+      // Um chamado é "novo" se foi criado APÓS o último timestamp salvo
+      const ultimoVisto = ultimoVistoRef.current ?? 0
+      const precisandoAcao = chamadosPrecisandoAcao(separadas.agora, meuId)
+
+      const novos = precisandoAcao.filter(
+        d => new Date(d.created_at).getTime() > ultimoVisto
+      )
+
+      if (novos.length > 0 && !alarmeTocandoRef.current) {
+        // Ordena por mais recente para mostrar o chamado mais novo no alerta
+        novos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        setAlertaChamado(novos[0])
+        iniciarAlarme()
+        alarmeTocandoRef.current = true
       }
-      idsVistosRef.current = idsAtuais
+
+      // Marca os chamados pendentes atuais como vistos (atualiza timestamp)
+      // Só faz isso se não estiver com alarme tocando — enquanto o alerta
+      // está na tela, não avança o timestamp (o motorista ainda não "viu")
+      if (!alarmeTocandoRef.current && precisandoAcao.length > 0) {
+        await marcarComoVistos(precisandoAcao)
+      }
+
+      primeiraVezRef.current = false
     } catch {
       setErro("Não foi possível carregar os chamados.")
     } finally {
@@ -232,10 +222,6 @@ function MinhasDemandas({
       await aceitarDemanda(token, id, meuId)
       await carregar()
     } catch (e) {
-      // 400 aqui quase sempre significa "outro motorista já aceitou
-      // esse mesmo chamado aberto entre o carregamento da tela e o
-      // seu toque" -- corrida normal em chamado aberto, não é bug.
-      // Mensagem específica em vez do genérico "tente de novo".
       if (e instanceof ApiError && e.status === 400) {
         setErro("Esse chamado já foi assumido por outro motorista.")
       } else {
@@ -253,9 +239,6 @@ function MinhasDemandas({
       await concluirDemanda(token, id)
       setProcessando(null)
       setConfirmadoId(id)
-      // Recarrega a lista em segundo plano -- NÃO espera isso antes
-      // de navegar (era esse await que travava a tela por vários
-      // segundos em rede mais lenta/emulador).
       carregar()
       window.setTimeout(() => {
         setConfirmadoId(null)
@@ -272,16 +255,18 @@ function MinhasDemandas({
     const id = alertaChamado.id
     pararAlarmeSonoro()
     setAlertaChamado(null)
+    // Marca como visto ao aceitar
+    await Preferences.set({ key: CHAVE_ULTIMO_VISTO, value: String(Date.now()) })
+    ultimoVistoRef.current = Date.now()
     await handleAceitar(id)
   }
 
-  /** "Recusar" do alerta pra chamados ABERTOS -- 100% local, não
-   * chama a API. Só fecha a tela e para o alarme pra este aparelho;
-   * o chamado continua pendente/aberto pra qualquer motorista (ver
-   * comentário de regra de negócio em AlertaChamado.tsx). */
-  function handleDispensarAlerta() {
+  async function handleDispensarAlerta() {
     pararAlarmeSonoro()
     setAlertaChamado(null)
+    // Marca como visto ao dispensar também
+    await Preferences.set({ key: CHAVE_ULTIMO_VISTO, value: String(Date.now()) })
+    ultimoVistoRef.current = Date.now()
   }
 
   const listaAgoraComCancelados = [...agora, ...canceladosRecentes.values()]
@@ -296,18 +281,13 @@ function MinhasDemandas({
         <button style={estiloSubAba(subAba === "agora")} onClick={() => setSubAba("agora")}>
           Agora{listaAgoraComCancelados.length > 0 ? ` (${listaAgoraComCancelados.length})` : ""}
         </button>
-        <button
-          style={estiloSubAba(subAba === "atendidas")}
-          onClick={() => setSubAba("atendidas")}
-        >
+        <button style={estiloSubAba(subAba === "atendidas")} onClick={() => setSubAba("atendidas")}>
           Atendidas{atendidas.length > 0 ? ` (${atendidas.length})` : ""}
         </button>
       </div>
 
       {erro && <p style={estilos.erro}>{erro}</p>}
-
       {carregando && listaAtiva.length === 0 && <p style={estilos.mensagem}>Carregando...</p>}
-
       {!carregando && listaAtiva.length === 0 && !erro && (
         <p style={estilos.mensagem}>
           {subAba === "agora" ? "Nenhum chamado no momento." : "Nenhum chamado atendido hoje."}
@@ -318,11 +298,7 @@ function MinhasDemandas({
         {subAba === "agora"
           ? listaAgoraComCancelados.map((d) =>
               d.status === "cancelada" ? (
-                <CardCancelado
-                  key={d.id}
-                  demanda={d}
-                  onDispensar={() => removerCanceladoRecente(d.id)}
-                />
+                <CardCancelado key={d.id} demanda={d} onDispensar={() => removerCanceladoRecente(d.id)} />
               ) : (
                 <CardAgora
                   key={d.id}
@@ -368,24 +344,14 @@ function MinhasDemandas({
 }
 
 function CardAgora({
-  demanda: d,
-  meuId,
-  processando,
-  confirmado,
-  onAceitar,
-  onPedirConfirmacaoChegada,
+  demanda: d, meuId, processando, confirmado, onAceitar, onPedirConfirmacaoChegada,
 }: {
-  demanda: DemandaVendaPublic
-  meuId: string
-  processando: boolean
-  confirmado: boolean
-  onAceitar: () => void
-  onPedirConfirmacaoChegada: () => void
+  demanda: DemandaVendaPublic; meuId: string; processando: boolean; confirmado: boolean
+  onAceitar: () => void; onPedirConfirmacaoChegada: () => void
 }) {
   const aberto = d.motorista_id === null
   const meuAceito = d.motorista_id === meuId && d.status === "aceita"
   const temCoordenadas = d.endereco.latitude != null && d.endereco.longitude != null
-
   const tempo = meuAceito
     ? d.respondida_em && formatarTempoDecorrido(d.respondida_em)
     : formatarTempoDecorrido(d.created_at)
@@ -398,14 +364,12 @@ function CardAgora({
         </span>
         {tempo && <span style={estilos.chipTempo}>{tempo}</span>}
       </div>
-
       <div style={estilos.cardInterno}>
         <span style={estilos.cliente}>{d.cliente_nome}</span>
         <span style={estilos.endereco}>{formatarEndereco(d)}</span>
         <span style={estilos.itens}>{formatarItens(d)}</span>
         {d.observacao && <span style={estilos.observacao}>{d.observacao}</span>}
       </div>
-
       {meuAceito ? (
         <>
           {temCoordenadas && (
@@ -422,8 +386,6 @@ function CardAgora({
           </button>
         </>
       ) : (
-        // Sem opção de recusar aqui -- nem aberto nem convite direto
-        // (ver regra de negócio documentada em AlertaChamado.tsx).
         <button style={estilos.botaoAceitar} disabled={processando} onClick={onAceitar}>
           {processando ? "..." : "Aceitar chamado"}
         </button>
@@ -432,19 +394,7 @@ function CardAgora({
   )
 }
 
-/** Card "lingering" pra chamado CANCELADO pelo atendente -- fica na
- * aba Agora por até 15s (ou até o motorista tocar) antes de sumir
- * de vez (a partir daí só existe mais na aba Atendidas, já
- * reclassificado por separarChamadas). Botão PRETO de propósito --
- * visualmente bem diferente de aceitar/cheguei, deixa claro que não
- * precisa fazer mais nada com esse chamado. */
-function CardCancelado({
-  demanda: d,
-  onDispensar,
-}: {
-  demanda: DemandaVendaPublic
-  onDispensar: () => void
-}) {
+function CardCancelado({ demanda: d, onDispensar }: { demanda: DemandaVendaPublic; onDispensar: () => void }) {
   return (
     <div style={estilos.card}>
       <div style={estilos.cardTopo}>
@@ -454,9 +404,7 @@ function CardCancelado({
         <span style={estilos.cliente}>{d.cliente_nome}</span>
         <span style={estilos.endereco}>{formatarEndereco(d)}</span>
       </div>
-      <button style={estilos.botaoCancelado} onClick={onDispensar}>
-        Chamada cancelada
-      </button>
+      <button style={estilos.botaoCancelado} onClick={onDispensar}>Chamada cancelada</button>
     </div>
   )
 }
@@ -476,15 +424,9 @@ function CardAtendida({ demanda: d }: { demanda: DemandaVendaPublic }) {
         )}
       </div>
       <div style={cancelado ? estilos.cardInternoCancelado : estilos.cardInternoMuted}>
-        <span style={cancelado ? estilos.clienteCancelado : estilos.clienteMuted}>
-          {d.cliente_nome}
-        </span>
-        <span style={cancelado ? estilos.textoCancelado : estilos.enderecoMuted}>
-          {formatarEndereco(d)}
-        </span>
-        <span style={cancelado ? estilos.textoCancelado : estilos.itensMuted}>
-          {formatarItens(d)}
-        </span>
+        <span style={cancelado ? estilos.clienteCancelado : estilos.clienteMuted}>{d.cliente_nome}</span>
+        <span style={cancelado ? estilos.textoCancelado : estilos.enderecoMuted}>{formatarEndereco(d)}</span>
+        <span style={cancelado ? estilos.textoCancelado : estilos.itensMuted}>{formatarItens(d)}</span>
       </div>
     </div>
   )
@@ -492,182 +434,49 @@ function CardAtendida({ demanda: d }: { demanda: DemandaVendaPublic }) {
 
 function estiloSubAba(ativa: boolean): CSSProperties {
   return {
-    flex: 1,
-    padding: "0.6rem",
-    border: "none",
+    flex: 1, padding: "0.6rem", border: "none",
     borderBottom: `2px solid ${ativa ? CORES.destaque : "transparent"}`,
     background: "transparent",
     color: ativa ? CORES.destaque : CORES.textoSecundario,
-    fontWeight: ativa ? 700 : 400,
-    fontSize: "0.9rem",
+    fontWeight: ativa ? 700 : 400, fontSize: "0.9rem",
   }
 }
 
-// Sem minHeight/100vh nem padding de safe-area aqui -- este
-// componente é renderizado DENTRO da casca de navegação (TopBar +
-// BottomNav) em App.tsx, que já cuida do espaçamento geral da página.
-//
-// Card "Cancelado" (aba Atendidas) usa CORES SÓLIDAS de propósito
-// (não opacity) -- opacity esmaece fundo E texto na mesma proporção,
-// o que deixava o card praticamente ilegível (feedback do Ricardo:
-// motoristas com dificuldade de visão não conseguiam ler). Fundo
-// cinza sólido (35% preto -- 60% ficou pesado demais no teste real
-// com o Ricardo) + texto preto/quase-preto por cima dá contraste de
-// verdade, sem depender de transparência.
 const CINZA_CANCELADO = "#A6A6A6"
 
 const estilos: Record<string, CSSProperties> = {
-  pagina: {
-    color: CORES.texto,
-    fontFamily: "system-ui, sans-serif",
-    padding: "1.25rem 1rem 0",
-    boxSizing: "border-box",
-  },
+  pagina: { color: CORES.texto, fontFamily: "system-ui, sans-serif", padding: "1.25rem 1rem 0", boxSizing: "border-box" },
   titulo: { fontSize: "1.35rem", fontWeight: 700, margin: "0 0 0.75rem" },
-  subAbas: {
-    display: "flex",
-    borderBottom: `1px solid ${CORES.borda}`,
-    marginBottom: "1rem",
-  },
+  subAbas: { display: "flex", borderBottom: `1px solid ${CORES.borda}`, marginBottom: "1rem" },
   mensagem: { color: CORES.textoSecundario, textAlign: "center", marginTop: "2rem" },
   erro: { color: CORES.erro, fontSize: "0.875rem", marginBottom: "0.75rem" },
   lista: { display: "flex", flexDirection: "column", gap: "0.75rem", paddingBottom: "1rem" },
-
-  card: {
-    background: CORES.fundoCard,
-    borderRadius: "0.85rem",
-    padding: "0.75rem",
-  },
-  cardTopo: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "0 0.15rem 0.5rem",
-  },
+  card: { background: CORES.fundoCard, borderRadius: "0.85rem", padding: "0.75rem" },
+  cardTopo: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 0.15rem 0.5rem" },
   cardTopoLabel: { fontSize: "0.8rem", fontWeight: 700, color: CORES.texto },
-  chipTempo: {
-    fontSize: "0.7rem",
-    fontWeight: 700,
-    color: CORES.textoSecundario,
-    background: CORES.fundoCardInterno,
-    padding: "0.2rem 0.5rem",
-    borderRadius: "0.4rem",
-  },
-  cardInterno: {
-    background: CORES.fundoCardInterno,
-    borderRadius: "0.6rem",
-    padding: "0.75rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.15rem",
-    marginBottom: "0.6rem",
-  },
+  chipTempo: { fontSize: "0.7rem", fontWeight: 700, color: CORES.textoSecundario, background: CORES.fundoCardInterno, padding: "0.2rem 0.5rem", borderRadius: "0.4rem" },
+  cardInterno: { background: CORES.fundoCardInterno, borderRadius: "0.6rem", padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.15rem", marginBottom: "0.6rem" },
   cliente: { fontWeight: 700, fontSize: "1rem", color: CORES.texto },
   endereco: { fontSize: "0.85rem", color: CORES.textoSecundario },
   itens: { fontSize: "0.8rem", color: CORES.textoSecundario },
   observacao: { fontSize: "0.78rem", fontStyle: "italic", color: CORES.textoSecundario },
-  botaoAceitar: {
-    width: "100%",
-    padding: "0.75rem",
-    borderRadius: "0.5rem",
-    border: "none",
-    background: CORES.destaque,
-    color: CORES.destaqueTexto,
-    fontWeight: 700,
-    fontSize: "0.9rem",
-  },
-  // "Abrir no Google Maps" -- secundário, fica ACIMA do "Cheguei"
-  // (ação primária). Outline com a mesma cor do "Cheguei" (azul,
-  // estado "aceito") pra sinalizar visualmente que pertence ao mesmo
-  // momento do fluxo, mas sem competir com a ação principal.
-  botaoMaps: {
-    width: "100%",
-    padding: "0.65rem",
-    borderRadius: "0.5rem",
-    border: `1.5px solid ${CORES.aceito}`,
-    background: "#FFFFFF",
-    color: CORES.aceito,
-    fontWeight: 700,
-    fontSize: "0.85rem",
-    marginBottom: "0.5rem",
-  },
-  botaoCheguei: {
-    width: "100%",
-    padding: "0.75rem",
-    borderRadius: "0.5rem",
-    border: "none",
-    background: CORES.aceito,
-    color: CORES.aceitoTexto,
-    fontWeight: 700,
-    fontSize: "0.9rem",
-    transition: "background 0.2s ease",
-  },
-  botaoCheguelConfirmado: {
-    width: "100%",
-    padding: "0.75rem",
-    borderRadius: "0.5rem",
-    border: "none",
-    background: CORES.statusOn,
-    color: "#FFFFFF",
-    fontWeight: 700,
-    fontSize: "0.9rem",
-    transition: "background 0.2s ease",
-  },
-  botaoCancelado: {
-    width: "100%",
-    padding: "0.75rem",
-    borderRadius: "0.5rem",
-    border: "none",
-    background: "#000000",
-    color: "#FFFFFF",
-    fontWeight: 700,
-    fontSize: "0.9rem",
-  },
-
-  // "Atendido" (concluído de verdade) -- card claro normal, sem
-  // opacity (não precisava, contraste já era bom).
-  cardAtendida: {
-    background: CORES.fundoCard,
-    borderRadius: "0.85rem",
-    padding: "0.75rem",
-  },
+  botaoAceitar: { width: "100%", padding: "0.75rem", borderRadius: "0.5rem", border: "none", background: CORES.destaque, color: CORES.destaqueTexto, fontWeight: 700, fontSize: "0.9rem" },
+  botaoMaps: { width: "100%", padding: "0.65rem", borderRadius: "0.5rem", border: `1.5px solid ${CORES.aceito}`, background: "#FFFFFF", color: CORES.aceito, fontWeight: 700, fontSize: "0.85rem", marginBottom: "0.5rem" },
+  botaoCheguei: { width: "100%", padding: "0.75rem", borderRadius: "0.5rem", border: "none", background: CORES.aceito, color: CORES.aceitoTexto, fontWeight: 700, fontSize: "0.9rem", transition: "background 0.2s ease" },
+  botaoCheguelConfirmado: { width: "100%", padding: "0.75rem", borderRadius: "0.5rem", border: "none", background: CORES.statusOn, color: "#FFFFFF", fontWeight: 700, fontSize: "0.9rem", transition: "background 0.2s ease" },
+  botaoCancelado: { width: "100%", padding: "0.75rem", borderRadius: "0.5rem", border: "none", background: "#000000", color: "#FFFFFF", fontWeight: 700, fontSize: "0.9rem" },
+  cardAtendida: { background: CORES.fundoCard, borderRadius: "0.85rem", padding: "0.75rem" },
   cardTopoLabelMuted: { fontSize: "0.75rem", fontWeight: 700, color: CORES.textoSecundario },
   chipTempoMuted: { fontSize: "0.7rem", color: CORES.textoSecundario },
-  cardInternoMuted: {
-    background: CORES.fundoCardInterno,
-    borderRadius: "0.6rem",
-    padding: "0.75rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.15rem",
-  },
+  cardInternoMuted: { background: CORES.fundoCardInterno, borderRadius: "0.6rem", padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.15rem" },
   clienteMuted: { fontWeight: 700, fontSize: "0.95rem", color: CORES.texto },
   enderecoMuted: { fontSize: "0.82rem", color: CORES.textoSecundario },
   itensMuted: { fontSize: "0.78rem", color: CORES.textoSecundario },
-
-  // "Cancelado" -- cinza SÓLIDO + texto preto, contraste real (ver
-  // comentário grande acima da const CINZA_CANCELADO).
-  cardAtendidaCancelada: {
-    background: CINZA_CANCELADO,
-    borderRadius: "0.85rem",
-    padding: "0.75rem",
-  },
+  cardAtendidaCancelada: { background: CINZA_CANCELADO, borderRadius: "0.85rem", padding: "0.75rem" },
   labelCanceladoTopo: { fontSize: "0.75rem", fontWeight: 700, color: "#000000" },
   chipTempoCancelado: { fontSize: "0.7rem", fontWeight: 700, color: "#000000" },
-  cardInternoCancelado: {
-    background: "rgba(255,255,255,0.25)",
-    borderRadius: "0.6rem",
-    padding: "0.75rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.15rem",
-  },
-  clienteCancelado: {
-    fontWeight: 700,
-    fontSize: "0.95rem",
-    color: "#000000",
-    textDecoration: "line-through",
-  },
+  cardInternoCancelado: { background: "rgba(255,255,255,0.25)", borderRadius: "0.6rem", padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.15rem" },
+  clienteCancelado: { fontWeight: 700, fontSize: "0.95rem", color: "#000000", textDecoration: "line-through" },
   textoCancelado: { fontSize: "0.82rem", color: "#1A1A1A", fontWeight: 500 },
 }
 
