@@ -17,6 +17,8 @@ allowed_extensions:
   - .css
   - .xml
   - .java
+  - .mp3
+  - .gradle
 blocked_dirs:
   - node_modules
   - .git
