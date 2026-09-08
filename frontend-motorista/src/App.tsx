@@ -1,6 +1,6 @@
-// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:03:42
-// App.tsx: passa nomeMotorista para TopBar
-// App.tsx — navegação do Financeiro via hub de blocos (estilo v1.0 aprovada)
+// [mcp-local harness] feature: perfil-config-debug-gps | plano: 34436423 | 2026-09-08 10:19:46
+// App.tsx: passa token para PerfilTela
+// App.tsx — navegação principal + token passado ao PerfilTela
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
@@ -91,7 +91,6 @@ function App() {
     if (!subTelaFinanceiro) {
       return <FinanceiroHub onNavegar={setSubTelaFinanceiro} />
     }
-
     const cabecalho = (
       <div style={estilos.subCabecalho}>
         <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>←</button>
@@ -99,7 +98,6 @@ function App() {
         <div style={{ width: "36px" }} />
       </div>
     )
-
     if (subTelaFinanceiro === "livro")            return <>{cabecalho}<FinanceiroTela token={token} usuario={usuario} /></>
     if (subTelaFinanceiro === "recebimento_vale") return <>{cabecalho}<RecebimentoFiadoTela token={token} usuario={usuario} /></>
     if (subTelaFinanceiro === "inadimplentes")    return <>{cabecalho}<InadimplentesTola token={token} usuario={usuario} /></>
@@ -110,26 +108,17 @@ function App() {
 
   return (
     <div style={estilos.shell}>
-      {/* Passa o nome do motorista para a TopBar */}
-      <TopBar
-        token={token}
-        motoristaId={usuario.id}
-        nomeMotorista={usuario.full_name ?? usuario.email}
-      />
-
+      <TopBar token={token} motoristaId={usuario.id} nomeMotorista={usuario.full_name ?? usuario.email} />
       <main style={estilos.conteudo}>
         {abaAtiva === "demandas" && (
           <MinhasDemandas token={token} meuId={usuario.id} aoConcluirChamado={() => handleMudarAba("vendas")} />
         )}
-        {abaAtiva === "vendas" && (
-          <VendasTela token={token} usuario={usuario} />
-        )}
+        {abaAtiva === "vendas" && <VendasTela token={token} usuario={usuario} />}
         {abaAtiva === "financeiro" && renderFinanceiro()}
         {abaAtiva === "perfil" && (
-          <PerfilTela usuario={usuario} onLogout={handleLogout} />
+          <PerfilTela usuario={usuario} token={token} onLogout={handleLogout} />
         )}
       </main>
-
       <BottomNav abaAtiva={abaAtiva} onMudarAba={handleMudarAba} />
     </div>
   )
@@ -151,18 +140,9 @@ const estilos = {
     paddingBottom: `calc(${ALTURA_BOTTOMNAV_PX}px + env(safe-area-inset-bottom))`,
     minHeight: "100vh", boxSizing: "border-box" as const,
   },
-  subCabecalho: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "10px 16px 8px", background: "#fff", borderBottom: "1px solid #F3F4F6",
-  } as const,
-  btnVoltar: {
-    background: "transparent", border: "none", color: "#606C38",
-    fontSize: "20px", fontWeight: 700, cursor: "pointer", padding: "2px 6px", lineHeight: 1, width: "36px",
-  } as const,
-  subTitulo: {
-    fontSize: "15px", fontWeight: 700, color: CORES_APP.texto,
-    flex: 1, textAlign: "center" as const,
-  },
+  subCabecalho: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 8px", background: "#fff", borderBottom: "1px solid #F3F4F6" } as const,
+  btnVoltar:    { background: "transparent", border: "none", color: "#606C38", fontSize: "20px", fontWeight: 700, cursor: "pointer", padding: "2px 6px", lineHeight: 1, width: "36px" } as const,
+  subTitulo:    { fontSize: "15px", fontWeight: 700, color: CORES_APP.texto, flex: 1, textAlign: "center" as const },
   splash: {
     minHeight: "100vh", display: "flex", flexDirection: "column" as const,
     alignItems: "center", justifyContent: "center", gap: "0.75rem",
