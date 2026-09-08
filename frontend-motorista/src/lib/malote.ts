@@ -1,7 +1,6 @@
-// [mcp-local harness] feature: fix-malote-tipos-e-tela | plano: 1c62f81b | 2026-09-07 19:44:52
-// lib/malote.ts reescrito com tipos corretos baseados na resposta real do backend
+// [mcp-local harness] feature: malote-retorno-cascos-busca | plano: 51e5d554 | 2026-09-08 12:42:27
+// malote.ts: adiciona campo vendidos na carga_produtos
 // lib/malote.ts — tipos e API do Malote do Motorista
-// Estrutura baseada na resposta real de GET /api/v1/fechamento/resumo/{motorista_id}/{data}
 import { request } from "./api"
 
 export type VendaMalote = {
@@ -37,6 +36,7 @@ export type ResumoMalote = {
     produto_id: string
     produto_nome: string
     carregado: number
+    vendidos: number   // ← novo: calculado no backend via JOIN com venda_item
   }>
   fundo_troco: number
   total_dinheiro: number
@@ -55,25 +55,15 @@ function hojeISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export async function buscarResumoMalote(
-  token: string,
-  motoristaId: string
-): Promise<ResumoMalote> {
+export async function buscarResumoMalote(token: string, motoristaId: string): Promise<ResumoMalote> {
   const hoje = hojeISO()
-  return request<ResumoMalote>(
-    `/api/v1/fechamento/resumo/${motoristaId}/${hoje}`,
-    { token }
-  )
+  return request<ResumoMalote>(`/api/v1/fechamento/resumo/${motoristaId}/${hoje}`, { token })
 }
 
 const LABEL_FORMA: Record<string, string> = {
-  cartao_debito:  "Débito",
-  cartao_credito: "Crédito",
-  pix:            "Pix",
-  dinheiro:       "Dinheiro",
-  vale:           "Fiado",
-  vale_gas:       "Vale Gás",
-  gas_povo:       "Gás do Povo",
+  cartao_debito: "Débito", cartao_credito: "Crédito",
+  pix: "Pix", dinheiro: "Dinheiro",
+  vale: "Fiado", vale_gas: "Vale Gás", gas_povo: "Gás do Povo",
 }
 
 export function gerarTextoMalote(resumo: ResumoMalote, nomeMotorista: string): string {
@@ -81,7 +71,10 @@ export function gerarTextoMalote(resumo: ResumoMalote, nomeMotorista: string): s
   const fmt = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`
 
   const linhasProdutos = resumo.carga_produtos
-    .map(p => `  ${p.produto_nome}: ${p.carregado} unid.`)
+    .map(p => {
+      const retornou = Math.max(0, p.carregado - p.vendidos)
+      return `  ${p.produto_nome}: saiu ${p.carregado} | vendidos ${p.vendidos} | retornou ${retornou}`
+    })
     .join("\n")
 
   const linhasVendas = resumo.vendas
@@ -106,7 +99,7 @@ export function gerarTextoMalote(resumo: ResumoMalote, nomeMotorista: string): s
     `  Crédito (maquininha): ${fmt(resumo.total_credito)}`,
     `  Fiado: ${fmt(resumo.total_fiado)}`,
     "",
-    "🛢 *Produtos (carga):*",
+    "🛢 *Produtos (carga/retorno):*",
     linhasProdutos || "  Sem carga registrada",
     "",
     "📋 *Vendas do dia:*",
