@@ -15,6 +15,7 @@ allowed_extensions:
   - .svg
   - .html
   - .css
+  - .xml
 blocked_dirs:
   - node_modules
   - .git
