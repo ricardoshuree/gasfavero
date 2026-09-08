@@ -1,6 +1,7 @@
-// [mcp-local harness] feature: fix-topbar-nome-erro-amarelo-historico | plano: 6babef1f | 2026-09-07 20:04:23
-// ResumoConfirmacao: erros de negócio (vale já usado, bloco outro motorista) em amarelo ⚠️, erros de servidor em vermelho ❌
+// [mcp-local harness] feature: fix-pagamento-visual | plano: b2fd44a7 | 2026-09-08 09:55:53
+// Botão Editar em negrito (fontWeight 700) igual ao Confirmar
 // ResumoConfirmacao — resumo final antes de confirmar e submeter a venda
+// Botão Editar em negrito igual ao Confirmar
 // Erros de negócio (vale já usado, bloco de outro motorista) em amarelo com ⚠️
 // Erros de servidor em vermelho
 import { useState, type CSSProperties } from "react"
@@ -17,19 +18,13 @@ const LABEL_FORMA: Record<string, string> = {
   gas_povo:       "Gás do Povo",
 }
 
-// Mensagens de negócio que devem aparecer em amarelo (aviso) em vez de vermelho (erro)
 const ERROS_NEGOCIO = [
-  "ja foi usado",
-  "já foi usado",
-  "pertence ao bloco de outro motorista",
-  "outro motorista",
-  "ja tem uma venda a prazo",
-  "já tem uma venda a prazo",
-  "bloco nao encontrado",
-  "bloco não encontrado",
+  "ja foi usado", "já foi usado",
+  "pertence ao bloco de outro motorista", "outro motorista",
+  "ja tem uma venda a prazo em aberto", "já tem uma venda a prazo em aberto",
+  "bloco nao encontrado", "bloco não encontrado",
   "fora do intervalo",
-  "numero de vale gas invalido",
-  "número de vale gás inválido",
+  "numero de vale gas invalido", "número de vale gás inválido",
 ]
 
 function ehErroNegocio(msg: string): boolean {
@@ -59,8 +54,7 @@ export default function ResumoConfirmacao({
     : parseFloat(pagamento.valorPago ?? String(total))
 
   async function confirmar() {
-    setEnviando(true)
-    setErro("")
+    setEnviando(true); setErro("")
     try {
       const hoje = new Date().toISOString().slice(0, 10)
       await criarVenda(token, {
@@ -81,9 +75,7 @@ export default function ResumoConfirmacao({
       onSucesso()
     } catch (e: any) {
       setErro(e.message ?? "Erro ao registrar venda.")
-    } finally {
-      setEnviando(false)
-    }
+    } finally { setEnviando(false) }
   }
 
   const isNegocio = erro && ehErroNegocio(erro)
@@ -122,12 +114,8 @@ export default function ResumoConfirmacao({
       <div style={s.secao}>
         <p style={s.secaoLabel}>Pagamento</p>
         <p style={s.secaoValor}>{LABEL_FORMA[pagamento.forma] ?? pagamento.forma}</p>
-        {pagamento.forma === "vale" && (
-          <p style={s.secaoSub}>Fiado nº {pagamento.valeNumero}</p>
-        )}
-        {pagamento.forma === "vale_gas" && (
-          <p style={s.secaoSub}>Vale Gás nº {pagamento.valeGasNumero}</p>
-        )}
+        {pagamento.forma === "vale" && <p style={s.secaoSub}>Fiado nº {pagamento.valeNumero}</p>}
+        {pagamento.forma === "vale_gas" && <p style={s.secaoSub}>Vale Gás nº {pagamento.valeGasNumero}</p>}
         {pagamento.forma === "gas_povo" && (
           <>
             <p style={s.secaoSub}>Valor gov: R$ {parseFloat(pagamento.gasPovoValorGov ?? "0").toFixed(2).replace(".", ",")}</p>
@@ -140,7 +128,7 @@ export default function ResumoConfirmacao({
         </div>
       </div>
 
-      {/* Erro — amarelo para erros de negócio, vermelho para erros de servidor */}
+      {/* Erro */}
       {erro && (
         <div style={isNegocio ? s.avisoNegocio : s.erroServidor}>
           {isNegocio ? "⚠️ " : "❌ "}{erro}
@@ -148,7 +136,8 @@ export default function ResumoConfirmacao({
       )}
 
       <div style={s.rodape}>
-        <button style={s.btnVoltar} onClick={onVoltar} disabled={enviando}>← Editar</button>
+        {/* Editar em negrito — igual peso visual ao Confirmar */}
+        <button style={s.btnEditar} onClick={onVoltar} disabled={enviando}>← Editar</button>
         <button style={s.btnConfirmar} onClick={confirmar} disabled={enviando}>
           {enviando ? "Enviando..." : "✓ Confirmar"}
         </button>
@@ -172,22 +161,20 @@ const s: Record<string, CSSProperties> = {
     display: "flex", justifyContent: "space-between", fontSize: "15px",
     fontWeight: 700, color: C.texto, borderTop: `1px solid ${C.borda}`, marginTop: "8px", paddingTop: "8px",
   },
-  // Erro de negócio — amarelo com ícone ⚠️
   avisoNegocio: {
     background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "10px",
-    padding: "10px 12px", fontSize: "13px", color: "#92400e",
-    margin: "8px 0", lineHeight: "1.5",
+    padding: "10px 12px", fontSize: "13px", color: "#92400e", margin: "8px 0", lineHeight: "1.5",
   },
-  // Erro de servidor — vermelho
   erroServidor: {
     background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: "10px",
-    padding: "10px 12px", fontSize: "13px", color: "#991b1b",
-    margin: "8px 0", lineHeight: "1.5",
+    padding: "10px 12px", fontSize: "13px", color: "#991b1b", margin: "8px 0", lineHeight: "1.5",
   },
-  rodape:     { display: "flex", gap: "10px", marginTop: "16px" },
-  btnVoltar:  {
-    flex: 1, background: "transparent", border: `1px solid ${C.borda}`,
-    borderRadius: "12px", padding: "13px", fontSize: "15px", color: C.texto, cursor: "pointer",
+  rodape:      { display: "flex", gap: "10px", marginTop: "16px" },
+  // Editar — mesmo peso visual do Confirmar mas outline
+  btnEditar: {
+    flex: 1, background: "transparent", border: "1.5px solid #374151",
+    borderRadius: "12px", padding: "13px", fontSize: "15px",
+    color: "#111111", fontWeight: 700, cursor: "pointer",
   },
   btnConfirmar: {
     flex: 2, background: "#606C38", color: "#F8FAFC", border: "none",
