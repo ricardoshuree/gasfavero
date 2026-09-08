@@ -1,6 +1,6 @@
-// [mcp-local harness] feature: livro-vendas-motorista | plano: 3366d60e | 2026-09-07 12:32:41
-// API helpers para o livro de vendas do motorista: busca filtrada por período, editar e cancelar venda
-// Funções de API para o Livro de Vendas do motorista
+// [mcp-local harness] feature: fix-sheet-fechar-endereco | plano: a1c3180e | 2026-09-08 11:07:52
+// Adiciona campo endereco opcional ao tipo VendaMotorista
+// API helpers para o livro de vendas do motorista
 import { request } from "./api"
 
 export type VendaMotorista = {
@@ -30,6 +30,13 @@ export type VendaMotorista = {
     preco_unitario: string
     subtotal: string
   }>
+  // Endereço onde a venda foi realizada (pode não existir em vendas antigas)
+  endereco?: {
+    rua_nome: string
+    numero: string
+    bairro_nome: string
+    complemento?: string | null
+  } | null
   created_at: string
 }
 
@@ -47,7 +54,7 @@ function subtractDays(days: number): string {
 
 function primeiroDiaSemana(): string {
   const hoje = new Date()
-  const dow = hoje.getDay() // 0=dom
+  const dow = hoje.getDay()
   const d = new Date(hoje)
   d.setDate(hoje.getDate() - dow)
   return d.toISOString().slice(0, 10)
