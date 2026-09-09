@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: venda_casco_produto | plano: 088582f9 | 2026-09-09 11:57:44
+﻿// [mcp-local harness] feature: venda_casco_produto | plano: 088582f9 | 2026-09-09 11:57:44
 // Integra toggle de casco na sacola: SacolaItem carrega vendeCasco/precoCascoAtual/comCasco; onToggleCasco atualiza estado; VendaCreate envia com_casco por item
 // Passa cascos={cascos} para ResumoVendaDialog
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"

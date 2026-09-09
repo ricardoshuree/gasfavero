@@ -1,11 +1,11 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: f507aa50 | 2026-09-07 15:14:45
-// Componente PainelCasco: stepper âmbar por produto com máximo igual à quantidade na sacola
+// [mcp-local harness] feature: venda_casco_regras | plano: 90951188 | 2026-09-09 13:48:23
+// PainelCasco filtra fora produtos com com_casco=true — casco já comprado não precisa de empréstimo
 /**
  * PainelCasco — painel âmbar abaixo da Sacola.
  *
- * Aparece quando há itens na sacola. Para cada item, exibe um stepper
- * (0 até a quantidade vendida) para informar quantos cascos serão emprestados.
- * Valor padrão = 0 (sem empréstimo).
+ * Exibe stepper de empréstimo apenas para produtos que NÃO têm
+ * casco incluído na venda (com_casco=false). Produtos com casco
+ * já comprado não precisam de empréstimo.
  */
 import { Minus, Package, Plus } from "lucide-react"
 
@@ -20,6 +20,7 @@ interface SacolaItemMin {
   produtoId: string
   title: string
   quantidade: number
+  comCasco?: boolean
 }
 
 interface PainelCascoProps {
@@ -39,13 +40,15 @@ function setQtd(cascos: CascoItem[], produtoId: string, qtd: number): CascoItem[
 }
 
 export function PainelCasco({ itens, cascos, onChange }: PainelCascoProps) {
-  if (itens.length === 0) return null
+  // Exibe somente produtos que NÃO têm casco incluído na venda
+  const itensElegiveis = itens.filter((i) => !i.comCasco)
+
+  if (itensElegiveis.length === 0) return null
 
   const totalCascos = cascos.reduce((acc, c) => acc + c.quantidade, 0)
 
   return (
     <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
-      {/* Header */}
       <div className="flex items-center gap-2 border-b border-amber-200 px-3 py-2.5 dark:border-amber-800">
         <Package
           className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
@@ -66,17 +69,13 @@ export function PainelCasco({ itens, cascos, onChange }: PainelCascoProps) {
         )}
       </div>
 
-      {/* Linhas por produto */}
       <div className="flex flex-col gap-0 divide-y divide-amber-100 px-3 dark:divide-amber-900">
-        {itens.map((item) => {
+        {itensElegiveis.map((item) => {
           const qtdCasco = getQtd(cascos, item.produtoId)
           const max = item.quantidade
 
           return (
-            <div
-              key={item.produtoId}
-              className="flex items-center gap-3 py-2.5"
-            >
+            <div key={item.produtoId} className="flex items-center gap-3 py-2.5">
               <span className="flex-1 text-sm text-amber-900 dark:text-amber-100">
                 {item.title}
                 <span className="ml-1.5 text-xs text-amber-500 dark:text-amber-500">
@@ -84,7 +83,6 @@ export function PainelCasco({ itens, cascos, onChange }: PainelCascoProps) {
                 </span>
               </span>
 
-              {/* Stepper */}
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -121,7 +119,6 @@ export function PainelCasco({ itens, cascos, onChange }: PainelCascoProps) {
                 </Button>
               </div>
 
-              {/* Badge de status */}
               {qtdCasco > 0 ? (
                 <span className="w-20 text-right text-xs font-medium text-amber-700 dark:text-amber-300">
                   {qtdCasco} casco{qtdCasco !== 1 ? "s" : ""}

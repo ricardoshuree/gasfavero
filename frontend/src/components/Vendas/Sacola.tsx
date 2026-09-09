@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: venda_casco_produto | plano: 1e4e7de6 | 2026-09-09 12:02:22
-// Fix: remove Switch (não existe), usa button nativo; onToggleCasco opcional; tipos explícitos nos handlers
+// [mcp-local harness] feature: venda_casco_regras | plano: 90951188 | 2026-09-09 13:48:00
+// Bloqueia botão + quando com_casco=true (máx 1 unidade por venda com casco)
 import { Minus, Package, Plus, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +10,6 @@ export interface SacolaItem {
   title: string
   precoUnitario: string
   quantidade: number
-  // campos de casco: presentes quando o produto tem vende_casco=true
   vendeCasco?: boolean
   precoCascoAtual?: string | null
   comCasco?: boolean
@@ -21,7 +20,6 @@ interface SacolaProps {
   onIncrementar: (produtoId: string) => void
   onDecrementar: (produtoId: string) => void
   onRemover: (produtoId: string) => void
-  // opcional: chamado.tsx usa Sacola sem toggle de casco
   onToggleCasco?: (produtoId: string, comCasco: boolean) => void
 }
 
@@ -67,10 +65,11 @@ export function Sacola({
               ? Number(item.precoCascoAtual) * item.quantidade
               : 0
           const subtotalTotal = subtotalGas + subtotalCasco
+          // quando com_casco=true, quantidade é travada em 1
+          const incrementoBloqueado = !!item.comCasco
 
           return (
             <div key={item.produtoId} className="rounded-md bg-muted/40 px-2 py-1.5">
-              {/* linha principal do produto */}
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -103,6 +102,8 @@ export function Sacola({
                     variant="outline"
                     size="icon"
                     className="h-7 w-7"
+                    disabled={incrementoBloqueado}
+                    title={incrementoBloqueado ? "Com casco: máx 1 unidade por venda" : undefined}
                     onClick={() => onIncrementar(item.produtoId)}
                   >
                     <Plus className="h-3 w-3" />
@@ -122,7 +123,7 @@ export function Sacola({
                 </span>
               </div>
 
-              {/* toggle de casco: só aparece quando onToggleCasco foi passado e produto permite casco */}
+              {/* toggle de casco */}
               {onToggleCasco && item.vendeCasco && item.precoCascoAtual && (
                 <div
                   className={`mt-1.5 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
@@ -130,9 +131,7 @@ export function Sacola({
                       ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
                       : "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300"
                   }`}
-                  onClick={() =>
-                    onToggleCasco(item.produtoId, !item.comCasco)
-                  }
+                  onClick={() => onToggleCasco(item.produtoId, !item.comCasco)}
                 >
                   <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
                   <span className="flex-1">Incluir casco</span>
@@ -140,7 +139,6 @@ export function Sacola({
                     + {formatMoney(Number(item.precoCascoAtual))} ×{" "}
                     {item.quantidade}
                   </span>
-                  {/* toggle nativo estilizado — sem dependência de shadcn/switch */}
                   <button
                     type="button"
                     role="switch"
@@ -166,7 +164,6 @@ export function Sacola({
         })}
       </div>
 
-      {/* rodapé com total */}
       <div className="flex flex-col gap-0.5 border-t pt-2">
         {temCasco && (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
