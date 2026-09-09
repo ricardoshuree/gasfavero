@@ -1,10 +1,11 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: 1b682768 | 2026-09-07 16:11:17
-// Adiciona ícone Package+⚠️ na coluna status quando a venda tem casco em aberto, cruzando com CascosService.readCascosEmAberto
+// [mcp-local harness] feature: livro_vendas_coluna_produtos | plano: 003f8a30 | 2026-09-09 12:43:53
+// Coluna Produtos entre Endereço e Tipo pagamento, formatando itens com indicação de casco
+// Adiciona coluna Produtos entre Endereço e Tipo pagamento na tabela do Livro de Vendas
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
 
-import { CascosService, type VendaPublic, VendasService } from "@/client"
+import { CascosService, type VendaPublic, type VendaItemPublic, VendasService } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,6 +79,18 @@ function isAtrasado(dataVendaISO: string): boolean {
   limite.setHours(0, 0, 0, 0)
   limite.setDate(limite.getDate() - DIAS_ATRASO_VALE)
   return dataVenda <= limite
+}
+
+// Formata os itens da sacola para exibição na coluna Produtos
+// Ex: "2× P13 (+casco), 1× P45"
+function formatItens(itens: VendaItemPublic[] | null | undefined): string {
+  if (!itens || itens.length === 0) return "—"
+  return itens
+    .map((i) => {
+      const casco = i.com_casco ? " (+casco)" : ""
+      return `${i.quantidade}× ${i.produto_title}${casco}`
+    })
+    .join(", ")
 }
 
 function StatusBadge({
@@ -413,14 +426,12 @@ export function LivroVendasTable() {
       }),
   })
 
-  // Busca todos os cascos em aberto para cruzar com as vendas da tabela
   const { data: cascosEmAberto } = useQuery({
     queryKey: ["cascos", "em-aberto"],
     queryFn: () => CascosService.readCascosEmAberto(),
     retry: false,
   })
 
-  // Set de venda_ids que têm casco em aberto (não devolvido)
   const vendasComCascoAberto = new Set<string>(
     (cascosEmAberto?.data ?? [])
       .filter((c) => c.status !== "devolvido")
@@ -470,6 +481,7 @@ export function LivroVendasTable() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Nome cliente</TableHead>
                 <TableHead>Endereço</TableHead>
+                <TableHead>Produtos</TableHead>
                 <TableHead>Tipo pagamento</TableHead>
                 <TableHead>Data venda</TableHead>
                 <TableHead>Data pagamento</TableHead>
@@ -481,7 +493,7 @@ export function LivroVendasTable() {
             <TableBody>
               {vendas.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                     {isFetching ? "Carregando..." : "Nenhuma venda encontrada"}
                   </TableCell>
                 </TableRow>
@@ -505,6 +517,9 @@ export function LivroVendasTable() {
                         ? `${venda.endereco.rua_nome}, ${venda.endereco.numero} — ${venda.endereco.bairro_nome}`
                         : "—"}
                     </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatItens(venda.itens)}
+                    </TableCell>
                     <TableCell>{LABEL_FORMA_PAGAMENTO[venda.forma_pagamento] ?? venda.forma_pagamento}</TableCell>
                     <TableCell>{formatDate(venda.data_venda)}</TableCell>
                     <TableCell>{formatDate(venda.pago_em ?? venda.data_pagamento_vale)}</TableCell>
@@ -523,7 +538,7 @@ export function LivroVendasTable() {
             {vendas.length > 0 && (
               <TableFooter>
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={5} className="text-right font-semibold">Total</TableCell>
+                  <TableCell colSpan={6} className="text-right font-semibold">Total</TableCell>
                   <TableCell className="text-right font-semibold">{formatMoney(data?.soma_preco ?? 0)}</TableCell>
                   <TableCell className="text-right font-semibold">{formatMoney(data?.soma_valor_pago ?? 0)}</TableCell>
                   <TableCell />
