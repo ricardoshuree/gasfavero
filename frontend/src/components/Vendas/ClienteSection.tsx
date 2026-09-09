@@ -1,7 +1,7 @@
-// [mcp-local harness] feature: aviso_fiado_sem_bloqueio | plano: 131de0c0 | 2026-09-09 14:38:45
-// Aviso âmbar/vermelho de fiado em aberto no bloco do cliente — sem bloquear a venda
+// [mcp-local harness] feature: aviso_fiado_sem_bloqueio | plano: 12184779 | 2026-09-09 14:56:24
+// AvisoFiadoCliente busca limit:50 e filtra localmente; spinner Loader2 no histórico enquanto carrega
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, MapPin, Package, Plus, Search, User, X } from "lucide-react"
+import { AlertTriangle, Loader2, MapPin, Package, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
@@ -92,22 +92,19 @@ function formatTelefone(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Aviso de fiado em aberto
+// Aviso de fiado em aberto — busca todas as vendas do cliente e filtra
 // ---------------------------------------------------------------------------
 
 function AvisoFiadoCliente({ clienteId }: { clienteId: string }) {
-  const { data } = useQuery({
-    queryKey: ["historicoVendasCliente", clienteId],
-    queryFn: () => VendasService.readHistoricoVendasCliente({ clienteId, limit: 3 }),
+  // Busca ampla para garantir que fiados antigos apareçam (não apenas as 3 últimas)
+  const { data, isLoading } = useQuery({
+    queryKey: ["vendas-cliente-fiado", clienteId],
+    queryFn: () => VendasService.readHistoricoVendasCliente({ clienteId, limit: 50 }),
   })
 
-  // Busca todas as vendas em aberto — não apenas as 3 do histórico
-  const { data: todasVendas } = useQuery({
-    queryKey: ["vendas-cliente-aberto", clienteId],
-    queryFn: () => VendasService.readHistoricoVendasCliente({ clienteId, limit: 20 }),
-  })
+  if (isLoading) return null
 
-  const fiados = (todasVendas?.data ?? data?.data ?? []).filter(
+  const fiados = (data?.data ?? []).filter(
     (v) => v.forma_pagamento === "vale" && !v.pago_em && v.status !== "cancelada"
   )
 
@@ -122,7 +119,9 @@ function AvisoFiadoCliente({ clienteId }: { clienteId: string }) {
         ? "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30"
         : "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30"
     }`}>
-      <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${temAtraso ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`} aria-hidden="true" />
+      <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${
+        temAtraso ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+      }`} aria-hidden="true" />
       <span className={temAtraso ? "text-red-800 dark:text-red-200" : "text-amber-800 dark:text-amber-200"}>
         {temAtraso ? "⚠️" : "ℹ️"} Cliente tem{" "}
         <strong>{fiados.length} fiado{fiados.length !== 1 ? "s" : ""} em aberto</strong>
@@ -134,11 +133,11 @@ function AvisoFiadoCliente({ clienteId }: { clienteId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Histórico com ícone de casco quando há empréstimo em aberto
+// Histórico de vendas com spinner de carregamento
 // ---------------------------------------------------------------------------
 
 function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
-  const { data: historicoData } = useQuery({
+  const { data: historicoData, isLoading: historicoLoading } = useQuery({
     queryKey: ["historicoVendasCliente", clienteId],
     queryFn: () =>
       VendasService.readHistoricoVendasCliente({ clienteId, limit: 3 }),
@@ -157,6 +156,16 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
         cascosPorVenda.set(c.venda_id, (cascosPorVenda.get(c.venda_id) ?? 0) + c.quantidade)
       }
     }
+  }
+
+  // Spinner enquanto carrega
+  if (historicoLoading) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border p-3 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Carregando histórico...
+      </div>
+    )
   }
 
   if (!historicoData || historicoData.data.length === 0) return null
