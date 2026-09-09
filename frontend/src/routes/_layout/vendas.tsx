@@ -1,6 +1,6 @@
-// [mcp-local harness] feature: sacola_reset_e_resumo_valor_pago | plano: 22053e73 | 2026-09-09 17:11:38
-// useEffect observa totalSacola: reseta valoresPorForma quando sacola muda; passa formasPagamento para ResumoVendaDialog
-// Sacola (referência) + Pago (soma formas) + Total acima do botão Finalizar.
+// [mcp-local harness] feature: sacola_cor_consistente | plano: a254a2df | 2026-09-09 17:26:36
+// Sacola usa corPago — tudo verde quando pago ok, tudo âmbar quando desconto
+// Sacola, Pago e Total usam mesma corPago — tudo verde quando ok, tudo âmbar quando desconto.
 // Quando sacola muda (produto add/remove/qty), valoresPorForma é resetado:
 //   - forma única → repreenche com novo total automaticamente
 //   - mix → fica vazio para o operador redistribuir
@@ -201,10 +201,6 @@ function Vendas() {
     return acc + gas + casco
   }, 0)
 
-  // Quando totalSacola muda, reseta valoresPorForma:
-  //   - 1 forma: repreenche automaticamente com novo total
-  //   - mix: zera para o operador redistribuir
-  // Usa ref para ignorar o mount inicial (totalSacola=0 antes de qualquer produto)
   const prevTotalSacola = useRef<number | null>(null)
   useEffect(() => {
     if (formasPagamento.length === 0) return
@@ -214,11 +210,9 @@ function Vendas() {
     }
     if (prevTotalSacola.current === totalSacola) return
     prevTotalSacola.current = totalSacola
-
     setValoresPorForma(() => {
       const novo: Partial<Record<FormaPagamentoValue, string>> = {}
       formasPagamento.forEach((f) => {
-        // forma única: preenche com novo total; mix: deixa vazio para o operador
         novo[f] = formasPagamento.length === 1 ? totalSacola.toFixed(2) : ""
       })
       return novo
@@ -233,6 +227,7 @@ function Vendas() {
   const totalPago = formasPagamento.includes("gas_povo") ? gasPovoTotal : somaFormas
 
   const pagamentoOk = formasPagamento.length > 0 && totalPago >= totalSacola
+  // corPago aplica-se a Sacola, Pago e Total — consistência visual total
   const corPago = pagamentoOk ? "text-[#00a63e]" : "text-amber-500"
 
   // ── Handlers valor por forma ──────────────────────────────────────────────
@@ -240,7 +235,6 @@ function Vendas() {
     const valor = parseFloat(raw) || 0
     setValoresPorForma((prev) => {
       const novo = { ...prev, [forma]: raw }
-      // Auto-fill: preenche o segundo campo SÓ se ainda estiver vazio
       if (formasPagamento.length === 2) {
         const outra = formasPagamento.find((f) => f !== forma)
         if (outra && !prev[outra]) {
@@ -536,15 +530,16 @@ function Vendas() {
             </div>
           </div>
 
-          {/* Sacola · Pago · Total + Finalizar */}
+          {/* Sacola · Pago · Total + Finalizar
+              Todas as linhas usam corPago: tudo verde quando ok, tudo âmbar quando desconto */}
           <div className="flex flex-col gap-2 rounded-lg border p-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Sacola</span>
-              <span className="text-sm font-medium text-muted-foreground">{formatMoney(totalSacola)}</span>
+              <span className={`text-sm font-medium ${formasPagamento.length > 0 ? corPago : "text-muted-foreground"}`}>Sacola</span>
+              <span className={`text-sm font-medium ${formasPagamento.length > 0 ? corPago : "text-muted-foreground"}`}>{formatMoney(totalSacola)}</span>
             </div>
             {formasPagamento.length > 0 && (
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Pago</span>
+                <span className={`text-sm font-medium ${corPago}`}>Pago</span>
                 <span className={`text-sm font-semibold ${corPago}`}>{formatMoney(totalPago)}</span>
               </div>
             )}
