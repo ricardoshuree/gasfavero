@@ -1,5 +1,8 @@
-// [mcp-local harness] feature: vendas_ajustes_cosmeticos | plano: 14031785 | 2026-09-09 14:19:23
-// FormaPagamento simplificado: só grade de botões; campos extras movidos para coluna direita em vendas.tsx
+// [mcp-local harness] feature: multiplas_formas_pagamento_ui | plano: 47ac2e3b | 2026-09-09 15:51:29
+// Multi-seleção: value vira string[], Vale Gás e Gás do Povo são exclusivos
+// Múltipla seleção de formas de pagamento.
+// Vale Gás e Gás do Povo são exclusivos (substituem tudo ao clicar).
+// Clique numa forma ativa adiciona; segundo clique remove.
 import { Banknote, CreditCard, Flame, QrCode, Receipt, Truck } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -11,6 +14,8 @@ export type FormaPagamentoValue =
   | "vale"
   | "vale_gas"
   | "gas_povo"
+
+export const FORMAS_EXCLUSIVAS: FormaPagamentoValue[] = ["vale_gas", "gas_povo"]
 
 const OPCOES: {
   value: FormaPagamentoValue
@@ -27,26 +32,45 @@ const OPCOES: {
 ]
 
 interface FormaPagamentoProps {
-  value: FormaPagamentoValue | null
-  onChange: (value: FormaPagamentoValue) => void
+  value: FormaPagamentoValue[]
+  onChange: (value: FormaPagamentoValue[]) => void
 }
 
-// Componente simplificado: só renderiza a grade de botões.
-// Os campos extras (Fiado, Vale Gás, Gás do Povo) são renderizados
-// diretamente em vendas.tsx na coluna direita, acima de Pago+Data.
 export function FormaPagamento({ value, onChange }: FormaPagamentoProps) {
+  const handleClick = (forma: FormaPagamentoValue) => {
+    const jaAtivo = value.includes(forma)
+    const exclusivo = FORMAS_EXCLUSIVAS.includes(forma)
+
+    if (jaAtivo) {
+      // remove — mas não deixa array vazio se for a única
+      const novo = value.filter((f) => f !== forma)
+      onChange(novo)
+      return
+    }
+
+    if (exclusivo) {
+      // exclusivo substitui tudo
+      onChange([forma])
+      return
+    }
+
+    // remove exclusivos que possam estar ativos e adiciona a nova forma
+    const semExclusivos = value.filter((f) => !FORMAS_EXCLUSIVAS.includes(f))
+    onChange([...semExclusivos, forma])
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium">Forma de Pagamento</p>
       <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
         {OPCOES.map((opcao) => {
           const Icon = opcao.icon
-          const selecionado = value === opcao.value
+          const selecionado = value.includes(opcao.value)
           return (
             <button
               key={opcao.value}
               type="button"
-              onClick={() => onChange(opcao.value)}
+              onClick={() => handleClick(opcao.value)}
               className={cn(
                 "flex flex-col items-center justify-center gap-2 rounded-xl border-2 py-6 transition-all",
                 selecionado

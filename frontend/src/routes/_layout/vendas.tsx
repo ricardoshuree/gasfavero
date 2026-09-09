@@ -1,5 +1,11 @@
-// [mcp-local harness] feature: vendas_ajustes_cosmeticos | plano: 14031785 | 2026-09-09 14:21:01
-// Campos extras de forma de pagamento na coluna direita; FormaPagamento recebe só value+onChange
+// [mcp-local harness] feature: multiplas_formas_pagamento_ui | plano: 47ac2e3b | 2026-09-09 15:53:33
+// Estado multi-forma; coluna direita com linha por forma + valor editável + auto-fill; Fiado inline com folha e checkboxes vencimento; total verde/âmbar
+// Tema 2: múltiplas formas de pagamento.
+// formasPagamento: FormaPagamentoValue[] — cada forma tem um valor associado em valoresPorForma.
+// Vale Gás e Gás do Povo continuam exclusivos (tratados em FormaPagamento.tsx).
+// Fiado expande folha + vencimento (checkbox 5º dia útil OU 30 dias, mutuamente exclusivos).
+// Total verde quando soma >= sacola, âmbar quando soma < sacola.
+// Backend ainda recebe forma_pagamento como string (campo principal) — migration Tema 2 vem depois.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -14,7 +20,6 @@ import {
   VendasService,
 } from "@/client"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -25,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import ClienteSection from "@/components/Vendas/ClienteSection"
-import { FormaPagamento, type FormaPagamentoValue } from "@/components/Vendas/FormaPagamento"
+import { FormaPagamento, type FormaPagamentoValue, FORMAS_EXCLUSIVAS } from "@/components/Vendas/FormaPagamento"
 import PainelCasco, { type CascoItem } from "@/components/Vendas/PainelCasco"
 import ProdutoGrid from "@/components/Vendas/ProdutoGrid"
 import ResumoVendaDialog from "@/components/Vendas/ResumoVendaDialog"
@@ -38,13 +43,35 @@ const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
 const ROLES_PERMITIDAS = ["gerente", "motorista"]
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
 
+const LABEL_FORMA: Record<FormaPagamentoValue, string> = {
+  cartao_debito:  "Débito",
+  cartao_credito: "Crédito",
+  pix:            "Pix",
+  dinheiro:       "Dinheiro",
+  vale:           "Fiado",
+  vale_gas:       "Vale Gás",
+  gas_povo:       "Gás do Povo",
+}
+
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function somarDiasISO(isoDate: string, dias: number): string {
-  const d = new Date(`${isoDate}T00:00:00`)
-  d.setDate(d.getDate() + dias)
+function quintoUtilMesSeguinte(): string {
+  const hoje = new Date()
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)
+  let uteis = 0
+  const d = new Date(primeiroDia)
+  while (uteis < 5) {
+    d.setDate(d.getDate() + 1)
+    if (d.getDay() !== 0 && d.getDay() !== 6) uteis++
+  }
+  return d.toISOString().slice(0, 10)
+}
+
+function trinta(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 30)
   return d.toISOString().slice(0, 10)
 }
 
@@ -59,6 +86,9 @@ interface ValeGasInfo {
   bloco_id: string | null
 }
 
+// Tipo de vencimento para o Fiado
+type VctoTipo = "quinto" | "trinta" | "manual"
+
 export const Route = createFileRoute("/_layout/vendas")({
   component: Vendas,
   beforeLoad: async () => {
@@ -66,43 +96,51 @@ export const Route = createFileRoute("/_layout/vendas")({
     const canRead =
       perms.is_superuser ||
       perms.permissions.some((p) => p.module === MODULE && p.can_read)
-    if (!canRead) {
-      throw redirect({ to: "/" })
-    }
+    if (!canRead) throw redirect({ to: "/" })
   },
-  head: () => ({
-    meta: [{ title: "Vendas - FastAPI Template" }],
-  }),
+  head: () => ({ meta: [{ title: "Vendas - FastAPI Template" }] }),
 })
 
 function Vendas() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
+  // Sacola e cascos
   const [sacola, setSacola] = useState<SacolaItem[]>([])
   const [cascos, setCascos] = useState<CascoItem[]>([])
+
+  // Cliente / endereço / motorista
   const [cliente, setCliente] = useState<ClientePublic | null>(null)
   const [endereco, setEndereco] = useState<EnderecoPublic | null>(null)
   const [motoristaId, setMotoristaId] = useState("")
-  const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoValue | null>(null)
-  // Fiado
+
+  // Múltiplas formas de pagamento
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamentoValue[]>([])
+  // Valor por forma: chave = FormaPagamentoValue, valor = string numérica
+  const [valoresPorForma, setValoresPorForma] = useState<Partial<Record<FormaPagamentoValue, string>>>({})
+
+  // Fiado (vale)
   const [valeNumero, setValeNumero] = useState("")
-  const [dataPagamentoVale, setDataPagamentoVale] = useState("")
-  const [quintoUtil, setQuintoUtil] = useState(true)
+  const [vctoTipo, setVctoTipo] = useState<VctoTipo>("quinto")
+  const [dataPagamentoVale, setDataPagamentoVale] = useState(quintoUtilMesSeguinte())
+
   // Vale Gás
   const [valeGasNumero, setValeGasNumero] = useState("")
   const [valeGasBlocoId, setValeGasBlocoId] = useState<string | null>(null)
   const [valeGasInfo, setValeGasInfo] = useState<ValeGasInfo | null>(null)
   const [validandoValeGas, setValidandoValeGas] = useState(false)
+
   // Gás do Povo
   const [gasPovoValorGov, setGasPovoValorGov] = useState("")
   const [gasPovoFrete, setGasPovoFrete] = useState("")
-  // Valores
-  const [valorPago, setValorPago] = useState("")
-  const [valorPagoManual, setValorPagoManual] = useState(false)
+
+  // Data da venda
   const [dataVenda, setDataVenda] = useState(hojeISO())
+
+  // Diálogo de resumo
   const [showResumo, setShowResumo] = useState(false)
 
+  // ── Queries ──────────────────────────────────────────────────────────────
   const { data: produtosComPreco } = useQuery({
     queryKey: ["precos"],
     queryFn: () => PrecosService.readPrecos(),
@@ -114,36 +152,33 @@ function Vendas() {
     queryFn: () => UsersService.readUsers({ limit: 100 }),
   })
 
-  const usuariosCombo = (users?.data ?? []).filter((u) =>
-    u.full_name === NOME_DISTRIBUIDORA ||
-    (u.roles ?? []).some((r) => ROLES_PERMITIDAS.includes(r.toLowerCase()))
+  const usuariosCombo = (users?.data ?? []).filter(
+    (u) =>
+      u.full_name === NOME_DISTRIBUIDORA ||
+      (u.roles ?? []).some((r) => ROLES_PERMITIDAS.includes(r.toLowerCase())),
   )
 
+  // Seleciona distribuidora por padrão
   useEffect(() => {
     if (motoristaId || !users) return
-    const distribuidora = users.data.find((u) => u.full_name === NOME_DISTRIBUIDORA)
-    if (distribuidora) setMotoristaId(distribuidora.id)
+    const dist = users.data.find((u) => u.full_name === NOME_DISTRIBUIDORA)
+    if (dist) setMotoristaId(dist.id)
   }, [users, motoristaId])
 
-  // Próximo número de vale (Fiado)
+  // Próximo número de vale (Fiado) ao selecionar
   useEffect(() => {
-    if (formaPagamento !== "vale" || !motoristaId) return
+    if (!formasPagamento.includes("vale") || !motoristaId) return
     VendasService.readProximoNumeroVale({ motoristaId })
       .then((res) => {
         if (res.numero == null) return
         setValeNumero((atual) => (atual ? atual : String(res.numero)))
       })
       .catch(() => {})
-  }, [formaPagamento, motoristaId])
-
-  useEffect(() => {
-    if (formaPagamento !== "vale") return
-    setDataPagamentoVale((atual) => atual ? atual : somarDiasISO(hojeISO(), 30))
-  }, [formaPagamento])
+  }, [formasPagamento, motoristaId])
 
   // Validação em tempo real do Vale Gás
   useEffect(() => {
-    if (formaPagamento !== "vale_gas" || !valeGasNumero.trim()) {
+    if (!formasPagamento.includes("vale_gas") || !valeGasNumero.trim()) {
       setValeGasInfo(null)
       setValeGasBlocoId(null)
       return
@@ -168,42 +203,85 @@ function Vendas() {
       }
     }, 600)
     return () => clearTimeout(timer)
-  }, [valeGasNumero, formaPagamento])
+  }, [valeGasNumero, formasPagamento])
 
-  // Limpa campos ao trocar forma de pagamento
+  // Limpa campos ao remover forma exclusiva
   useEffect(() => {
-    if (formaPagamento !== "gas_povo") {
+    if (!formasPagamento.includes("gas_povo")) {
       setGasPovoValorGov("")
       setGasPovoFrete("")
     }
-    if (formaPagamento !== "vale_gas") {
+    if (!formasPagamento.includes("vale_gas")) {
       setValeGasNumero("")
       setValeGasInfo(null)
       setValeGasBlocoId(null)
     }
-  }, [formaPagamento])
+    if (!formasPagamento.includes("vale")) {
+      setValeNumero("")
+    }
+  }, [formasPagamento])
 
-  const total = sacola.reduce((acc, item) => {
+  // Sincroniza cascos com sacola
+  useEffect(() => {
+    const ids = new Set(sacola.map((i) => i.produtoId))
+    setCascos((prev) => prev.filter((c) => ids.has(c.produto_id)))
+  }, [sacola])
+
+  // ── Total da sacola ───────────────────────────────────────────────────────
+  const totalSacola = sacola.reduce((acc, item) => {
     const gas = Number(item.precoUnitario) * item.quantidade
-    const casco = item.comCasco && item.precoCascoAtual
-      ? Number(item.precoCascoAtual) * item.quantidade
-      : 0
+    const casco =
+      item.comCasco && item.precoCascoAtual
+        ? Number(item.precoCascoAtual) * item.quantidade
+        : 0
     return acc + gas + casco
   }, 0)
 
-  useEffect(() => {
-    if (formaPagamento === "gas_povo") {
-      setValorPago(gasPovoValorGov)
-      return
-    }
-    if (!valorPagoManual) setValorPago(total > 0 ? total.toFixed(2) : "")
-  }, [total, valorPagoManual, formaPagamento, gasPovoValorGov])
+  // Soma dos valores preenchidos por forma
+  const somaFormas = formasPagamento.reduce((acc, f) => {
+    return acc + (parseFloat(valoresPorForma[f] ?? "0") || 0)
+  }, 0)
 
-  useEffect(() => {
-    const idsNaSacola = new Set(sacola.map((i) => i.produtoId))
-    setCascos((prev) => prev.filter((c) => idsNaSacola.has(c.produto_id)))
-  }, [sacola])
+  // Cor do total: verde se soma >= sacola, âmbar se menor
+  const totalOk = somaFormas >= totalSacola && formasPagamento.length > 0
+  const totalColorClass = totalOk ? "text-[#00a63e]" : "text-amber-500"
 
+  // ── Handlers de valor por forma ───────────────────────────────────────────
+  const handleValorForma = (forma: FormaPagamentoValue, raw: string) => {
+    const valor = parseFloat(raw) || 0
+    setValoresPorForma((prev) => {
+      const novo = { ...prev, [forma]: raw }
+
+      // Auto-fill: se houver exatamente 2 formas, preenche o saldo na outra
+      if (formasPagamento.length === 2) {
+        const outra = formasPagamento.find((f) => f !== forma)
+        if (outra) {
+          const saldo = Math.max(0, totalSacola - valor)
+          novo[outra] = saldo > 0 ? saldo.toFixed(2) : ""
+        }
+      }
+      return novo
+    })
+  }
+
+  // Ao mudar as formas selecionadas: inicializa valor da nova forma
+  const handleFormasChange = (novas: FormaPagamentoValue[]) => {
+    setFormasPagamento(novas)
+    setValoresPorForma((prev) => {
+      const novo: Partial<Record<FormaPagamentoValue, string>> = {}
+      novas.forEach((f) => {
+        // mantém valor existente; se forma nova e só tem 1 forma, preenche total
+        if (prev[f] !== undefined) {
+          novo[f] = prev[f]
+        } else {
+          novo[f] = novas.length === 1 ? totalSacola.toFixed(2) : ""
+        }
+      })
+      return novo
+    })
+  }
+
+  // ── Handlers da sacola ────────────────────────────────────────────────────
   const quantidadesNaSacola = Object.fromEntries(
     sacola.map((i) => [i.produtoId, i.quantidade]),
   )
@@ -233,20 +311,30 @@ function Vendas() {
   }
 
   const handleIncrementar = (produtoId: string) =>
-    setSacola((prev) => prev.map((i) => i.produtoId === produtoId ? { ...i, quantidade: i.quantidade + 1 } : i))
+    setSacola((prev) =>
+      prev.map((i) =>
+        i.produtoId === produtoId ? { ...i, quantidade: i.quantidade + 1 } : i,
+      ),
+    )
 
   const handleDecrementar = (produtoId: string) => {
-    setSacola((prev) => prev.flatMap((i) => {
-      if (i.produtoId !== produtoId) return [i]
-      if (i.quantidade <= 1) return []
-      return [{ ...i, quantidade: i.quantidade - 1 }]
-    }))
-    setCascos((prev) => prev.map((c) => {
-      if (c.produto_id !== produtoId) return c
-      const itemAtual = sacola.find((i) => i.produtoId === produtoId)
-      const novaQtdSacola = (itemAtual?.quantidade ?? 1) - 1
-      return { ...c, quantidade: Math.min(c.quantidade, novaQtdSacola) }
-    }).filter((c) => c.quantidade > 0))
+    setSacola((prev) =>
+      prev.flatMap((i) => {
+        if (i.produtoId !== produtoId) return [i]
+        if (i.quantidade <= 1) return []
+        return [{ ...i, quantidade: i.quantidade - 1 }]
+      }),
+    )
+    setCascos((prev) =>
+      prev
+        .map((c) => {
+          if (c.produto_id !== produtoId) return c
+          const itemAtual = sacola.find((i) => i.produtoId === produtoId)
+          const novaQtd = (itemAtual?.quantidade ?? 1) - 1
+          return { ...c, quantidade: Math.min(c.quantidade, novaQtd) }
+        })
+        .filter((c) => c.quantidade > 0),
+    )
   }
 
   const handleRemover = (produtoId: string) => {
@@ -261,30 +349,82 @@ function Vendas() {
         return { ...i, comCasco, quantidade: comCasco ? 1 : i.quantidade }
       }),
     )
-    if (comCasco) {
-      setCascos((prev) => prev.filter((c) => c.produto_id !== produtoId))
-    }
+    if (comCasco) setCascos((prev) => prev.filter((c) => c.produto_id !== produtoId))
   }
 
+  // ── Vcto Fiado ────────────────────────────────────────────────────────────
+  const handleVctoTipo = (tipo: VctoTipo) => {
+    setVctoTipo(tipo)
+    if (tipo === "quinto") setDataPagamentoVale(quintoUtilMesSeguinte())
+    else if (tipo === "trinta") setDataPagamentoVale(trinta())
+    // manual: mantém o campo editável
+  }
+
+  // ── Reset ─────────────────────────────────────────────────────────────────
   const resetForm = () => {
     setSacola([])
     setCascos([])
     setCliente(null)
     setEndereco(null)
-    setFormaPagamento(null)
+    setFormasPagamento([])
+    setValoresPorForma({})
     setValeNumero("")
-    setDataPagamentoVale("")
-    setQuintoUtil(true)
+    setVctoTipo("quinto")
+    setDataPagamentoVale(quintoUtilMesSeguinte())
     setValeGasNumero("")
     setValeGasBlocoId(null)
     setValeGasInfo(null)
     setGasPovoValorGov("")
     setGasPovoFrete("")
-    setValorPago("")
-    setValorPagoManual(false)
     setDataVenda(hojeISO())
+    setShowResumo(false)
   }
 
+  // ── Validações ────────────────────────────────────────────────────────────
+  const gasPovoValido =
+    formasPagamento.includes("gas_povo") &&
+    parseFloat(gasPovoValorGov) > 0 &&
+    parseFloat(gasPovoFrete) > 0
+
+  const gasPovoTotal =
+    (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
+
+  // Forma principal para envio ao backend (primeira da lista)
+  const formaPrincipal = formasPagamento[0] ?? null
+
+  // Valor total para envio: se gas_povo usa total gov+frete, senão soma das formas
+  const valorPagoEnvio = formasPagamento.includes("gas_povo")
+    ? String(gasPovoTotal)
+    : somaFormas.toFixed(2)
+
+  const podeFinalizar =
+    !!cliente &&
+    sacola.length > 0 &&
+    !!motoristaId &&
+    formasPagamento.length > 0 &&
+    (!formasPagamento.includes("vale") || valeNumero.trim().length > 0) &&
+    (!formasPagamento.includes("vale_gas") ||
+      (valeGasNumero.trim().length > 0 && !!valeGasBlocoId)) &&
+    (!formasPagamento.includes("gas_povo") || gasPovoValido)
+
+  const handleAbrirResumo = () => {
+    if (!cliente) return showErrorToast("Selecione ou cadastre um cliente")
+    if (sacola.length === 0) return showErrorToast("Adicione ao menos 1 produto na sacola")
+    if (formasPagamento.length === 0) return showErrorToast("Selecione a forma de pagamento")
+    if (formasPagamento.includes("vale") && !valeNumero.trim())
+      return showErrorToast("Informe o número do fiado")
+    if (formasPagamento.includes("vale_gas") && !valeGasNumero.trim())
+      return showErrorToast("Informe o número do vale gás")
+    if (formasPagamento.includes("vale_gas") && !valeGasBlocoId)
+      return showErrorToast("Número de vale gás inválido — verifique o estabelecimento")
+    if (formasPagamento.includes("gas_povo") && !(parseFloat(gasPovoValorGov) > 0))
+      return showErrorToast("Informe o valor do governo para Gás do Povo")
+    if (formasPagamento.includes("gas_povo") && !(parseFloat(gasPovoFrete) > 0))
+      return showErrorToast("Informe o valor do frete para Gás do Povo")
+    setShowResumo(true)
+  }
+
+  // ── Mutation ──────────────────────────────────────────────────────────────
   const mutation = useMutation({
     mutationFn: () =>
       VendasService.createVenda({
@@ -292,14 +432,29 @@ function Vendas() {
           cliente_id: cliente?.id ?? "",
           endereco_id: endereco?.id,
           motorista_id: motoristaId,
-          forma_pagamento: formaPagamento as
-            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro" | "vale" | "vale_gas" | "gas_povo",
-          vale_numero: formaPagamento === "vale" && valeNumero ? Number(valeNumero) : undefined,
-          data_pagamento_vale: formaPagamento === "vale" && dataPagamentoVale ? dataPagamentoVale : undefined,
-          vale_gas_numero: formaPagamento === "vale_gas" && valeGasNumero ? Number(valeGasNumero) : undefined,
-          vale_gas_bloco_id: formaPagamento === "vale_gas" ? (valeGasBlocoId ?? undefined) : undefined,
-          gas_povo_frete: formaPagamento === "gas_povo" && gasPovoFrete ? gasPovoFrete : undefined,
-          valor_pago: formaPagamento === "gas_povo" ? (gasPovoValorGov || "0") : valorPago,
+          forma_pagamento: formaPrincipal as
+            | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro"
+            | "vale" | "vale_gas" | "gas_povo",
+          vale_numero:
+            formasPagamento.includes("vale") && valeNumero
+              ? Number(valeNumero)
+              : undefined,
+          data_pagamento_vale:
+            formasPagamento.includes("vale") && dataPagamentoVale
+              ? dataPagamentoVale
+              : undefined,
+          vale_gas_numero:
+            formasPagamento.includes("vale_gas") && valeGasNumero
+              ? Number(valeGasNumero)
+              : undefined,
+          vale_gas_bloco_id: formasPagamento.includes("vale_gas")
+            ? (valeGasBlocoId ?? undefined)
+            : undefined,
+          gas_povo_frete:
+            formasPagamento.includes("gas_povo") && gasPovoFrete
+              ? gasPovoFrete
+              : undefined,
+          valor_pago: valorPagoEnvio,
           data_venda: dataVenda,
           itens: sacola.map((i) => ({
             produto_id: i.produtoId,
@@ -311,7 +466,6 @@ function Vendas() {
       }),
     onSuccess: () => {
       showSuccessToast("Venda registrada com sucesso")
-      setShowResumo(false)
       resetForm()
     },
     onError: (err: ApiError) => {
@@ -325,42 +479,22 @@ function Vendas() {
     },
   })
 
-  const gasPovoValido =
-    formaPagamento === "gas_povo" &&
-    parseFloat(gasPovoValorGov) > 0 &&
-    parseFloat(gasPovoFrete) > 0
-
-  const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
-
-  const podeFinalizar =
-    !!cliente &&
-    sacola.length > 0 &&
-    !!motoristaId &&
-    !!formaPagamento &&
-    (formaPagamento !== "vale" || valeNumero.trim().length > 0) &&
-    (formaPagamento !== "vale_gas" || (valeGasNumero.trim().length > 0 && !!valeGasBlocoId)) &&
-    (formaPagamento !== "gas_povo" || gasPovoValido)
-
-  const handleAbrirResumo = () => {
-    if (!cliente) return showErrorToast("Selecione ou cadastre um cliente")
-    if (sacola.length === 0) return showErrorToast("Adicione ao menos 1 produto na sacola")
-    if (!formaPagamento) return showErrorToast("Selecione a forma de pagamento")
-    if (formaPagamento === "vale" && !valeNumero.trim()) return showErrorToast("Informe o número do fiado")
-    if (formaPagamento === "vale_gas" && !valeGasNumero.trim()) return showErrorToast("Informe o número do vale gás")
-    if (formaPagamento === "vale_gas" && !valeGasBlocoId) return showErrorToast("Número de vale gás inválido — verifique o estabelecimento")
-    if (formaPagamento === "gas_povo" && !(parseFloat(gasPovoValorGov) > 0)) return showErrorToast("Informe o valor do governo para Gás do Povo")
-    if (formaPagamento === "gas_povo" && !(parseFloat(gasPovoFrete) > 0)) return showErrorToast("Informe o valor do frete para Gás do Povo")
-    setShowResumo(true)
-  }
-
+  // ── Helpers de render ─────────────────────────────────────────────────────
   const motoristaNome =
     usuariosCombo.find((u) => u.id === motoristaId)?.full_name ||
-    usuariosCombo.find((u) => u.id === motoristaId)?.email || ""
+    usuariosCombo.find((u) => u.id === motoristaId)?.email ||
+    ""
 
-  const totalFormatado = formaPagamento === "gas_povo"
-    ? formatMoney(gasPovoTotal)
-    : formatMoney(total)
+  // Total exibido: gas_povo usa gov+frete, demais usa soma das formas (ou sacola se vazio)
+  const totalExibido = formasPagamento.includes("gas_povo")
+    ? gasPovoTotal
+    : somaFormas > 0
+      ? somaFormas
+      : totalSacola
 
+  const totalFormatado = formatMoney(totalExibido)
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-4 pb-6">
       <div>
@@ -386,13 +520,12 @@ function Vendas() {
         </Select>
       </div>
 
-      {/* Grid principal: esquerda = conteúdo / direita = sacola + ações */}
+      {/* Grid principal */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
 
         {/* ── Coluna ESQUERDA ── */}
         <div className="flex flex-col gap-6">
 
-          {/* Cliente */}
           <div>
             <p className="mb-2 text-sm font-medium">Cliente</p>
             <ClienteSection
@@ -403,7 +536,6 @@ function Vendas() {
             />
           </div>
 
-          {/* Produtos */}
           <div>
             <p className="mb-2 text-sm font-medium">Produtos</p>
             <ProdutoGrid
@@ -413,10 +545,10 @@ function Vendas() {
             />
           </div>
 
-          {/* Forma de Pagamento (só grade de botões) */}
+          {/* Grade de botões de forma de pagamento */}
           <FormaPagamento
-            value={formaPagamento}
-            onChange={(v) => { setFormaPagamento(v); setValorPagoManual(false) }}
+            value={formasPagamento}
+            onChange={handleFormasChange}
           />
 
         </div>
@@ -437,155 +569,204 @@ function Vendas() {
           </div>
 
           {/* Empréstimo de casco */}
-          <PainelCasco
-            itens={sacola}
-            cascos={cascos}
-            onChange={setCascos}
-          />
+          <PainelCasco itens={sacola} cascos={cascos} onChange={setCascos} />
 
-          {/* Campos extras de forma de pagamento — coluna direita */}
-          {formaPagamento === "vale" && (
-            <div className="flex flex-col gap-3 rounded-lg border p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fiado</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="vale-numero">Número do fiado</Label>
-                  <Input
-                    id="vale-numero"
-                    type="number"
-                    inputMode="numeric"
-                    value={valeNumero}
-                    onChange={(e) => setValeNumero(e.target.value)}
-                    placeholder="Ex: 123"
-                  />
-                </div>
-                {!quintoUtil && (
+          {/* ── Valores por forma de pagamento ── */}
+          {formasPagamento.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border p-3">
+
+              {/* Gás do Povo: campos especiais */}
+              {formasPagamento.includes("gas_povo") && (
+                <>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gás do Povo</p>
+                  <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-3 py-2">
+                    <p className="text-xs text-blue-800 dark:text-blue-200">
+                      O governo paga depois. O frete é cobrado do cliente no ato.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="gas-povo-valor-gov">Valor governo (R$)</Label>
+                      <Input
+                        id="gas-povo-valor-gov"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={gasPovoValorGov}
+                        onChange={(e) => setGasPovoValorGov(e.target.value)}
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="gas-povo-frete">Frete cliente (R$)</Label>
+                      <Input
+                        id="gas-povo-frete"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={gasPovoFrete}
+                        onChange={(e) => setGasPovoFrete(e.target.value)}
+                        placeholder="0,00"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Vale Gás: campos especiais */}
+              {formasPagamento.includes("vale_gas") && (
+                <>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Vale Gás</p>
                   <div className="grid gap-1.5">
-                    <Label htmlFor="data-pagamento-vale">Data a ser pago</Label>
+                    <Label htmlFor="vale-gas-numero">Número do vale gás</Label>
                     <Input
-                      id="data-pagamento-vale"
-                      type="date"
-                      value={dataPagamentoVale}
-                      onChange={(e) => setDataPagamentoVale(e.target.value)}
+                      id="vale-gas-numero"
+                      type="number"
+                      inputMode="numeric"
+                      value={valeGasNumero}
+                      onChange={(e) => setValeGasNumero(e.target.value)}
+                      placeholder="Ex: 1001"
                     />
                   </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="quinto-util"
-                  checked={quintoUtil}
-                  onCheckedChange={(checked) => {
-                    setQuintoUtil(checked === true)
-                    if (checked) setDataPagamentoVale("")
-                  }}
-                />
-                <label htmlFor="quinto-util" className="text-sm text-muted-foreground cursor-pointer select-none">
-                  5º dia útil do mês seguinte
-                </label>
-              </div>
-            </div>
-          )}
-
-          {formaPagamento === "vale_gas" && (
-            <div className="flex flex-col gap-3 rounded-lg border p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Vale Gás</p>
-              <div className="grid gap-1.5">
-                <Label htmlFor="vale-gas-numero">Número do vale gás</Label>
-                <Input
-                  id="vale-gas-numero"
-                  type="number"
-                  inputMode="numeric"
-                  value={valeGasNumero}
-                  onChange={(e) => setValeGasNumero(e.target.value)}
-                  placeholder="Ex: 1001"
-                />
-              </div>
-              {validandoValeGas && <p className="text-xs text-muted-foreground">Verificando...</p>}
-              {!validandoValeGas && valeGasInfo !== null && (
-                valeGasInfo.valido ? (
-                  <div className="rounded-md bg-green-50 border border-green-200 px-3 py-2">
-                    <p className="text-xs font-medium text-green-800">✓ {valeGasInfo.estabelecimento_nome}</p>
-                    <p className="text-xs text-green-700">{valeGasInfo.estabelecimento_cpf}</p>
-                  </div>
-                ) : (
-                  <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
-                    <p className="text-xs text-destructive">Número não encontrado em nenhum bloco de vale gás.</p>
-                  </div>
-                )
+                  {validandoValeGas && (
+                    <p className="text-xs text-muted-foreground">Verificando...</p>
+                  )}
+                  {!validandoValeGas && valeGasInfo !== null && (
+                    valeGasInfo.valido ? (
+                      <div className="rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 px-3 py-2">
+                        <p className="text-xs font-medium text-green-800 dark:text-green-200">✓ {valeGasInfo.estabelecimento_nome}</p>
+                        <p className="text-xs text-green-700 dark:text-green-300">{valeGasInfo.estabelecimento_cpf}</p>
+                      </div>
+                    ) : (
+                      <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                        <p className="text-xs text-destructive">Número não encontrado em nenhum bloco de vale gás.</p>
+                      </div>
+                    )
+                  )}
+                </>
               )}
+
+              {/* Formas normais: uma linha por forma com campo de valor */}
+              {formasPagamento
+                .filter((f) => !FORMAS_EXCLUSIVAS.includes(f))
+                .map((forma) => (
+                  <div key={forma} className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="w-20 shrink-0 text-sm">{LABEL_FORMA[forma]}</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={valoresPorForma[forma] ?? ""}
+                        onChange={(e) => handleValorForma(forma, e.target.value)}
+                        placeholder="R$ 0,00"
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* Fiado: campos extras inline */}
+                    {forma === "vale" && (
+                      <div className="ml-[5.5rem] flex flex-col gap-2 border-l-2 border-border pl-3">
+                        <div className="grid gap-1.5">
+                          <Label htmlFor="vale-numero" className="text-xs text-muted-foreground">
+                            Número da folha (bloco)
+                          </Label>
+                          <Input
+                            id="vale-numero"
+                            type="number"
+                            inputMode="numeric"
+                            value={valeNumero}
+                            onChange={(e) => setValeNumero(e.target.value)}
+                            placeholder="Ex: 47"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-xs text-muted-foreground">Vencimento</p>
+                          {/* Radio checkboxes mutuamente exclusivos */}
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="vcto-tipo"
+                              checked={vctoTipo === "quinto"}
+                              onChange={() => handleVctoTipo("quinto")}
+                              className="accent-primary"
+                            />
+                            <span className="text-xs text-muted-foreground">5º dia útil do mês seguinte</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="vcto-tipo"
+                              checked={vctoTipo === "trinta"}
+                              onChange={() => handleVctoTipo("trinta")}
+                              className="accent-primary"
+                            />
+                            <span className="text-xs text-muted-foreground">30 dias a partir de hoje</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="vcto-tipo"
+                              checked={vctoTipo === "manual"}
+                              onChange={() => handleVctoTipo("manual")}
+                              className="accent-primary"
+                            />
+                            <span className="text-xs text-muted-foreground">Data manual</span>
+                          </label>
+                        </div>
+                        <Input
+                          type="date"
+                          value={dataPagamentoVale}
+                          onChange={(e) => {
+                            setDataPagamentoVale(e.target.value)
+                            setVctoTipo("manual")
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
             </div>
           )}
 
-          {formaPagamento === "gas_povo" && (
-            <div className="flex flex-col gap-3 rounded-lg border p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gás do Povo</p>
-              <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
-                <p className="text-xs text-blue-800">O governo paga depois. O frete é cobrado do cliente no ato.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="gas-povo-valor-gov">Valor do governo (R$)</Label>
-                  <Input id="gas-povo-valor-gov" type="number" inputMode="decimal" step="0.01" min="0" value={gasPovoValorGov} onChange={(e) => setGasPovoValorGov(e.target.value)} placeholder="0,00" />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="gas-povo-frete">Frete do cliente (R$)</Label>
-                  <Input id="gas-povo-frete" type="number" inputMode="decimal" step="0.01" min="0" value={gasPovoFrete} onChange={(e) => setGasPovoFrete(e.target.value)} placeholder="0,00" />
-                </div>
-              </div>
-              {gasPovoTotal > 0 && (
-                <div className="flex justify-between items-center rounded-md bg-muted px-3 py-2">
-                  <span className="text-xs text-muted-foreground">Total a receber</span>
-                  <span className="text-sm font-semibold">R$ {gasPovoTotal.toFixed(2).replace(".", ",")}</span>
-                </div>
-              )}
+          {/* Data da venda */}
+          <div className="rounded-lg border p-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="data-venda">Data da venda</Label>
+              <Input
+                id="data-venda"
+                type="date"
+                value={dataVenda}
+                onChange={(e) => setDataVenda(e.target.value)}
+              />
             </div>
-          )}
-
-          {/* Valor pago + Data */}
-          {formaPagamento !== "gas_povo" && (
-            <div className="grid grid-cols-2 gap-3 rounded-lg border p-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="valor-pago">PAGO (R$)</Label>
-                <Input
-                  id="valor-pago"
-                  type="text"
-                  inputMode="decimal"
-                  value={valorPago}
-                  onChange={(e) => {
-                    setValorPago(e.target.value)
-                    setValorPagoManual(true)
-                  }}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="data-venda">Data</Label>
-                <Input
-                  id="data-venda"
-                  type="date"
-                  value={dataVenda}
-                  onChange={(e) => setDataVenda(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          {formaPagamento === "gas_povo" && (
-            <div className="rounded-lg border p-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="data-venda-gp">Data</Label>
-                <Input id="data-venda-gp" type="date" value={dataVenda} onChange={(e) => setDataVenda(e.target.value)} />
-              </div>
-            </div>
-          )}
+          </div>
 
           {/* Total + Finalizar */}
           <div className="flex flex-col gap-3 rounded-lg border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Total</span>
-              <span className="text-xl font-bold">{totalFormatado}</span>
+              <span className={`text-xl font-bold ${formasPagamento.length > 0 ? totalColorClass : ""}`}>
+                {totalFormatado}
+              </span>
             </div>
-            <Button size="lg" className="w-full" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
+            {/* Referência da sacola quando há mix */}
+            {formasPagamento.length > 1 && somaFormas !== totalSacola && (
+              <p className="text-xs text-muted-foreground text-right">
+                Sacola: {formatMoney(totalSacola)}
+              </p>
+            )}
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={!podeFinalizar}
+              onClick={handleAbrirResumo}
+            >
               Finalizar Venda
             </Button>
           </div>
@@ -601,12 +782,10 @@ function Vendas() {
         motoristaNome={motoristaNome}
         itens={sacola}
         cascos={cascos}
-        formaPagamento={formaPagamento ?? ""}
+        formaPagamento={formaPrincipal ?? ""}
         valeNumero={valeNumero}
         dataPagamentoVale={dataPagamentoVale}
-        valorPago={formaPagamento === "gas_povo"
-          ? String(gasPovoTotal)
-          : valorPago}
+        valorPago={valorPagoEnvio}
         dataVenda={dataVenda}
         isPending={mutation.isPending}
         onConfirm={() => mutation.mutate()}
