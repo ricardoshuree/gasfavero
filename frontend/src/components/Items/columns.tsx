@@ -1,9 +1,10 @@
-// [mcp-local harness] feature: rbac-permission-matrix-and-produtos-frontend | plano: bc499083 | 2026-08-04 14:15:25
-// columns vira funcao getColumns(canUpdate, canDelete) para gatear o menu de acoes
+// [mcp-local harness] feature: venda_casco_produto | plano: 634c1da9 | 2026-09-09 12:27:19
+// Adiciona coluna Casco na tabela de produtos com badge Package quando vende_casco=true
 import type { ColumnDef } from "@tanstack/react-table"
-import { Check, Copy } from "lucide-react"
+import { Check, Copy, Package } from "lucide-react"
 
 import type { ItemPublic } from "@/client"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { cn } from "@/lib/utils"
@@ -33,9 +34,6 @@ function CopyId({ id }: { id: string }) {
   )
 }
 
-// Recebe as permissões do usuário logado no módulo -- o menu de ações
-// (editar/apagar) só aparece pra quem pode fazer aquilo (ex: role
-// "vendedor" só tem canRead, então não vê o menu de ações).
 export function getColumns(
   canUpdate: boolean,
   canDelete: boolean,
@@ -67,6 +65,23 @@ export function getColumns(
           >
             {description || "No description"}
           </span>
+        )
+      },
+    },
+    {
+      accessorKey: "vende_casco",
+      header: "Casco",
+      cell: ({ row }) => {
+        const vende = row.original.vende_casco
+        if (!vende) return null
+        return (
+          <Badge
+            variant="secondary"
+            className="flex w-fit items-center gap-1 text-xs"
+          >
+            <Package className="h-3 w-3" aria-hidden="true" />
+            Vende casco
+          </Badge>
         )
       },
     },

@@ -1,6 +1,7 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:34:26
-// Colunas de Precos, com PrecoActionsCell como componente proprio (evita hook solto dentro de arrow function inline)
+// [mcp-local harness] feature: venda_casco_produto | plano: 634c1da9 | 2026-09-09 12:27:33
+// Adiciona coluna Casco na tabela de preços: badge com valor quando preenchido, ⚠️ amarelo quando vende_casco=true mas sem preço cadastrado
 import type { ColumnDef } from "@tanstack/react-table"
+import { AlertTriangle } from "lucide-react"
 
 import type { ProdutoComPrecoPublic } from "@/client"
 import { Badge } from "@/components/ui/badge"
@@ -49,6 +50,34 @@ export const precoColumns: ColumnDef<ProdutoComPrecoPublic>[] = [
       return (
         <Badge variant={valor ? "default" : "secondary"}>
           {formatMoney(valor)}
+        </Badge>
+      )
+    },
+  },
+  {
+    // coluna de casco: só aparece para produtos com vende_casco=true
+    // ⚠️ quando o preço do casco ainda não foi cadastrado
+    accessorKey: "preco_casco_atual",
+    header: "Casco",
+    cell: ({ row }) => {
+      const { vende_casco, preco_casco_atual } = row.original
+      if (!vende_casco) return null
+
+      if (!preco_casco_atual) {
+        return (
+          <span
+            className="flex items-center gap-1 text-xs font-medium text-amber-500"
+            title="Preço do casco não cadastrado"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            Sem preço
+          </span>
+        )
+      }
+
+      return (
+        <Badge variant="secondary" className="text-xs">
+          {formatMoney(preco_casco_atual)}
         </Badge>
       )
     },
