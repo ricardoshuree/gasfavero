@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: venda_casco_produto | plano: 5805b812 | 2026-09-09 11:48:24
-# Processa com_casco e preco_casco_snapshot nos VendaItem; soma casco no valor_total; retorna campos nos VendaItemPublic
+# [mcp-local harness] feature: aviso_fiado_sem_bloqueio | plano: 419e339b | 2026-09-09 14:47:25
+# Remove bloqueio de fiado em aberto do create_venda — aviso exibido no frontend
 import calendar
 import uuid
 from datetime import date, timedelta
@@ -810,8 +810,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} pertence ao bloco de outro motorista")
         if session.exec(select(Venda).where(Venda.vale_id == vale.id)).first():
             raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} ja foi usado em outra venda")
-        if session.exec(select(Venda).where(Venda.cliente_id == venda_in.cliente_id).where(Venda.forma_pagamento == "vale").where(col(Venda.pago_em).is_(None))).first():
-            raise HTTPException(status_code=400, detail="Este cliente ja tem uma venda a prazo em aberto -- quite antes de vender novamente")
+        # Aviso de fiado em aberto e exibido no frontend — a decisao de vender e do operador
         if data_pagamento_vale is None:
             data_pagamento_vale = _quinto_dia_util_proximo_mes()
 
@@ -843,9 +842,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 
-    # Resolve itens: preco vigente + casco (se com_casco=True)
-    # Regra: se item.com_casco=True, o produto deve ter vende_casco=True e preco vigente com preco_casco
-    itens_resolvidos: list[tuple] = []  # (item_in, preco, subtotal_gas, preco_casco_snapshot)
+    itens_resolvidos: list[tuple] = []
 
     if venda_in.forma_pagamento == "gas_povo":
         valor_total = venda_in.valor_pago
@@ -867,25 +864,17 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             if not preco:
                 raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
 
-            # Valida casco
             preco_casco_snapshot: Decimal | None = None
             if item_in.com_casco:
                 if not produto.vende_casco:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Produto '{produto.title}' nao permite venda de casco"
-                    )
+                    raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' nao permite venda de casco")
                 if preco.preco_casco is None:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Produto '{produto.title}' nao tem preco de casco cadastrado"
-                    )
+                    raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' nao tem preco de casco cadastrado")
                 preco_casco_snapshot = preco.preco_casco
 
             subtotal_gas = preco.valor * item_in.quantidade
             itens_resolvidos.append((item_in, preco, subtotal_gas, preco_casco_snapshot))
 
-        # valor_total = soma do gás + soma dos cascos
         valor_total = sum(
             subtotal + (snap * item_in.quantidade if snap else Decimal("0"))
             for item_in, _, subtotal, snap in itens_resolvidos
@@ -923,7 +912,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             preco_casco_snapshot=preco_casco_snap,
         ))
 
-    # Registra cascos emprestados (dentro da mesma transação)
     qtd_por_produto = {str(i.produto_id): i.quantidade for i in venda_in.itens}
     for casco_in in venda_in.cascos:
         if casco_in.quantidade <= 0:
