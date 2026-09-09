@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: ed5b9c43 | 2026-09-07 15:49:06
-// Substitui fetch manual por CascosService.readCascosCliente — funciona em produção
+// [mcp-local harness] feature: vendas_ajustes_cosmeticos | plano: 14031785 | 2026-09-09 14:19:04
+// Lupa à direita; resultados em verde; bloco cliente selecionado com borda+fundo verde como produto
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { MapPin, Package, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -108,7 +108,6 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
     retry: false,
   })
 
-  // Mapa venda_id -> qtd cascos em aberto (não devolvidos)
   const cascosPorVenda = new Map<string, number>()
   if (cascosData?.cascos) {
     for (const c of cascosData.cascos) {
@@ -229,12 +228,13 @@ export function ClienteSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cliente?.id, cliente, onEnderecoChange])
 
+  // Cliente selecionado: bloco verde como produto selecionado
   if (cliente) {
     return (
-      <div className="flex flex-col gap-4 rounded-lg border p-4">
+      <div className="flex flex-col gap-4 rounded-lg border-2 border-primary bg-primary/10 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
-            <User className="h-6 w-6 text-muted-foreground" />
+            <User className="h-6 w-6 text-primary" />
             <div>
               <p className="text-lg font-semibold">{cliente.nome}</p>
               <p className="text-base text-muted-foreground">
@@ -302,29 +302,31 @@ export function ClienteSection({
     <div className="flex flex-col gap-4">
       {!showQuickAdd ? (
         <>
+          {/* Campo de busca: lupa à direita para não cobrir o texto */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className={`pl-11 ${CAMPO_ACESSIVEL}`}
+              className={`pr-11 ${CAMPO_ACESSIVEL}`}
               placeholder="Buscar cliente por nome ou CPF/CNPJ..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
+            <Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
 
+          {/* Resultados: linha verde ao hover e texto em verde */}
           {resultados && resultados.data.length > 0 && (
             <div className="flex flex-col gap-1 rounded-lg border p-1">
               {resultados.data.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  className="rounded-md px-3 py-2.5 text-left text-base hover:bg-muted"
+                  className="rounded-md px-3 py-2.5 text-left text-base hover:bg-primary/10 hover:text-primary transition-colors"
                   onClick={() => {
                     onClienteChange(c)
                     setQuery("")
                   }}
                 >
-                  <span className="font-medium">{c.nome}</span>{" "}
+                  <span className="font-medium text-primary">{c.nome}</span>{" "}
                   <span className="text-muted-foreground">— {c.cpf}</span>
                 </button>
               ))}

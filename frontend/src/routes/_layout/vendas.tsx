@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: vendas_layout_otimizado | plano: 45d0bc3d | 2026-09-09 14:00:50
-// Layout otimizado: grid 2 colunas com Cliente|Sacola, Produtos|Empréstimo, FormaPgto|Valor+Data, vazio|Total+Finalizar
+// [mcp-local harness] feature: vendas_ajustes_cosmeticos | plano: 14031785 | 2026-09-09 14:21:01
+// Campos extras de forma de pagamento na coluna direita; FormaPagamento recebe só value+onChange
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -14,6 +14,7 @@ import {
   VendasService,
 } from "@/client"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -24,9 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import ClienteSection from "@/components/Vendas/ClienteSection"
-import FormaPagamento, {
-  type FormaPagamentoValue,
-} from "@/components/Vendas/FormaPagamento"
+import { FormaPagamento, type FormaPagamentoValue } from "@/components/Vendas/FormaPagamento"
 import PainelCasco, { type CascoItem } from "@/components/Vendas/PainelCasco"
 import ProdutoGrid from "@/components/Vendas/ProdutoGrid"
 import ResumoVendaDialog from "@/components/Vendas/ResumoVendaDialog"
@@ -37,6 +36,7 @@ import { handleError } from "@/utils"
 const MODULE = "vendas"
 const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
 const ROLES_PERMITIDAS = ["gerente", "motorista"]
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
 
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -50,6 +50,13 @@ function somarDiasISO(isoDate: string, dias: number): string {
 
 function formatMoney(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+interface ValeGasInfo {
+  valido: boolean
+  estabelecimento_nome: string | null
+  estabelecimento_cpf: string | null
+  bloco_id: string | null
 }
 
 export const Route = createFileRoute("/_layout/vendas")({
@@ -78,12 +85,19 @@ function Vendas() {
   const [endereco, setEndereco] = useState<EnderecoPublic | null>(null)
   const [motoristaId, setMotoristaId] = useState("")
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoValue | null>(null)
+  // Fiado
   const [valeNumero, setValeNumero] = useState("")
   const [dataPagamentoVale, setDataPagamentoVale] = useState("")
+  const [quintoUtil, setQuintoUtil] = useState(true)
+  // Vale Gás
   const [valeGasNumero, setValeGasNumero] = useState("")
   const [valeGasBlocoId, setValeGasBlocoId] = useState<string | null>(null)
+  const [valeGasInfo, setValeGasInfo] = useState<ValeGasInfo | null>(null)
+  const [validandoValeGas, setValidandoValeGas] = useState(false)
+  // Gás do Povo
   const [gasPovoValorGov, setGasPovoValorGov] = useState("")
   const [gasPovoFrete, setGasPovoFrete] = useState("")
+  // Valores
   const [valorPago, setValorPago] = useState("")
   const [valorPagoManual, setValorPagoManual] = useState(false)
   const [dataVenda, setDataVenda] = useState(hojeISO())
@@ -111,6 +125,7 @@ function Vendas() {
     if (distribuidora) setMotoristaId(distribuidora.id)
   }, [users, motoristaId])
 
+  // Próximo número de vale (Fiado)
   useEffect(() => {
     if (formaPagamento !== "vale" || !motoristaId) return
     VendasService.readProximoNumeroVale({ motoristaId })
@@ -124,6 +139,48 @@ function Vendas() {
   useEffect(() => {
     if (formaPagamento !== "vale") return
     setDataPagamentoVale((atual) => atual ? atual : somarDiasISO(hojeISO(), 30))
+  }, [formaPagamento])
+
+  // Validação em tempo real do Vale Gás
+  useEffect(() => {
+    if (formaPagamento !== "vale_gas" || !valeGasNumero.trim()) {
+      setValeGasInfo(null)
+      setValeGasBlocoId(null)
+      return
+    }
+    const timer = setTimeout(async () => {
+      setValidandoValeGas(true)
+      try {
+        const token = localStorage.getItem("access_token")
+        const res = await fetch(
+          `${API}/api/v1/vale-gas/validar-numero/${valeGasNumero}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        )
+        if (!res.ok) throw new Error()
+        const data: ValeGasInfo = await res.json()
+        setValeGasInfo(data)
+        setValeGasBlocoId(data.valido ? data.bloco_id : null)
+      } catch {
+        setValeGasInfo(null)
+        setValeGasBlocoId(null)
+      } finally {
+        setValidandoValeGas(false)
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [valeGasNumero, formaPagamento])
+
+  // Limpa campos ao trocar forma de pagamento
+  useEffect(() => {
+    if (formaPagamento !== "gas_povo") {
+      setGasPovoValorGov("")
+      setGasPovoFrete("")
+    }
+    if (formaPagamento !== "vale_gas") {
+      setValeGasNumero("")
+      setValeGasInfo(null)
+      setValeGasBlocoId(null)
+    }
   }, [formaPagamento])
 
   const total = sacola.reduce((acc, item) => {
@@ -141,13 +198,6 @@ function Vendas() {
     }
     if (!valorPagoManual) setValorPago(total > 0 ? total.toFixed(2) : "")
   }, [total, valorPagoManual, formaPagamento, gasPovoValorGov])
-
-  useEffect(() => {
-    if (formaPagamento !== "gas_povo") {
-      setGasPovoValorGov("")
-      setGasPovoFrete("")
-    }
-  }, [formaPagamento])
 
   useEffect(() => {
     const idsNaSacola = new Set(sacola.map((i) => i.produtoId))
@@ -224,8 +274,10 @@ function Vendas() {
     setFormaPagamento(null)
     setValeNumero("")
     setDataPagamentoVale("")
+    setQuintoUtil(true)
     setValeGasNumero("")
     setValeGasBlocoId(null)
+    setValeGasInfo(null)
     setGasPovoValorGov("")
     setGasPovoFrete("")
     setValorPago("")
@@ -278,6 +330,8 @@ function Vendas() {
     parseFloat(gasPovoValorGov) > 0 &&
     parseFloat(gasPovoFrete) > 0
 
+  const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
+
   const podeFinalizar =
     !!cliente &&
     sacola.length > 0 &&
@@ -303,9 +357,8 @@ function Vendas() {
     usuariosCombo.find((u) => u.id === motoristaId)?.full_name ||
     usuariosCombo.find((u) => u.id === motoristaId)?.email || ""
 
-  // Valor total formatado para exibição
   const totalFormatado = formaPagamento === "gas_povo"
-    ? formatMoney((parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0))
+    ? formatMoney(gasPovoTotal)
     : formatMoney(total)
 
   return (
@@ -315,7 +368,7 @@ function Vendas() {
         <p className="text-muted-foreground">Venda de balcão da distribuidora</p>
       </div>
 
-      {/* Atribuir venda — linha única acima do grid */}
+      {/* Atribuir venda */}
       <div className="grid gap-1.5 max-w-sm">
         <Label>Atribuir venda a</Label>
         <Select value={motoristaId} onValueChange={setMotoristaId}>
@@ -333,13 +386,13 @@ function Vendas() {
         </Select>
       </div>
 
-      {/* Grid principal 2 colunas: esquerda = conteúdo / direita = sacola+ações */}
+      {/* Grid principal: esquerda = conteúdo / direita = sacola + ações */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
 
         {/* ── Coluna ESQUERDA ── */}
         <div className="flex flex-col gap-6">
 
-          {/* Linha 1E: Cliente */}
+          {/* Cliente */}
           <div>
             <p className="mb-2 text-sm font-medium">Cliente</p>
             <ClienteSection
@@ -350,7 +403,7 @@ function Vendas() {
             />
           </div>
 
-          {/* Linha 2E: Produtos */}
+          {/* Produtos */}
           <div>
             <p className="mb-2 text-sm font-medium">Produtos</p>
             <ProdutoGrid
@@ -360,32 +413,18 @@ function Vendas() {
             />
           </div>
 
-          {/* Linha 3E: Forma de Pagamento */}
-          <div>
-            <FormaPagamento
-              value={formaPagamento}
-              onChange={(v) => { setFormaPagamento(v); setValorPagoManual(false) }}
-              valeNumero={valeNumero}
-              onValeNumeroChange={setValeNumero}
-              dataPagamentoVale={dataPagamentoVale}
-              onDataPagamentoValeChange={setDataPagamentoVale}
-              valeGasNumero={valeGasNumero}
-              onValeGasNumeroChange={setValeGasNumero}
-              onValeGasBlocoIdChange={setValeGasBlocoId}
-              gasPovoValorGov={gasPovoValorGov}
-              onGasPovoValorGovChange={setGasPovoValorGov}
-              gasPovoFrete={gasPovoFrete}
-              onGasPovoFreteChange={setGasPovoFrete}
-            />
-          </div>
+          {/* Forma de Pagamento (só grade de botões) */}
+          <FormaPagamento
+            value={formaPagamento}
+            onChange={(v) => { setFormaPagamento(v); setValorPagoManual(false) }}
+          />
 
-          {/* Linha 4E: vazio intencional */}
         </div>
 
         {/* ── Coluna DIREITA ── */}
         <div className="flex flex-col gap-4">
 
-          {/* Linha 1D: Sacola */}
+          {/* Sacola */}
           <div>
             <p className="mb-2 text-sm font-medium">Sacola</p>
             <Sacola
@@ -397,14 +436,113 @@ function Vendas() {
             />
           </div>
 
-          {/* Linha 2D: Empréstimo de casco */}
+          {/* Empréstimo de casco */}
           <PainelCasco
             itens={sacola}
             cascos={cascos}
             onChange={setCascos}
           />
 
-          {/* Linha 3D: Valor pago + Data */}
+          {/* Campos extras de forma de pagamento — coluna direita */}
+          {formaPagamento === "vale" && (
+            <div className="flex flex-col gap-3 rounded-lg border p-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fiado</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="vale-numero">Número do fiado</Label>
+                  <Input
+                    id="vale-numero"
+                    type="number"
+                    inputMode="numeric"
+                    value={valeNumero}
+                    onChange={(e) => setValeNumero(e.target.value)}
+                    placeholder="Ex: 123"
+                  />
+                </div>
+                {!quintoUtil && (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="data-pagamento-vale">Data a ser pago</Label>
+                    <Input
+                      id="data-pagamento-vale"
+                      type="date"
+                      value={dataPagamentoVale}
+                      onChange={(e) => setDataPagamentoVale(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="quinto-util"
+                  checked={quintoUtil}
+                  onCheckedChange={(checked) => {
+                    setQuintoUtil(checked === true)
+                    if (checked) setDataPagamentoVale("")
+                  }}
+                />
+                <label htmlFor="quinto-util" className="text-sm text-muted-foreground cursor-pointer select-none">
+                  5º dia útil do mês seguinte
+                </label>
+              </div>
+            </div>
+          )}
+
+          {formaPagamento === "vale_gas" && (
+            <div className="flex flex-col gap-3 rounded-lg border p-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Vale Gás</p>
+              <div className="grid gap-1.5">
+                <Label htmlFor="vale-gas-numero">Número do vale gás</Label>
+                <Input
+                  id="vale-gas-numero"
+                  type="number"
+                  inputMode="numeric"
+                  value={valeGasNumero}
+                  onChange={(e) => setValeGasNumero(e.target.value)}
+                  placeholder="Ex: 1001"
+                />
+              </div>
+              {validandoValeGas && <p className="text-xs text-muted-foreground">Verificando...</p>}
+              {!validandoValeGas && valeGasInfo !== null && (
+                valeGasInfo.valido ? (
+                  <div className="rounded-md bg-green-50 border border-green-200 px-3 py-2">
+                    <p className="text-xs font-medium text-green-800">✓ {valeGasInfo.estabelecimento_nome}</p>
+                    <p className="text-xs text-green-700">{valeGasInfo.estabelecimento_cpf}</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                    <p className="text-xs text-destructive">Número não encontrado em nenhum bloco de vale gás.</p>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {formaPagamento === "gas_povo" && (
+            <div className="flex flex-col gap-3 rounded-lg border p-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gás do Povo</p>
+              <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
+                <p className="text-xs text-blue-800">O governo paga depois. O frete é cobrado do cliente no ato.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="gas-povo-valor-gov">Valor do governo (R$)</Label>
+                  <Input id="gas-povo-valor-gov" type="number" inputMode="decimal" step="0.01" min="0" value={gasPovoValorGov} onChange={(e) => setGasPovoValorGov(e.target.value)} placeholder="0,00" />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="gas-povo-frete">Frete do cliente (R$)</Label>
+                  <Input id="gas-povo-frete" type="number" inputMode="decimal" step="0.01" min="0" value={gasPovoFrete} onChange={(e) => setGasPovoFrete(e.target.value)} placeholder="0,00" />
+                </div>
+              </div>
+              {gasPovoTotal > 0 && (
+                <div className="flex justify-between items-center rounded-md bg-muted px-3 py-2">
+                  <span className="text-xs text-muted-foreground">Total a receber</span>
+                  <span className="text-sm font-semibold">R$ {gasPovoTotal.toFixed(2).replace(".", ",")}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Valor pago + Data */}
           {formaPagamento !== "gas_povo" && (
             <div className="grid grid-cols-2 gap-3 rounded-lg border p-3">
               <div className="grid gap-1.5">
@@ -436,28 +574,18 @@ function Vendas() {
             <div className="rounded-lg border p-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="data-venda-gp">Data</Label>
-                <Input
-                  id="data-venda-gp"
-                  type="date"
-                  value={dataVenda}
-                  onChange={(e) => setDataVenda(e.target.value)}
-                />
+                <Input id="data-venda-gp" type="date" value={dataVenda} onChange={(e) => setDataVenda(e.target.value)} />
               </div>
             </div>
           )}
 
-          {/* Linha 4D: Total + Finalizar */}
+          {/* Total + Finalizar */}
           <div className="flex flex-col gap-3 rounded-lg border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Total</span>
               <span className="text-xl font-bold">{totalFormatado}</span>
             </div>
-            <Button
-              size="lg"
-              className="w-full"
-              disabled={!podeFinalizar}
-              onClick={handleAbrirResumo}
-            >
+            <Button size="lg" className="w-full" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
               Finalizar Venda
             </Button>
           </div>
@@ -477,7 +605,7 @@ function Vendas() {
         valeNumero={valeNumero}
         dataPagamentoVale={dataPagamentoVale}
         valorPago={formaPagamento === "gas_povo"
-          ? String((parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0))
+          ? String(gasPovoTotal)
           : valorPago}
         dataVenda={dataVenda}
         isPending={mutation.isPending}
