@@ -1,16 +1,9 @@
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed | 2026-08-04 23:26:17
-# Endpoints de Preco: lista produtos+preco vigente, e cadastra novo preco (fechando o anterior)
-# [mcp-local harness] feature: clientes-precos-vales-e-module-label | plano: 7a1919ed
+# [mcp-local harness] feature: venda_casco_produto | plano: 5805b812 | 2026-09-09 11:45:28
+# Inclui vende_casco e preco_casco_atual no response; persiste preco_casco no novo Preco
 """
-Rotas de Preço -- "uma tela parecida com Produto que atribui preço em
-cada produto" (RF-02 do apanhado do Giovani). Controle de acesso pelo
-MESMO módulo RBAC "produtos" (não criamos um módulo "precos" à parte
--- preço é um atributo de produto, e o Gerente já tem create/update
-em produtos, então não precisa reconfigurar nada na Matriz de
-Permissões pra isso funcionar).
-
-Preço tem vigência (ver Preco em models.py): cadastrar um preço novo
-fecha o vigente anterior e abre um novo -- nunca sobrescreve.
+Rotas de Preço -- controle de acesso pelo módulo RBAC "produtos".
+Preço tem vigência: cadastrar novo preço fecha o anterior e abre um novo -- nunca sobrescreve.
+preco_casco: incluso na mesma linha de vigência (quando produto tem vende_casco=True).
 """
 import uuid
 from typing import Any
@@ -48,8 +41,7 @@ def _preco_vigente(session: SessionDep, produto_id: uuid.UUID) -> Preco | None:
     dependencies=[Depends(require_module_permission(MODULE, action="read"))],
 )
 def read_precos(session: SessionDep) -> Any:
-    """Lista todos os produtos com o preço vigente de cada um (nulo
-    se o produto ainda não tem preço cadastrado)."""
+    """Lista todos os produtos com o preço vigente de cada um."""
     produtos = session.exec(select(Item).order_by(Item.title)).all()
 
     data = []
@@ -60,7 +52,9 @@ def read_precos(session: SessionDep) -> Any:
                 id=produto.id,
                 title=produto.title,
                 description=produto.description,
+                vende_casco=produto.vende_casco,
                 preco_atual=preco.valor if preco else None,
+                preco_casco_atual=preco.preco_casco if preco else None,
                 preco_valid_from=preco.valid_from if preco else None,
             )
         )
@@ -76,11 +70,17 @@ def read_precos(session: SessionDep) -> Any:
 def set_preco(
     *, session: SessionDep, produto_id: uuid.UUID, preco_in: PrecoCreate
 ) -> Any:
-    """Cadastra um novo preço vigente pro produto, fechando o
-    anterior (se houver)."""
+    """Cadastra um novo preço vigente pro produto, fechando o anterior (se houver)."""
     produto = session.get(Item, produto_id)
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+    # Validação: se produto vende casco, preco_casco é obrigatório
+    if produto.vende_casco and preco_in.preco_casco is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Este produto vende casco — informe o preço do casco"
+        )
 
     agora = get_datetime_utc()
     atual = _preco_vigente(session, produto_id)
@@ -88,7 +88,12 @@ def set_preco(
         atual.valid_to = agora
         session.add(atual)
 
-    novo = Preco(produto_id=produto_id, valor=preco_in.valor, valid_from=agora)
+    novo = Preco(
+        produto_id=produto_id,
+        valor=preco_in.valor,
+        preco_casco=preco_in.preco_casco if produto.vende_casco else None,
+        valid_from=agora,
+    )
     session.add(novo)
     session.commit()
     session.refresh(novo)

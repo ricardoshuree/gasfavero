@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: emprestimo_casco_historico | plano: 45b87eee | 2026-09-07 16:44:30
-# Adiciona EmprestimoCascoLog (tabela), EmprestimoCascoLogPublic, logs em EmprestimoCascoPublic, requests de desfazer
+# [mcp-local harness] feature: venda_casco_produto | plano: 3a491775 | 2026-09-09 11:44:47
+# Adiciona vende_casco em Item, preco_casco em Preco, com_casco+preco_casco_snapshot em VendaItem, schemas atualizados
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -208,7 +208,7 @@ class UsersPublicWithRoles(SQLModel):
 
 
 # ---------------------------------------------------------------------------
-# Item
+# Item (Produto)
 # ---------------------------------------------------------------------------
 
 class ItemBase(SQLModel):
@@ -217,12 +217,14 @@ class ItemBase(SQLModel):
 
 
 class ItemCreate(ItemBase):
-    pass
+    # vende_casco: produto pode ser vendido com casco (cobra preco_casco adicional)
+    vende_casco: bool = Field(default=False)
 
 
 class ItemUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
+    vende_casco: bool | None = None
 
 
 class Item(ItemBase, table=True):
@@ -231,6 +233,8 @@ class Item(ItemBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
+    # Se True, a tela de vendas exibe a opção "+ Casco" para este produto
+    vende_casco: bool = Field(default=False)
     owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
     owner: User | None = Relationship(back_populates="items")
 
@@ -239,6 +243,7 @@ class ItemPublic(ItemBase):
     id: uuid.UUID
     owner_id: uuid.UUID
     created_at: datetime | None = None
+    vende_casco: bool = False
 
 
 class ItemsPublic(SQLModel):
@@ -386,17 +391,22 @@ class Preco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    # preco_casco: valor cobrado pelo casco nesta vigência (null = produto não vende casco)
+    preco_casco: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
     valid_from: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
     valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
 class PrecoCreate(SQLModel):
     valor: Decimal = Field(gt=0, decimal_places=2)
+    # preco_casco: obrigatório quando o produto tem vende_casco=True; nulo caso contrário
+    preco_casco: Decimal | None = Field(default=None, gt=0, decimal_places=2)
 
 
 class PrecoPublic(SQLModel):
     id: uuid.UUID
     valor: Decimal
+    preco_casco: Decimal | None = None
     valid_from: datetime
 
 
@@ -404,7 +414,9 @@ class ProdutoComPrecoPublic(SQLModel):
     id: uuid.UUID
     title: str
     description: str | None = None
+    vende_casco: bool = False
     preco_atual: Decimal | None = None
+    preco_casco_atual: Decimal | None = None
     preco_valid_from: datetime | None = None
 
 
@@ -490,6 +502,10 @@ class VendaItem(SQLModel, table=True):
     preco_id: uuid.UUID = Field(foreign_key="preco.id", ondelete="RESTRICT")
     quantidade: int
     subtotal: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    # com_casco: True quando o cliente comprou o casco junto ao produto
+    com_casco: bool = Field(default=False)
+    # preco_casco_snapshot: valor unitário do casco no momento da venda (histórico imutável)
+    preco_casco_snapshot: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
 
 
 class VendaLog(SQLModel, table=True):
@@ -596,6 +612,8 @@ class CascosClientePublic(SQLModel):
 class VendaItemCreate(SQLModel):
     produto_id: uuid.UUID
     quantidade: int = Field(gt=0)
+    # com_casco: True quando o cliente compra o casco junto ao produto
+    com_casco: bool = Field(default=False)
 
 
 class VendaCreate(SQLModel):
@@ -628,6 +646,8 @@ class VendaItemPublic(SQLModel):
     quantidade: int
     preco_unitario: Decimal
     subtotal: Decimal
+    com_casco: bool = False
+    preco_casco_snapshot: Decimal | None = None
 
 
 class VendaLogPublic(SQLModel):

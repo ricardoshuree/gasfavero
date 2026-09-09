@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: emprestimo_casco | plano: 5aa828fc | 2026-09-07 15:20:20
-# Adiciona EmprestimoCasco no import e processa cascos[] dentro do create_venda na mesma transação
+# [mcp-local harness] feature: venda_casco_produto | plano: 5805b812 | 2026-09-09 11:48:24
+# Processa com_casco e preco_casco_snapshot nos VendaItem; soma casco no valor_total; retorna campos nos VendaItemPublic
 import calendar
 import uuid
 from datetime import date, timedelta
@@ -155,6 +155,8 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
                 quantidade=item.quantidade,
                 preco_unitario=preco.valor if preco else item.subtotal,
                 subtotal=item.subtotal,
+                com_casco=item.com_casco,
+                preco_casco_snapshot=item.preco_casco_snapshot,
             )
         )
 
@@ -841,7 +843,10 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 
-    itens_resolvidos = []
+    # Resolve itens: preco vigente + casco (se com_casco=True)
+    # Regra: se item.com_casco=True, o produto deve ter vende_casco=True e preco vigente com preco_casco
+    itens_resolvidos: list[tuple] = []  # (item_in, preco, subtotal_gas, preco_casco_snapshot)
+
     if venda_in.forma_pagamento == "gas_povo":
         valor_total = venda_in.valor_pago
         for item_in in venda_in.itens:
@@ -852,7 +857,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             if not preco:
                 raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
             subtotal = preco.valor * item_in.quantidade
-            itens_resolvidos.append((item_in, preco, subtotal))
+            itens_resolvidos.append((item_in, preco, subtotal, None))
     else:
         for item_in in venda_in.itens:
             produto = session.get(Item, item_in.produto_id)
@@ -861,10 +866,30 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             preco = _preco_vigente(session, item_in.produto_id)
             if not preco:
                 raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
-            subtotal = preco.valor * item_in.quantidade
-            valor_total = Decimal("0")
-            itens_resolvidos.append((item_in, preco, subtotal))
-        valor_total = sum(subtotal for _, _, subtotal in itens_resolvidos)
+
+            # Valida casco
+            preco_casco_snapshot: Decimal | None = None
+            if item_in.com_casco:
+                if not produto.vende_casco:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Produto '{produto.title}' nao permite venda de casco"
+                    )
+                if preco.preco_casco is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Produto '{produto.title}' nao tem preco de casco cadastrado"
+                    )
+                preco_casco_snapshot = preco.preco_casco
+
+            subtotal_gas = preco.valor * item_in.quantidade
+            itens_resolvidos.append((item_in, preco, subtotal_gas, preco_casco_snapshot))
+
+        # valor_total = soma do gás + soma dos cascos
+        valor_total = sum(
+            subtotal + (snap * item_in.quantidade if snap else Decimal("0"))
+            for item_in, _, subtotal, snap in itens_resolvidos
+        )
 
     venda = Venda(
         cliente_id=venda_in.cliente_id,
@@ -885,19 +910,20 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
         criado_por_id=current_user.id,
     )
     session.add(venda)
-    session.flush()  # gera venda.id antes de criar itens e cascos
+    session.flush()
 
-    for item_in, preco, subtotal in itens_resolvidos:
+    for item_in, preco, subtotal_gas, preco_casco_snap in itens_resolvidos:
         session.add(VendaItem(
             venda_id=venda.id,
             produto_id=item_in.produto_id,
             preco_id=preco.id,
             quantidade=item_in.quantidade,
-            subtotal=subtotal,
+            subtotal=subtotal_gas,
+            com_casco=item_in.com_casco,
+            preco_casco_snapshot=preco_casco_snap,
         ))
 
     # Registra cascos emprestados (dentro da mesma transação)
-    # Valida: quantidade do casco nao pode exceder a quantidade do produto na sacola
     qtd_por_produto = {str(i.produto_id): i.quantidade for i in venda_in.itens}
     for casco_in in venda_in.cascos:
         if casco_in.quantidade <= 0:
