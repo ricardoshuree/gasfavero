@@ -1,7 +1,7 @@
-// [mcp-local harness] feature: vendas_ajustes_cosmeticos | plano: 14031785 | 2026-09-09 14:19:04
-// Lupa à direita; resultados em verde; bloco cliente selecionado com borda+fundo verde como produto
+// [mcp-local harness] feature: aviso_fiado_sem_bloqueio | plano: 131de0c0 | 2026-09-09 14:38:45
+// Aviso âmbar/vermelho de fiado em aberto no bloco do cliente — sem bloquear a venda
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { MapPin, Package, Plus, Search, User, X } from "lucide-react"
+import { AlertTriangle, MapPin, Package, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
@@ -89,6 +89,48 @@ function formatTelefone(raw: string): string {
   if (d.length <= 2) return `(${d}${d.length === 2 ? ") " : ""}`
   if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
+// ---------------------------------------------------------------------------
+// Aviso de fiado em aberto
+// ---------------------------------------------------------------------------
+
+function AvisoFiadoCliente({ clienteId }: { clienteId: string }) {
+  const { data } = useQuery({
+    queryKey: ["historicoVendasCliente", clienteId],
+    queryFn: () => VendasService.readHistoricoVendasCliente({ clienteId, limit: 3 }),
+  })
+
+  // Busca todas as vendas em aberto — não apenas as 3 do histórico
+  const { data: todasVendas } = useQuery({
+    queryKey: ["vendas-cliente-aberto", clienteId],
+    queryFn: () => VendasService.readHistoricoVendasCliente({ clienteId, limit: 20 }),
+  })
+
+  const fiados = (todasVendas?.data ?? data?.data ?? []).filter(
+    (v) => v.forma_pagamento === "vale" && !v.pago_em && v.status !== "cancelada"
+  )
+
+  if (fiados.length === 0) return null
+
+  const total = fiados.reduce((acc, v) => acc + Number(v.valor_total), 0)
+  const temAtraso = fiados.some((v) => isAtrasado(v.data_venda))
+
+  return (
+    <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+      temAtraso
+        ? "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30"
+        : "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30"
+    }`}>
+      <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${temAtraso ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`} aria-hidden="true" />
+      <span className={temAtraso ? "text-red-800 dark:text-red-200" : "text-amber-800 dark:text-amber-200"}>
+        {temAtraso ? "⚠️" : "ℹ️"} Cliente tem{" "}
+        <strong>{fiados.length} fiado{fiados.length !== 1 ? "s" : ""} em aberto</strong>
+        {" "}— total {formatMoney(total)}
+        {temAtraso ? " (com atraso)" : ""}. A venda pode prosseguir.
+      </span>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +270,6 @@ export function ClienteSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cliente?.id, cliente, onEnderecoChange])
 
-  // Cliente selecionado: bloco verde como produto selecionado
   if (cliente) {
     return (
       <div className="flex flex-col gap-4 rounded-lg border-2 border-primary bg-primary/10 p-4">
@@ -253,6 +294,8 @@ export function ClienteSection({
           </Button>
         </div>
 
+        {/* Avisos — fiado em aberto e casco emprestado */}
+        <AvisoFiadoCliente clienteId={cliente.id} />
         <AvisoCascosCliente clienteId={cliente.id} />
 
         <div className="flex items-center gap-2 text-base">
@@ -302,7 +345,6 @@ export function ClienteSection({
     <div className="flex flex-col gap-4">
       {!showQuickAdd ? (
         <>
-          {/* Campo de busca: lupa à direita para não cobrir o texto */}
           <div className="relative">
             <Input
               className={`pr-11 ${CAMPO_ACESSIVEL}`}
@@ -313,7 +355,6 @@ export function ClienteSection({
             <Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
 
-          {/* Resultados: linha verde ao hover e texto em verde */}
           {resultados && resultados.data.length > 0 && (
             <div className="flex flex-col gap-1 rounded-lg border p-1">
               {resultados.data.map((c) => (
