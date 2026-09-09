@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: livro_vendas_endereco_truncado | plano: 3298f586 | 2026-09-09 13:20:22
+﻿// [mcp-local harness] feature: livro_vendas_endereco_truncado | plano: 3298f586 | 2026-09-09 13:20:22
 // Endereço truncado em 38 chars com tooltip no hover
 // Adiciona coluna Produtos entre Endereço e Tipo pagamento; trunca endereço em 40 chars
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -94,7 +94,7 @@ function formatItens(itens: VendaItemPublic[] | null | undefined): string {
 function formatEndereco(venda: VendaPublic): { full: string; display: string } | null {
   if (!venda.endereco) return null
   const full = `${venda.endereco.rua_nome}, ${venda.endereco.numero} \u2014 ${venda.endereco.bairro_nome}`
-  const display = full.length > 38 ? `${full.slice(0, 38)}\u2026` : full
+  const display = full.length > 20 ? `${full.slice(0, 20)}\u2026` : full
   return { full, display }
 }
 
