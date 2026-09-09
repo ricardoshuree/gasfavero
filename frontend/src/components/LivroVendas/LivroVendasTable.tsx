@@ -1,6 +1,6 @@
-﻿// [mcp-local harness] feature: livro_vendas_coluna_produtos | plano: 003f8a30 | 2026-09-09 12:43:53
-// Coluna Produtos entre Endereço e Tipo pagamento, formatando itens com indicação de casco
-// Adiciona coluna Produtos entre Endereço e Tipo pagamento na tabela do Livro de Vendas
+// [mcp-local harness] feature: livro_vendas_endereco_truncado | plano: 3298f586 | 2026-09-09 13:20:22
+// Endereço truncado em 38 chars com tooltip no hover
+// Adiciona coluna Produtos entre Endereço e Tipo pagamento; trunca endereço em 40 chars
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
@@ -81,16 +81,21 @@ function isAtrasado(dataVendaISO: string): boolean {
   return dataVenda <= limite
 }
 
-// Formata os itens da sacola para exibição na coluna Produtos
-// Ex: "2× P13 (+casco), 1× P45"
 function formatItens(itens: VendaItemPublic[] | null | undefined): string {
   if (!itens || itens.length === 0) return "—"
   return itens
     .map((i) => {
       const casco = i.com_casco ? " (+casco)" : ""
-      return `${i.quantidade}× ${i.produto_title}${casco}`
+      return `${i.quantidade}\u00d7 ${i.produto_title}${casco}`
     })
     .join(", ")
+}
+
+function formatEndereco(venda: VendaPublic): { full: string; display: string } | null {
+  if (!venda.endereco) return null
+  const full = `${venda.endereco.rua_nome}, ${venda.endereco.numero} \u2014 ${venda.endereco.bairro_nome}`
+  const display = full.length > 38 ? `${full.slice(0, 38)}\u2026` : full
+  return { full, display }
 }
 
 function StatusBadge({
@@ -330,7 +335,7 @@ function VendaEditPanel({
                 </div>
                 <div className="text-muted-foreground">
                   <span className="line-through">{log.valor_anterior}</span>
-                  {" → "}
+                  {" \u2192 "}
                   <span className="text-foreground">{log.valor_novo}</span>
                 </div>
                 <div className="text-muted-foreground">por {log.editado_por_nome ?? "?"}</div>
@@ -480,7 +485,7 @@ export function LivroVendasTable() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Nome cliente</TableHead>
-                <TableHead>Endereço</TableHead>
+                <TableHead className="max-w-[160px]">Endereço</TableHead>
                 <TableHead>Produtos</TableHead>
                 <TableHead>Tipo pagamento</TableHead>
                 <TableHead>Data venda</TableHead>
@@ -498,41 +503,44 @@ export function LivroVendasTable() {
                   </TableCell>
                 </TableRow>
               ) : (
-                vendas.map((venda) => (
-                  <TableRow key={venda.id} className="cursor-pointer" onClick={() => handleRowClick(venda)}>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <span className={venda.status === "cancelada" ? "line-through text-muted-foreground" : ""}>
-                          {venda.cliente_nome}
-                        </span>
-                        {(venda.qtd_edicoes ?? 0) > 0 && venda.status !== "cancelada" && (
-                          <span className="text-amber-500" title={`${venda.qtd_edicoes} edição(ões)`}>
-                            <AlertTriangle className="h-3.5 w-3.5" />
+                vendas.map((venda) => {
+                  const end = formatEndereco(venda)
+                  return (
+                    <TableRow key={venda.id} className="cursor-pointer" onClick={() => handleRowClick(venda)}>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <span className={venda.status === "cancelada" ? "line-through text-muted-foreground" : ""}>
+                            {venda.cliente_nome}
                           </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {venda.endereco
-                        ? `${venda.endereco.rua_nome}, ${venda.endereco.numero} — ${venda.endereco.bairro_nome}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatItens(venda.itens)}
-                    </TableCell>
-                    <TableCell>{LABEL_FORMA_PAGAMENTO[venda.forma_pagamento] ?? venda.forma_pagamento}</TableCell>
-                    <TableCell>{formatDate(venda.data_venda)}</TableCell>
-                    <TableCell>{formatDate(venda.pago_em ?? venda.data_pagamento_vale)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(venda.valor_total)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(venda.valor_pago)}</TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        venda={venda}
-                        temCascoAberto={vendasComCascoAberto.has(venda.id)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
+                          {(venda.qtd_edicoes ?? 0) > 0 && venda.status !== "cancelada" && (
+                            <span className="text-amber-500" title={`${venda.qtd_edicoes} edição(ões)`}>
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[160px] text-muted-foreground">
+                        {end
+                          ? <span title={end.full} className="cursor-default">{end.display}</span>
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatItens(venda.itens)}
+                      </TableCell>
+                      <TableCell>{LABEL_FORMA_PAGAMENTO[venda.forma_pagamento] ?? venda.forma_pagamento}</TableCell>
+                      <TableCell>{formatDate(venda.data_venda)}</TableCell>
+                      <TableCell>{formatDate(venda.pago_em ?? venda.data_pagamento_vale)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(venda.valor_total)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(venda.valor_pago)}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          venda={venda}
+                          temCascoAberto={vendasComCascoAberto.has(venda.id)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
             {vendas.length > 0 && (
