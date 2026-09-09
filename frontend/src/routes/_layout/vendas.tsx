@@ -1,13 +1,9 @@
-// [mcp-local harness] feature: total_sacola_vs_pago | plano: 0ab63a02 | 2026-09-09 16:46:25
-// Bloco Total com Sacola + Pago + Total; verde/âmbar baseado em soma vs sacola
-// [mcp-local harness] feature: total_sacola_vs_pago | plano: 0ab63a02 | 2026-09-09 16:44:32
+// [mcp-local harness] feature: autofill_nao_sobrescreve | plano: 66d32848 | 2026-09-09 17:01:00
+// Auto-fill só preenche campo vazio; campo com valor já digitado não é sobrescrito
 // Sacola (referência) + Pago (soma formas) + Total acima do botão Finalizar
 // Tema 2: múltiplas formas de pagamento.
-// formasPagamento: FormaPagamentoValue[] — cada forma tem um valor associado em valoresPorForma.
-// Vale Gás e Gás do Povo continuam exclusivos (tratados em FormaPagamento.tsx).
-// Fiado expande folha + vencimento (checkbox 5º dia útil OU 30 dias, mutuamente exclusivos).
-// Sacola = valor fixo dos produtos; Pago = soma das formas; ambos ficam verde/âmbar.
-// Backend ainda recebe forma_pagamento como string (campo principal) — migration Tema 2 vem depois.
+// Auto-fill: ao digitar no primeiro campo, preenche o segundo SÓ se ainda estiver vazio.
+// Se o segundo já tem valor, não sobrescreve — permite desconto livre.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -209,11 +205,9 @@ function Vendas() {
     (acc, f) => acc + (parseFloat(valoresPorForma[f] ?? "0") || 0), 0,
   )
 
-  // gas_povo: "pago" é gov+frete
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
   const totalPago = formasPagamento.includes("gas_povo") ? gasPovoTotal : somaFormas
 
-  // Verde quando pago >= sacola (ou sacola = 0), âmbar quando menor
   const pagamentoOk = formasPagamento.length > 0 && totalPago >= totalSacola
   const corPago = pagamentoOk ? "text-[#00a63e]" : "text-amber-500"
 
@@ -222,9 +216,11 @@ function Vendas() {
     const valor = parseFloat(raw) || 0
     setValoresPorForma((prev) => {
       const novo = { ...prev, [forma]: raw }
+      // Auto-fill: preenche o segundo campo SÓ se ainda estiver vazio.
+      // Se já tem valor digitado, não sobrescreve — permite desconto livre.
       if (formasPagamento.length === 2) {
         const outra = formasPagamento.find((f) => f !== forma)
-        if (outra) {
+        if (outra && !prev[outra]) {
           const saldo = Math.max(0, totalSacola - valor)
           novo[outra] = saldo > 0 ? saldo.toFixed(2) : ""
         }
@@ -241,7 +237,6 @@ function Vendas() {
         if (prev[f] !== undefined) {
           novo[f] = prev[f]
         } else {
-          // única forma nova: preenche com total da sacola
           novo[f] = novas.length === 1 ? totalSacola.toFixed(2) : ""
         }
       })
@@ -520,13 +515,11 @@ function Vendas() {
           {/* Sacola · Pago · Total + Finalizar */}
           <div className="flex flex-col gap-2 rounded-lg border p-3">
 
-            {/* Sacola — referência fixa */}
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Sacola</span>
               <span className="text-sm font-medium text-muted-foreground">{formatMoney(totalSacola)}</span>
             </div>
 
-            {/* Pago — soma das formas; só aparece quando há forma selecionada */}
             {formasPagamento.length > 0 && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Pago</span>
@@ -536,7 +529,6 @@ function Vendas() {
 
             <div className="my-1 border-t" />
 
-            {/* Total */}
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Total</span>
               <span className={`text-xl font-bold ${formasPagamento.length > 0 ? corPago : ""}`}>
