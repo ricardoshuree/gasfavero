@@ -1,5 +1,10 @@
-# [mcp-local harness] feature: aviso_fiado_sem_bloqueio | plano: 419e339b | 2026-09-09 14:47:25
-# Remove bloqueio de fiado em aberto do create_venda — aviso exibido no frontend
+# [mcp-local harness] feature: tema2_multiplas_formas_backend | plano: 38d656ed | 2026-09-09 17:49:30
+# create_venda processa pagamentos[] mix; _to_venda_public expõe pagamentos; proximo-vale-numero verifica VendaPagamento também
+# Tema 2: create_venda processa pagamentos[] (mix de formas).
+# Formas à vista: pago_em preenchido na criação.
+# Fiado no mix: pago_em=null, vale_id+data_vcto gravados em VendaPagamento.
+# pago_em da Venda só fecha quando todos os recebíveis estiverem pagos.
+# Retrocompat: vendas sem pagamentos[] continuam usando forma_pagamento da Venda.
 import calendar
 import uuid
 from datetime import date, timedelta
@@ -50,6 +55,9 @@ from app.models import (
     VendaLog,
     VendaLogPublic,
     VendaMarcarPagoRequest,
+    VendaPagamento,
+    VendaPagamentoCreate,
+    VendaPagamentoPublic,
     VendaPublic,
     VendasPublic,
     get_datetime_utc,
@@ -62,8 +70,8 @@ MODULE_LIVRO = "livro_vendas"
 MODULE_INADIMPLENCIA = "inadimplencia"
 DIAS_ATRASO_VALE = 30
 FORMAS_PAGAMENTO_ORDEM = ["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
-
 FORMAS_SIMPLES = {"cartao_debito", "cartao_credito", "pix", "dinheiro"}
+FORMAS_A_VISTA = {"cartao_debito", "cartao_credito", "pix", "dinheiro"}
 
 CONTA_MESTRE_ID     = "10000000-0000-0000-0000-000000000001"
 CONTA_TRANSITO_ID   = "11000000-0000-0000-0000-000000000001"
@@ -126,6 +134,41 @@ def _nome_usuario(user: User | None) -> str | None:
     return user.full_name or user.email
 
 
+def _pagamentos_public(session: SessionDep, venda_id: uuid.UUID) -> list[VendaPagamentoPublic]:
+    """Busca os recebíveis de uma venda (Tema 2). Retorna lista vazia para vendas antigas."""
+    linhas = session.exec(
+        select(VendaPagamento).where(VendaPagamento.venda_id == venda_id)
+    ).all()
+    result = []
+    for linha in linhas:
+        vale_num: int | None = None
+        if linha.vale_id:
+            vale = session.get(Vale, linha.vale_id)
+            vale_num = vale.numero if vale else None
+
+        vale_gas_estab: str | None = None
+        if linha.vale_gas_bloco_id:
+            bloco_gas = session.get(BlocoValeGas, linha.vale_gas_bloco_id)
+            if bloco_gas:
+                cliente_gas = session.get(Cliente, bloco_gas.cliente_id)
+                if cliente_gas:
+                    vale_gas_estab = cliente_gas.nome
+
+        result.append(VendaPagamentoPublic(
+            id=linha.id,
+            forma_pagamento=linha.forma_pagamento,
+            valor=linha.valor,
+            pago_em=linha.pago_em,
+            vale_numero=vale_num,
+            data_pagamento_vale=linha.data_pagamento_vale,
+            vale_gas_numero=linha.vale_gas_numero,
+            vale_gas_estabelecimento=vale_gas_estab,
+            gas_povo_frete=linha.gas_povo_frete,
+            gas_povo_frete_recebido_em=linha.gas_povo_frete_recebido_em,
+        ))
+    return result
+
+
 def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
     cliente = session.get(Cliente, venda.cliente_id)
     motorista = session.get(User, venda.motorista_id)
@@ -175,6 +218,9 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
             editado_em=log.editado_em,
         ))
 
+    # Recebíveis Tema 2 (vazio para vendas antigas)
+    pagamentos = _pagamentos_public(session, venda.id)
+
     return VendaPublic(
         id=venda.id,
         cliente_id=venda.cliente_id,
@@ -183,6 +229,7 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
         motorista_id=venda.motorista_id,
         motorista_nome=_nome_usuario(motorista) or "?",
         forma_pagamento=venda.forma_pagamento,
+        pagamentos=pagamentos,
         vale_numero=vale.numero if vale else None,
         data_pagamento_vale=venda.data_pagamento_vale,
         vale_gas_numero=venda.vale_gas_numero,
@@ -247,6 +294,29 @@ def _conta_por_forma(forma: str, motorista_id: uuid.UUID, session: SessionDep) -
     return CONTA_MESTRE_ID, cmi
 
 
+def _validar_e_reservar_vale(
+    session: SessionDep,
+    pgto: VendaPagamentoCreate,
+    motorista_id: uuid.UUID,
+) -> tuple[Vale, date]:
+    """Valida e reserva o vale para uma linha de fiado no mix."""
+    if pgto.vale_numero is None:
+        raise HTTPException(status_code=400, detail="Informe o numero do vale para pagamento fiado")
+    vale = session.exec(select(Vale).where(Vale.numero == pgto.vale_numero)).first()
+    if not vale:
+        raise HTTPException(status_code=404, detail=f"Vale numero {pgto.vale_numero} nao encontrado")
+    bloco = session.get(BlocoVale, vale.bloco_id)
+    if not bloco or bloco.motorista_id != motorista_id:
+        raise HTTPException(status_code=400, detail=f"O vale {pgto.vale_numero} pertence ao bloco de outro motorista")
+    # Verifica se já usado em Venda legada OU em VendaPagamento
+    if session.exec(select(Venda).where(Venda.vale_id == vale.id)).first():
+        raise HTTPException(status_code=400, detail=f"O vale {pgto.vale_numero} ja foi usado em outra venda")
+    if session.exec(select(VendaPagamento).where(VendaPagamento.vale_id == vale.id)).first():
+        raise HTTPException(status_code=400, detail=f"O vale {pgto.vale_numero} ja foi usado em outra venda")
+    vcto = pgto.data_pagamento_vale or _quinto_dia_util_proximo_mes()
+    return vale, vcto
+
+
 @router.get("/", response_model=VendasPublic,
     dependencies=[Depends(require_module_permission(MODULE, action="read"))])
 def read_vendas(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
@@ -288,11 +358,15 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
     blocos = session.exec(
         select(BlocoVale).where(BlocoVale.motorista_id == motorista_id).order_by(BlocoVale.created_at)
     ).all()
-    usados_subquery = select(Venda.vale_id).where(col(Venda.vale_id).is_not(None))
+    # Vales usados em vendas legadas OU em VendaPagamento (Tema 2)
+    usados_legado = select(Venda.vale_id).where(col(Venda.vale_id).is_not(None))
+    usados_mix = select(VendaPagamento.vale_id).where(col(VendaPagamento.vale_id).is_not(None))
     for bloco in blocos:
         vale_livre = session.exec(
             select(Vale).where(Vale.bloco_id == bloco.id)
-            .where(col(Vale.id).not_in(usados_subquery)).order_by(Vale.numero)
+            .where(col(Vale.id).not_in(usados_legado))
+            .where(col(Vale.id).not_in(usados_mix))
+            .order_by(Vale.numero)
         ).first()
         if vale_livre:
             return ProximoValeNumeroPublic(numero=vale_livre.numero)
@@ -499,7 +573,6 @@ def cancelar_venda(*, session: SessionDep, current_user: CurrentUser, id: uuid.U
     venda.status = "cancelada"
     venda.cancelada_em = get_datetime_utc()
     venda.cancelada_por_id = current_user.id
-
     _gravar_log_venda(session, venda.id, "status", "ativa", "cancelada", current_user.id)
 
     session.add(venda)
@@ -792,59 +865,64 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
     if venda_in.endereco_id and not session.get(Endereco, venda_in.endereco_id):
         raise HTTPException(status_code=404, detail="Endereco nao encontrado")
 
+    usa_mix = len(venda_in.pagamentos) > 0
+
+    # ── Caminho legado (sem mix) ─────────────────────────────────────────────
     vale = None
-    data_pagamento_vale = venda_in.data_pagamento_vale
+    data_pagamento_vale_legado = venda_in.data_pagamento_vale
     vale_gas_bloco_id: uuid.UUID | None = None
     gas_povo_frete_recebido_em = None
-    pago_em: Any = get_datetime_utc()
+    pago_em_legado: Any = get_datetime_utc()
 
-    if venda_in.forma_pagamento == "vale":
-        pago_em = None
-        if venda_in.vale_numero is None:
-            raise HTTPException(status_code=400, detail="Informe o numero do vale para pagamento a prazo")
-        vale = session.exec(select(Vale).where(Vale.numero == venda_in.vale_numero)).first()
-        if not vale:
-            raise HTTPException(status_code=404, detail=f"Vale numero {venda_in.vale_numero} nao encontrado")
-        bloco = session.get(BlocoVale, vale.bloco_id)
-        if not bloco or bloco.motorista_id != venda_in.motorista_id:
-            raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} pertence ao bloco de outro motorista")
-        if session.exec(select(Venda).where(Venda.vale_id == vale.id)).first():
-            raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} ja foi usado em outra venda")
-        # Aviso de fiado em aberto e exibido no frontend — a decisao de vender e do operador
-        if data_pagamento_vale is None:
-            data_pagamento_vale = _quinto_dia_util_proximo_mes()
+    if not usa_mix:
+        if venda_in.forma_pagamento == "vale":
+            pago_em_legado = None
+            if venda_in.vale_numero is None:
+                raise HTTPException(status_code=400, detail="Informe o numero do vale para pagamento a prazo")
+            vale = session.exec(select(Vale).where(Vale.numero == venda_in.vale_numero)).first()
+            if not vale:
+                raise HTTPException(status_code=404, detail=f"Vale numero {venda_in.vale_numero} nao encontrado")
+            bloco = session.get(BlocoVale, vale.bloco_id)
+            if not bloco or bloco.motorista_id != venda_in.motorista_id:
+                raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} pertence ao bloco de outro motorista")
+            if session.exec(select(Venda).where(Venda.vale_id == vale.id)).first():
+                raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} ja foi usado em outra venda")
+            if data_pagamento_vale_legado is None:
+                data_pagamento_vale_legado = _quinto_dia_util_proximo_mes()
 
-    elif venda_in.forma_pagamento == "vale_gas":
-        pago_em = None
-        if venda_in.vale_gas_numero is None:
-            raise HTTPException(status_code=400, detail="Informe o numero do vale gas")
-        if venda_in.vale_gas_bloco_id is None:
-            raise HTTPException(status_code=400, detail="Numero de vale gas invalido -- bloco nao encontrado")
-        bloco_gas = session.get(BlocoValeGas, venda_in.vale_gas_bloco_id)
-        if not bloco_gas:
-            raise HTTPException(status_code=404, detail="Bloco de vale gas nao encontrado")
-        num = venda_in.vale_gas_numero
-        if not (bloco_gas.primeira_folha <= num <= bloco_gas.ultima_folha):
-            raise HTTPException(status_code=400, detail=f"Numero {num} fora do intervalo do bloco ({bloco_gas.primeira_folha}-{bloco_gas.ultima_folha})")
-        ja_usado = session.exec(
-            select(Venda).where(Venda.forma_pagamento == "vale_gas").where(Venda.vale_gas_numero == num)
-        ).first()
-        if ja_usado:
-            raise HTTPException(status_code=400, detail=f"O vale gas numero {num} ja foi usado em outra venda")
-        vale_gas_bloco_id = bloco_gas.id
+        elif venda_in.forma_pagamento == "vale_gas":
+            pago_em_legado = None
+            if venda_in.vale_gas_numero is None:
+                raise HTTPException(status_code=400, detail="Informe o numero do vale gas")
+            if venda_in.vale_gas_bloco_id is None:
+                raise HTTPException(status_code=400, detail="Numero de vale gas invalido -- bloco nao encontrado")
+            bloco_gas = session.get(BlocoValeGas, venda_in.vale_gas_bloco_id)
+            if not bloco_gas:
+                raise HTTPException(status_code=404, detail="Bloco de vale gas nao encontrado")
+            num = venda_in.vale_gas_numero
+            if not (bloco_gas.primeira_folha <= num <= bloco_gas.ultima_folha):
+                raise HTTPException(status_code=400, detail=f"Numero {num} fora do intervalo do bloco ({bloco_gas.primeira_folha}-{bloco_gas.ultima_folha})")
+            ja_usado = session.exec(
+                select(Venda).where(Venda.forma_pagamento == "vale_gas").where(Venda.vale_gas_numero == num)
+            ).first()
+            if ja_usado:
+                raise HTTPException(status_code=400, detail=f"O vale gas numero {num} ja foi usado em outra venda")
+            vale_gas_bloco_id = bloco_gas.id
 
-    elif venda_in.forma_pagamento == "gas_povo":
-        pago_em = None
-        if venda_in.gas_povo_frete is None:
-            raise HTTPException(status_code=400, detail="Informe o valor do frete para vendas Gas do Povo")
-        gas_povo_frete_recebido_em = get_datetime_utc()
+        elif venda_in.forma_pagamento == "gas_povo":
+            pago_em_legado = None
+            if venda_in.gas_povo_frete is None:
+                raise HTTPException(status_code=400, detail="Informe o valor do frete para vendas Gas do Povo")
+            gas_povo_frete_recebido_em = get_datetime_utc()
 
+    # ── Itens da sacola (comum a ambos os caminhos) ───────────────────────────
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 
     itens_resolvidos: list[tuple] = []
+    forma_para_calculo = venda_in.forma_pagamento
 
-    if venda_in.forma_pagamento == "gas_povo":
+    if forma_para_calculo == "gas_povo":
         valor_total = venda_in.valor_pago
         for item_in in venda_in.itens:
             produto = session.get(Item, item_in.produto_id)
@@ -863,7 +941,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             preco = _preco_vigente(session, item_in.produto_id)
             if not preco:
                 raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' ainda nao tem preco cadastrado")
-
             preco_casco_snapshot: Decimal | None = None
             if item_in.com_casco:
                 if not produto.vende_casco:
@@ -871,7 +948,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
                 if preco.preco_casco is None:
                     raise HTTPException(status_code=400, detail=f"Produto '{produto.title}' nao tem preco de casco cadastrado")
                 preco_casco_snapshot = preco.preco_casco
-
             subtotal_gas = preco.valor * item_in.quantidade
             itens_resolvidos.append((item_in, preco, subtotal_gas, preco_casco_snapshot))
 
@@ -880,27 +956,44 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             for item_in, _, subtotal, snap in itens_resolvidos
         )
 
+    # ── Cria a Venda ──────────────────────────────────────────────────────────
+    # Para mix: forma_pagamento da Venda = "mix"; pago_em depende das formas
+    # Para legado: comportamento original
+    if usa_mix:
+        forma_venda = "mix"
+        # pago_em: fecha imediatamente se todas as formas forem à vista
+        todas_a_vista = all(p.forma_pagamento in FORMAS_A_VISTA for p in venda_in.pagamentos)
+        pago_em_venda: Any = get_datetime_utc() if todas_a_vista else None
+        valor_pago_venda = sum(
+            p.valor for p in venda_in.pagamentos if p.forma_pagamento in FORMAS_A_VISTA
+        )
+    else:
+        forma_venda = venda_in.forma_pagamento
+        pago_em_venda = pago_em_legado
+        valor_pago_venda = venda_in.valor_pago
+
     venda = Venda(
         cliente_id=venda_in.cliente_id,
         endereco_id=venda_in.endereco_id,
         motorista_id=venda_in.motorista_id,
-        forma_pagamento=venda_in.forma_pagamento,
+        forma_pagamento=forma_venda,
         vale_id=vale.id if vale else None,
-        data_pagamento_vale=data_pagamento_vale,
-        vale_gas_numero=venda_in.vale_gas_numero if venda_in.forma_pagamento == "vale_gas" else None,
+        data_pagamento_vale=data_pagamento_vale_legado,
+        vale_gas_numero=venda_in.vale_gas_numero if not usa_mix and venda_in.forma_pagamento == "vale_gas" else None,
         vale_gas_bloco_id=vale_gas_bloco_id,
-        gas_povo_frete=venda_in.gas_povo_frete if venda_in.forma_pagamento == "gas_povo" else None,
+        gas_povo_frete=venda_in.gas_povo_frete if not usa_mix and venda_in.forma_pagamento == "gas_povo" else None,
         gas_povo_frete_recebido_em=gas_povo_frete_recebido_em,
         valor_total=valor_total,
-        valor_pago=venda_in.valor_pago,
+        valor_pago=valor_pago_venda,
         data_venda=venda_in.data_venda or date.today(),
-        pago_em=pago_em,
+        pago_em=pago_em_venda,
         status="ativa",
         criado_por_id=current_user.id,
     )
     session.add(venda)
     session.flush()
 
+    # ── Itens ─────────────────────────────────────────────────────────────────
     for item_in, preco, subtotal_gas, preco_casco_snap in itens_resolvidos:
         session.add(VendaItem(
             venda_id=venda.id,
@@ -912,6 +1005,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             preco_casco_snapshot=preco_casco_snap,
         ))
 
+    # ── Empréstimos de casco ──────────────────────────────────────────────────
     qtd_por_produto = {str(i.produto_id): i.quantidade for i in venda_in.itens}
     for casco_in in venda_in.cascos:
         if casco_in.quantidade <= 0:
@@ -930,6 +1024,58 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             motorista_id=venda_in.motorista_id,
             cliente_id=venda_in.cliente_id,
         ))
+
+    # ── Recebíveis Tema 2 (mix de formas) ────────────────────────────────────
+    if usa_mix:
+        agora = get_datetime_utc()
+        for pgto in venda_in.pagamentos:
+            a_vista = pgto.forma_pagamento in FORMAS_A_VISTA
+            pgto_vale: Vale | None = None
+            pgto_vcto: date | None = None
+            pgto_vale_gas_bloco_id: uuid.UUID | None = None
+            pgto_gas_povo_frete_recebido_em = None
+
+            if pgto.forma_pagamento == "vale":
+                pgto_vale, pgto_vcto = _validar_e_reservar_vale(session, pgto, venda_in.motorista_id)
+
+            elif pgto.forma_pagamento == "vale_gas":
+                if pgto.vale_gas_numero is None or pgto.vale_gas_bloco_id is None:
+                    raise HTTPException(status_code=400, detail="Informe numero e bloco do vale gas")
+                bloco_gas = session.get(BlocoValeGas, pgto.vale_gas_bloco_id)
+                if not bloco_gas:
+                    raise HTTPException(status_code=404, detail="Bloco de vale gas nao encontrado")
+                num = pgto.vale_gas_numero
+                if not (bloco_gas.primeira_folha <= num <= bloco_gas.ultima_folha):
+                    raise HTTPException(status_code=400, detail=f"Numero {num} fora do intervalo do bloco")
+                ja_usado_venda = session.exec(
+                    select(Venda).where(Venda.forma_pagamento == "vale_gas").where(Venda.vale_gas_numero == num)
+                ).first()
+                ja_usado_mix = session.exec(
+                    select(VendaPagamento).where(VendaPagamento.vale_gas_numero == num)
+                ).first()
+                if ja_usado_venda or ja_usado_mix:
+                    raise HTTPException(status_code=400, detail=f"O vale gas {num} ja foi usado em outra venda")
+                pgto_vale_gas_bloco_id = bloco_gas.id
+
+            elif pgto.forma_pagamento == "gas_povo":
+                if pgto.gas_povo_frete is None:
+                    raise HTTPException(status_code=400, detail="Informe o valor do frete para Gas do Povo")
+                pgto_gas_povo_frete_recebido_em = agora
+
+            session.add(VendaPagamento(
+                id=uuid.uuid4(),
+                venda_id=venda.id,
+                forma_pagamento=pgto.forma_pagamento,
+                valor=pgto.valor,
+                pago_em=agora if a_vista else None,
+                vale_id=pgto_vale.id if pgto_vale else None,
+                data_pagamento_vale=pgto_vcto,
+                vale_gas_numero=pgto.vale_gas_numero if pgto.forma_pagamento == "vale_gas" else None,
+                vale_gas_bloco_id=pgto_vale_gas_bloco_id,
+                gas_povo_frete=pgto.gas_povo_frete if pgto.forma_pagamento == "gas_povo" else None,
+                gas_povo_frete_recebido_em=pgto_gas_povo_frete_recebido_em,
+                created_at=agora,
+            ))
 
     session.commit()
     session.refresh(venda)

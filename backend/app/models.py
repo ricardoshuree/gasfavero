@@ -1,5 +1,8 @@
-# [mcp-local harness] feature: venda_casco_produto | plano: 3a491775 | 2026-09-09 11:44:47
-# Adiciona vende_casco em Item, preco_casco em Preco, com_casco+preco_casco_snapshot em VendaItem, schemas atualizados
+# [mcp-local harness] feature: tema2_multiplas_formas_backend | plano: 38d656ed | 2026-09-09 17:46:06
+# Adiciona VendaPagamento model+schemas; VendaCreate aceita pagamentos[]; VendaPublic expõe pagamentos[]
+# Adiciona VendaPagamento (Tema 2) e schemas relacionados.
+# VendaCreate agora aceita pagamentos[] opcionalmente.
+# Retrocompat: vendas antigas sem linhas em venda_pagamento continuam funcionando.
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -217,7 +220,6 @@ class ItemBase(SQLModel):
 
 
 class ItemCreate(ItemBase):
-    # vende_casco: produto pode ser vendido com casco (cobra preco_casco adicional)
     vende_casco: bool = Field(default=False)
 
 
@@ -233,7 +235,6 @@ class Item(ItemBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
-    # Se True, a tela de vendas exibe a opção "+ Casco" para este produto
     vende_casco: bool = Field(default=False)
     owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
     owner: User | None = Relationship(back_populates="items")
@@ -391,7 +392,6 @@ class Preco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    # preco_casco: valor cobrado pelo casco nesta vigência (null = produto não vende casco)
     preco_casco: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
     valid_from: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
     valid_to: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
@@ -399,7 +399,6 @@ class Preco(SQLModel, table=True):
 
 class PrecoCreate(SQLModel):
     valor: Decimal = Field(gt=0, decimal_places=2)
-    # preco_casco: obrigatório quando o produto tem vende_casco=True; nulo caso contrário
     preco_casco: Decimal | None = Field(default=None, gt=0, decimal_places=2)
 
 
@@ -494,6 +493,63 @@ class Venda(SQLModel, table=True):
     cancelada_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
 
 
+# ---------------------------------------------------------------------------
+# VendaPagamento — Tema 2: recebível por forma de pagamento
+# ---------------------------------------------------------------------------
+
+class VendaPagamento(SQLModel, table=True):
+    """
+    Um registro por forma de pagamento numa venda com mix.
+    Formas à vista: pago_em preenchido na criação.
+    Fiado (vale): pago_em null até a baixa; vale_id + data_pagamento_vale preenchidos.
+    Vale Gás: pago_em null até recebimento do governo.
+    Gás do Povo: gas_povo_frete preenchido; pago_em null até recebimento.
+    """
+    __tablename__ = "venda_pagamento"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
+    forma_pagamento: str = Field(max_length=20)
+    valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    pago_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    # Fiado
+    vale_id: uuid.UUID | None = Field(default=None, foreign_key="vale.id", ondelete="RESTRICT")
+    data_pagamento_vale: date | None = Field(default=None)
+    # Vale Gás
+    vale_gas_numero: int | None = Field(default=None)
+    vale_gas_bloco_id: uuid.UUID | None = Field(default=None, foreign_key="bloco_vale_gas.id", ondelete="RESTRICT")
+    # Gás do Povo
+    gas_povo_frete: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
+    gas_povo_frete_recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+
+
+class VendaPagamentoCreate(SQLModel):
+    """Uma linha de pagamento no mix. Enviada pelo frontend no array pagamentos[]."""
+    forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
+    valor: Decimal = Field(gt=0, decimal_places=2)
+    # Fiado
+    vale_numero: int | None = None
+    data_pagamento_vale: date | None = None
+    # Vale Gás
+    vale_gas_numero: int | None = None
+    vale_gas_bloco_id: uuid.UUID | None = None
+    # Gás do Povo
+    gas_povo_frete: Decimal | None = None
+
+
+class VendaPagamentoPublic(SQLModel):
+    id: uuid.UUID
+    forma_pagamento: str
+    valor: Decimal
+    pago_em: datetime | None = None
+    vale_numero: int | None = None
+    data_pagamento_vale: date | None = None
+    vale_gas_numero: int | None = None
+    vale_gas_estabelecimento: str | None = None
+    gas_povo_frete: Decimal | None = None
+    gas_povo_frete_recebido_em: datetime | None = None
+
+
 class VendaItem(SQLModel, table=True):
     __tablename__ = "venda_item"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -502,9 +558,7 @@ class VendaItem(SQLModel, table=True):
     preco_id: uuid.UUID = Field(foreign_key="preco.id", ondelete="RESTRICT")
     quantidade: int
     subtotal: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    # com_casco: True quando o cliente comprou o casco junto ao produto
     com_casco: bool = Field(default=False)
-    # preco_casco_snapshot: valor unitário do casco no momento da venda (histórico imutável)
     preco_casco_snapshot: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
 
 
@@ -539,10 +593,6 @@ class EmprestimoCasco(SQLModel, table=True):
 
 
 class EmprestimoCascoLog(SQLModel, table=True):
-    """
-    Auditoria de eventos de empréstimo de casco.
-    Eventos: recebido | recebimento_desfeito | confirmado | confirmacao_desfeita
-    """
     __tablename__ = "emprestimo_casco_log"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     emprestimo_id: uuid.UUID = Field(foreign_key="emprestimo_casco.id", ondelete="CASCADE")
@@ -580,7 +630,7 @@ class EmprestimoCascoPublic(SQLModel):
     confirmado_em: datetime | None = None
     confirmado_por_nome: str | None = None
     dias_em_aberto: int = 0
-    status: str  # "emprestado" | "recebido_aguardando" | "devolvido"
+    status: str
     logs: list[EmprestimoCascoLogPublic] = []
     created_at: datetime
 
@@ -612,7 +662,6 @@ class CascosClientePublic(SQLModel):
 class VendaItemCreate(SQLModel):
     produto_id: uuid.UUID
     quantidade: int = Field(gt=0)
-    # com_casco: True quando o cliente compra o casco junto ao produto
     com_casco: bool = Field(default=False)
 
 
@@ -620,7 +669,11 @@ class VendaCreate(SQLModel):
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID | None = None
     motorista_id: uuid.UUID
+    # forma_pagamento: usado quando NÃO há mix (retrocompat + formas exclusivas vale_gas/gas_povo)
     forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
+    # pagamentos: lista de recebíveis para mix de formas (Tema 2)
+    # Se preenchido, substitui forma_pagamento+valor_pago no cálculo de pago_em
+    pagamentos: list[VendaPagamentoCreate] = Field(default_factory=list)
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
     vale_gas_numero: int | None = None
@@ -667,6 +720,8 @@ class VendaPublic(SQLModel):
     motorista_id: uuid.UUID
     motorista_nome: str
     forma_pagamento: str
+    # pagamentos: lista de recebíveis (preenchida quando há mix; vazia para vendas antigas)
+    pagamentos: list[VendaPagamentoPublic] = []
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
     vale_gas_numero: int | None = None
