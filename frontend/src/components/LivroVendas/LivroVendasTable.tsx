@@ -1,4 +1,4 @@
-// [mcp-local harness] feature: livro_vendas_coluna_produtos | plano: 003f8a30 | 2026-09-09 12:43:53
+﻿// [mcp-local harness] feature: livro_vendas_coluna_produtos | plano: 003f8a30 | 2026-09-09 12:43:53
 // Coluna Produtos entre Endereço e Tipo pagamento, formatando itens com indicação de casco
 // Adiciona coluna Produtos entre Endereço e Tipo pagamento na tabela do Livro de Vendas
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
