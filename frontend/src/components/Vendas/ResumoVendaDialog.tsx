@@ -1,5 +1,7 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: ed5b9c43 | 2026-09-07 15:49:33
-// Adiciona prop cascos e bloco âmbar de empréstimo de casco no ResumoVendaDialog
+// [mcp-local harness] feature: sacola_reset_e_resumo_valor_pago | plano: 22053e73 | 2026-09-09 17:09:42
+// Valor pago em linha própria com cor âmbar quando desconto; total inclui cascos comprados; lista formas no mix
+// Valor pago exibido em linha própria com cor âmbar quando < total da sacola.
+// Total inclui cascos comprados na venda.
 import { Package } from "lucide-react"
 
 import type { EnderecoPublic } from "@/client"
@@ -21,13 +23,13 @@ function formatMoney(valor: number): string {
 }
 
 const LABEL_PAGAMENTO: Record<string, string> = {
-  cartao_debito: "Cartão Débito",
+  cartao_debito:  "Cartão Débito",
   cartao_credito: "Cartão Crédito",
-  pix: "Pix",
-  dinheiro: "Dinheiro",
-  vale: "Fiado",
-  vale_gas: "Vale Gás",
-  gas_povo: "Gás do Povo",
+  pix:            "Pix",
+  dinheiro:       "Dinheiro",
+  vale:           "Fiado",
+  vale_gas:       "Vale Gás",
+  gas_povo:       "Gás do Povo",
 }
 
 interface ResumoVendaDialogProps {
@@ -39,6 +41,7 @@ interface ResumoVendaDialogProps {
   itens: SacolaItem[]
   cascos?: CascoItem[]
   formaPagamento: string
+  formasPagamento?: string[]        // lista completa para mix
   valeNumero: string
   dataPagamentoVale: string
   valorPago: string
@@ -56,6 +59,7 @@ export function ResumoVendaDialog({
   itens,
   cascos = [],
   formaPagamento,
+  formasPagamento = [],
   valeNumero,
   dataPagamentoVale,
   valorPago,
@@ -63,14 +67,24 @@ export function ResumoVendaDialog({
   isPending,
   onConfirm,
 }: ResumoVendaDialogProps) {
-  const total = itens.reduce(
-    (acc, item) => acc + Number(item.precoUnitario) * item.quantidade,
-    0,
-  )
+  // Total da sacola inclui gás + cascos comprados (com_casco=true)
+  const totalItens = itens.reduce((acc, item) => {
+    const gas = Number(item.precoUnitario) * item.quantidade
+    const casco = item.comCasco && item.precoCascoAtual
+      ? Number(item.precoCascoAtual) * item.quantidade
+      : 0
+    return acc + gas + casco
+  }, 0)
 
-  // Mapa produtoId -> title para exibir nome no resumo de cascos
+  const valorPagoNum = Number(valorPago) || 0
+  const desconto = valorPagoNum < totalItens
+
   const tituloPorProduto = Object.fromEntries(itens.map((i) => [i.produtoId, i.title]))
   const totalCascos = cascos.reduce((acc, c) => acc + c.quantidade, 0)
+
+  // Label da forma de pagamento: usa lista completa se houver mix
+  const formas = formasPagamento.length > 0 ? formasPagamento : [formaPagamento]
+  const labelFormas = formas.map((f) => LABEL_PAGAMENTO[f] ?? f).join(" + ")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,7 +92,7 @@ export function ResumoVendaDialog({
         <DialogHeader>
           <DialogTitle>Confirmar Venda</DialogTitle>
           <DialogDescription>
-            Confira os dados antes de finalizar -- depois de confirmado não dá
+            Confira os dados antes de finalizar — depois de confirmado não dá
             pra editar, só estornar/ajustar manualmente.
           </DialogDescription>
         </DialogHeader>
@@ -99,16 +113,25 @@ export function ResumoVendaDialog({
             <p className="font-medium">{motoristaNome}</p>
           </div>
 
+          {/* Itens da sacola */}
           <div className="rounded-md border p-2">
             {itens.map((item) => (
-              <div key={item.produtoId} className="flex justify-between">
-                <span>{item.quantidade}x {item.title}</span>
-                <span>{formatMoney(Number(item.precoUnitario) * item.quantidade)}</span>
+              <div key={item.produtoId} className="flex flex-col">
+                <div className="flex justify-between">
+                  <span>{item.quantidade}× {item.title}</span>
+                  <span>{formatMoney(Number(item.precoUnitario) * item.quantidade)}</span>
+                </div>
+                {item.comCasco && item.precoCascoAtual && (
+                  <div className="flex justify-between pl-4 text-xs text-muted-foreground">
+                    <span>+ casco</span>
+                    <span>{formatMoney(Number(item.precoCascoAtual) * item.quantidade)}</span>
+                  </div>
+                )}
               </div>
             ))}
             <div className="mt-1 flex justify-between border-t pt-1 font-semibold">
               <span>Total</span>
-              <span>{formatMoney(total)}</span>
+              <span>{formatMoney(totalItens)}</span>
             </div>
           </div>
 
@@ -130,17 +153,31 @@ export function ResumoVendaDialog({
             </div>
           )}
 
+          {/* Pagamento */}
           <div>
             <p className="text-muted-foreground">Pagamento</p>
             <p className="font-medium">
-              {LABEL_PAGAMENTO[formaPagamento] ?? formaPagamento}
-              {formaPagamento === "vale" && valeNumero
+              {labelFormas}
+              {formas.includes("vale") && valeNumero
                 ? ` — vale nº ${valeNumero} (previsão ${dataPagamentoVale || "5º dia útil do mês seguinte"})`
                 : ""}
             </p>
-            <p className="text-muted-foreground">
-              Pago: {formatMoney(Number(valorPago) || 0)} · Data: {dataVenda}
-            </p>
+            <p className="text-muted-foreground text-xs">Data: {dataVenda}</p>
+
+            {/* Valor pago — âmbar quando há desconto */}
+            <div className="mt-1 flex items-center justify-between rounded-md border px-3 py-2">
+              <span className="text-sm text-muted-foreground">Valor pago</span>
+              <span className={`text-sm font-semibold ${desconto ? "text-amber-500" : "text-[#00a63e]"}`}>
+                {formatMoney(valorPagoNum)}
+              </span>
+            </div>
+
+            {/* Aviso de desconto */}
+            {desconto && (
+              <p className="mt-1 text-xs text-amber-500">
+                ⚠️ Desconto de {formatMoney(totalItens - valorPagoNum)} aplicado
+              </p>
+            )}
           </div>
         </div>
 

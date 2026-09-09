@@ -1,12 +1,12 @@
-// [mcp-local harness] feature: autofill_nao_sobrescreve | plano: 66d32848 | 2026-09-09 17:01:00
-// Auto-fill só preenche campo vazio; campo com valor já digitado não é sobrescrito
-// Sacola (referência) + Pago (soma formas) + Total acima do botão Finalizar
-// Tema 2: múltiplas formas de pagamento.
-// Auto-fill: ao digitar no primeiro campo, preenche o segundo SÓ se ainda estiver vazio.
-// Se o segundo já tem valor, não sobrescreve — permite desconto livre.
+// [mcp-local harness] feature: sacola_reset_e_resumo_valor_pago | plano: 22053e73 | 2026-09-09 17:11:38
+// useEffect observa totalSacola: reseta valoresPorForma quando sacola muda; passa formasPagamento para ResumoVendaDialog
+// Sacola (referência) + Pago (soma formas) + Total acima do botão Finalizar.
+// Quando sacola muda (produto add/remove/qty), valoresPorForma é resetado:
+//   - forma única → repreenche com novo total automaticamente
+//   - mix → fica vazio para o operador redistribuir
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import {
   type ApiError,
@@ -201,6 +201,30 @@ function Vendas() {
     return acc + gas + casco
   }, 0)
 
+  // Quando totalSacola muda, reseta valoresPorForma:
+  //   - 1 forma: repreenche automaticamente com novo total
+  //   - mix: zera para o operador redistribuir
+  // Usa ref para ignorar o mount inicial (totalSacola=0 antes de qualquer produto)
+  const prevTotalSacola = useRef<number | null>(null)
+  useEffect(() => {
+    if (formasPagamento.length === 0) return
+    if (prevTotalSacola.current === null) {
+      prevTotalSacola.current = totalSacola
+      return
+    }
+    if (prevTotalSacola.current === totalSacola) return
+    prevTotalSacola.current = totalSacola
+
+    setValoresPorForma(() => {
+      const novo: Partial<Record<FormaPagamentoValue, string>> = {}
+      formasPagamento.forEach((f) => {
+        // forma única: preenche com novo total; mix: deixa vazio para o operador
+        novo[f] = formasPagamento.length === 1 ? totalSacola.toFixed(2) : ""
+      })
+      return novo
+    })
+  }, [totalSacola, formasPagamento])
+
   const somaFormas = formasPagamento.reduce(
     (acc, f) => acc + (parseFloat(valoresPorForma[f] ?? "0") || 0), 0,
   )
@@ -216,8 +240,7 @@ function Vendas() {
     const valor = parseFloat(raw) || 0
     setValoresPorForma((prev) => {
       const novo = { ...prev, [forma]: raw }
-      // Auto-fill: preenche o segundo campo SÓ se ainda estiver vazio.
-      // Se já tem valor digitado, não sobrescreve — permite desconto livre.
+      // Auto-fill: preenche o segundo campo SÓ se ainda estiver vazio
       if (formasPagamento.length === 2) {
         const outra = formasPagamento.find((f) => f !== forma)
         if (outra && !prev[outra]) {
@@ -306,6 +329,7 @@ function Vendas() {
     setValeGasNumero(""); setValeGasBlocoId(null); setValeGasInfo(null)
     setGasPovoValorGov(""); setGasPovoFrete("")
     setDataVenda(hojeISO()); setShowResumo(false)
+    prevTotalSacola.current = null
   }
 
   // ── Validações ────────────────────────────────────────────────────────────
@@ -514,28 +538,23 @@ function Vendas() {
 
           {/* Sacola · Pago · Total + Finalizar */}
           <div className="flex flex-col gap-2 rounded-lg border p-3">
-
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Sacola</span>
               <span className="text-sm font-medium text-muted-foreground">{formatMoney(totalSacola)}</span>
             </div>
-
             {formasPagamento.length > 0 && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Pago</span>
                 <span className={`text-sm font-semibold ${corPago}`}>{formatMoney(totalPago)}</span>
               </div>
             )}
-
             <div className="my-1 border-t" />
-
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Total</span>
               <span className={`text-xl font-bold ${formasPagamento.length > 0 ? corPago : ""}`}>
                 {formatMoney(formasPagamento.length > 0 ? totalPago : totalSacola)}
               </span>
             </div>
-
             <Button size="lg" className="w-full mt-1" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
               Finalizar Venda
             </Button>
@@ -553,6 +572,7 @@ function Vendas() {
         itens={sacola}
         cascos={cascos}
         formaPagamento={formaPrincipal ?? ""}
+        formasPagamento={formasPagamento}
         valeNumero={valeNumero}
         dataPagamentoVale={dataPagamentoVale}
         valorPago={valorPagoEnvio}
