@@ -1,6 +1,7 @@
-// [mcp-local harness] feature: sacola_cor_consistente | plano: a254a2df | 2026-09-09 17:26:36
-// Sacola usa corPago — tudo verde quando pago ok, tudo âmbar quando desconto
-// Sacola, Pago e Total usam mesma corPago — tudo verde quando ok, tudo âmbar quando desconto.
+// [mcp-local harness] feature: sacola_verde_fixo | plano: 13548fa0 | 2026-09-09 17:34:19
+// Sacola sempre verde fixo; Pago e Total variam verde/âmbar
+// Sacola sempre verde fixo (#00a63e) — é a meta/alvo.
+// Pago e Total variam entre verde e âmbar dependendo do desconto.
 // Quando sacola muda (produto add/remove/qty), valoresPorForma é resetado:
 //   - forma única → repreenche com novo total automaticamente
 //   - mix → fica vazio para o operador redistribuir
@@ -40,6 +41,7 @@ const MODULE = "vendas"
 const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
 const ROLES_PERMITIDAS = ["gerente", "motorista"]
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+const COR_VERDE = "text-[#00a63e]"
 
 const LABEL_FORMA: Record<FormaPagamentoValue, string> = {
   cartao_debito:  "Débito",
@@ -226,9 +228,10 @@ function Vendas() {
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
   const totalPago = formasPagamento.includes("gas_povo") ? gasPovoTotal : somaFormas
 
+  // Sacola: sempre verde fixo (é a meta)
+  // Pago e Total: verde quando pago >= sacola, âmbar quando há desconto
   const pagamentoOk = formasPagamento.length > 0 && totalPago >= totalSacola
-  // corPago aplica-se a Sacola, Pago e Total — consistência visual total
-  const corPago = pagamentoOk ? "text-[#00a63e]" : "text-amber-500"
+  const corPago = pagamentoOk ? COR_VERDE : "text-amber-500"
 
   // ── Handlers valor por forma ──────────────────────────────────────────────
   const handleValorForma = (forma: FormaPagamentoValue, raw: string) => {
@@ -530,26 +533,33 @@ function Vendas() {
             </div>
           </div>
 
-          {/* Sacola · Pago · Total + Finalizar
-              Todas as linhas usam corPago: tudo verde quando ok, tudo âmbar quando desconto */}
+          {/* Sacola · Pago · Total + Finalizar */}
           <div className="flex flex-col gap-2 rounded-lg border p-3">
+
+            {/* Sacola: sempre verde fixo — é a meta */}
             <div className="flex items-center justify-between">
-              <span className={`text-sm font-medium ${formasPagamento.length > 0 ? corPago : "text-muted-foreground"}`}>Sacola</span>
-              <span className={`text-sm font-medium ${formasPagamento.length > 0 ? corPago : "text-muted-foreground"}`}>{formatMoney(totalSacola)}</span>
+              <span className={`text-sm font-medium ${COR_VERDE}`}>Sacola</span>
+              <span className={`text-sm font-medium ${COR_VERDE}`}>{formatMoney(totalSacola)}</span>
             </div>
+
+            {/* Pago: verde quando fecha, âmbar quando há desconto */}
             {formasPagamento.length > 0 && (
               <div className="flex items-center justify-between">
                 <span className={`text-sm font-medium ${corPago}`}>Pago</span>
                 <span className={`text-sm font-semibold ${corPago}`}>{formatMoney(totalPago)}</span>
               </div>
             )}
+
             <div className="my-1 border-t" />
+
+            {/* Total: mesma cor que Pago */}
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Total</span>
               <span className={`text-xl font-bold ${formasPagamento.length > 0 ? corPago : ""}`}>
                 {formatMoney(formasPagamento.length > 0 ? totalPago : totalSacola)}
               </span>
             </div>
+
             <Button size="lg" className="w-full mt-1" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
               Finalizar Venda
             </Button>
