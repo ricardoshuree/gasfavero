@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: venda_casco_produto | plano: 1e4e7de6 | 2026-09-09 12:01:32
+// Fix: vende_casco como z.boolean() não-opcional; onCheckedChange tipado
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
@@ -7,6 +9,7 @@ import { z } from "zod"
 
 import { type ItemCreate, ItemsService } from "@/client"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogClose,
@@ -30,9 +33,11 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
+// vende_casco é boolean não-opcional para evitar conflito de tipos com react-hook-form
 const formSchema = z.object({
-  title: z.string().min(1, { message: "Title is required" }),
+  title: z.string().min(1, { message: "Nome é obrigatório" }),
   description: z.string().optional(),
+  vende_casco: z.boolean(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -49,6 +54,7 @@ const AddItem = () => {
     defaultValues: {
       title: "",
       description: "",
+      vende_casco: false,
     },
   })
 
@@ -56,7 +62,7 @@ const AddItem = () => {
     mutationFn: (data: ItemCreate) =>
       ItemsService.createItem({ requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Item created successfully")
+      showSuccessToast("Produto cadastrado com sucesso")
       form.reset()
       setIsOpen(false)
     },
@@ -80,9 +86,10 @@ const AddItem = () => {
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Item</DialogTitle>
+          <DialogTitle>Novo Produto</DialogTitle>
           <DialogDescription>
-            Fill in the details to add a new item.
+            Preencha os dados do produto. O preço é definido separadamente na
+            tela de Preços.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -94,15 +101,10 @@ const AddItem = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Title <span className="text-destructive">*</span>
+                      Nome <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Title"
-                        type="text"
-                        {...field}
-                        required
-                      />
+                      <Input placeholder="Ex: P13" type="text" {...field} required />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -114,11 +116,41 @@ const AddItem = () => {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>Descrição</FormLabel>
                     <FormControl>
-                      <Input placeholder="Description" type="text" {...field} />
+                      <Input
+                        placeholder="Ex: Botijão de Gás GLP 13kg"
+                        type="text"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="vende_casco"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 rounded-md border p-3">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={(checked) =>
+                          field.onChange(checked === true)
+                        }
+                      />
+                    </FormControl>
+                    <div className="grid gap-0.5">
+                      <FormLabel className="leading-none">
+                        Permite venda de casco
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Quando marcado, a tela de vendas exibe a opção de
+                        incluir o casco (botijão vazio) no pedido.
+                      </p>
+                    </div>
                   </FormItem>
                 )}
               />
@@ -127,11 +159,11 @@ const AddItem = () => {
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" disabled={mutation.isPending}>
-                  Cancel
+                  Cancelar
                 </Button>
               </DialogClose>
               <LoadingButton type="submit" loading={mutation.isPending}>
-                Save
+                Salvar
               </LoadingButton>
             </DialogFooter>
           </form>

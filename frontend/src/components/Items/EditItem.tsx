@@ -1,3 +1,5 @@
+// [mcp-local harness] feature: venda_casco_produto | plano: 1e4e7de6 | 2026-09-09 12:01:53
+// Fix: vende_casco como z.boolean() não-opcional; onCheckedChange tipado
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
@@ -7,6 +9,7 @@ import { z } from "zod"
 
 import { type ItemPublic, ItemsService } from "@/client"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogClose,
@@ -30,9 +33,11 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
+// vende_casco é boolean não-opcional para evitar conflito de tipos com react-hook-form
 const formSchema = z.object({
-  title: z.string().min(1, { message: "Title is required" }),
+  title: z.string().min(1, { message: "Nome é obrigatório" }),
   description: z.string().optional(),
+  vende_casco: z.boolean(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -54,6 +59,7 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
     defaultValues: {
       title: item.title,
       description: item.description ?? undefined,
+      vende_casco: item.vende_casco ?? false,
     },
   })
 
@@ -61,7 +67,7 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
     mutationFn: (data: FormData) =>
       ItemsService.updateItem({ id: item.id, requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Item updated successfully")
+      showSuccessToast("Produto atualizado com sucesso")
       setIsOpen(false)
       onSuccess()
     },
@@ -88,9 +94,9 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <DialogHeader>
-              <DialogTitle>Edit Item</DialogTitle>
+              <DialogTitle>Editar Produto</DialogTitle>
               <DialogDescription>
-                Update the item details below.
+                Atualize os dados do produto.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -100,10 +106,10 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Title <span className="text-destructive">*</span>
+                      Nome <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="Title" type="text" {...field} />
+                      <Input placeholder="Ex: P13" type="text" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -115,11 +121,41 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>Descrição</FormLabel>
                     <FormControl>
-                      <Input placeholder="Description" type="text" {...field} />
+                      <Input
+                        placeholder="Ex: Botijão de Gás GLP 13kg"
+                        type="text"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="vende_casco"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 rounded-md border p-3">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={(checked) =>
+                          field.onChange(checked === true)
+                        }
+                      />
+                    </FormControl>
+                    <div className="grid gap-0.5">
+                      <FormLabel className="leading-none">
+                        Permite venda de casco
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Quando marcado, a tela de vendas exibe a opção de
+                        incluir o casco (botijão vazio) no pedido.
+                      </p>
+                    </div>
                   </FormItem>
                 )}
               />
@@ -128,11 +164,11 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" disabled={mutation.isPending}>
-                  Cancel
+                  Cancelar
                 </Button>
               </DialogClose>
               <LoadingButton type="submit" loading={mutation.isPending}>
-                Save
+                Salvar
               </LoadingButton>
             </DialogFooter>
           </form>

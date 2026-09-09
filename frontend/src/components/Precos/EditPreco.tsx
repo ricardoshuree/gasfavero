@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: clientes-precos-vales-frontend | plano: 5db64e4b | 2026-08-04 23:33:57
-// Dialog de definicao de preco vigente de um produto
+// [mcp-local harness] feature: venda_casco_produto | plano: 139ac581 | 2026-09-09 11:59:24
+// Adiciona campo preco_casco condicional: aparece e é obrigatório quando produto.vende_casco=true
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { CircleDollarSign } from "lucide-react"
@@ -32,18 +32,19 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
+const valorSchema = z
+  .string()
+  .min(1, { message: "Informe o valor" })
+  .refine(
+    (v) =>
+      !Number.isNaN(Number(v.replace(",", "."))) &&
+      Number(v.replace(",", ".")) > 0,
+    { message: "Valor precisa ser um número maior que zero" },
+  )
+
 const formSchema = z.object({
-  valor: z
-    .string()
-    .min(1, { message: "Informe o valor" })
-    .refine(
-      (v) =>
-        !Number.isNaN(Number(v.replace(",", "."))) &&
-        Number(v.replace(",", ".")) > 0,
-      {
-        message: "Valor precisa ser um número maior que zero",
-      },
-    ),
+  valor: valorSchema,
+  preco_casco: z.string().optional(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -61,15 +62,25 @@ const EditPreco = ({ produto }: EditPrecoProps) => {
     resolver: zodResolver(formSchema),
     mode: "onBlur",
     criteriaMode: "all",
-    defaultValues: { valor: produto.preco_atual ?? "" },
+    defaultValues: {
+      valor: produto.preco_atual ?? "",
+      preco_casco: produto.preco_casco_atual ?? "",
+    },
   })
 
   const mutation = useMutation({
-    mutationFn: (data: FormData) =>
-      PrecosService.setPreco({
+    mutationFn: (data: FormData) => {
+      const precoCasco = produto.vende_casco && data.preco_casco
+        ? data.preco_casco.replace(",", ".")
+        : undefined
+      return PrecosService.setPreco({
         produtoId: produto.id,
-        requestBody: { valor: data.valor.replace(",", ".") },
-      }),
+        requestBody: {
+          valor: data.valor.replace(",", "."),
+          preco_casco: precoCasco,
+        },
+      })
+    },
     onSuccess: () => {
       showSuccessToast("Preço atualizado com sucesso")
       setIsOpen(false)
@@ -80,7 +91,19 @@ const EditPreco = ({ produto }: EditPrecoProps) => {
     },
   })
 
-  const onSubmit = (data: FormData) => mutation.mutate(data)
+  const onSubmit = (data: FormData) => {
+    // Valida preco_casco quando o produto vende casco
+    if (produto.vende_casco) {
+      const v = data.preco_casco?.replace(",", ".")
+      if (!v || Number.isNaN(Number(v)) || Number(v) <= 0) {
+        form.setError("preco_casco", {
+          message: "Informe o preço do casco (obrigatório para este produto)",
+        })
+        return
+      }
+    }
+    mutation.mutate(data)
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -95,19 +118,20 @@ const EditPreco = ({ produto }: EditPrecoProps) => {
           <DialogTitle>Preço — {produto.title}</DialogTitle>
           <DialogDescription>
             Cadastrar um novo valor fecha o preço vigente atual e passa a valer
-            a partir de agora -- vendas já feitas não mudam.
+            a partir de agora — vendas já feitas não mudam.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="py-4">
+            <div className="grid gap-4 py-4">
               <FormField
                 control={form.control}
                 name="valor"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Valor (R$) <span className="text-destructive">*</span>
+                      Preço do gás (R$){" "}
+                      <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -122,6 +146,32 @@ const EditPreco = ({ produto }: EditPrecoProps) => {
                   </FormItem>
                 )}
               />
+
+              {/* campo de preço do casco: só aparece quando produto.vende_casco=true */}
+              {produto.vende_casco && (
+                <FormField
+                  control={form.control}
+                  name="preco_casco"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Preço do casco (R$){" "}
+                        <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="0,00"
+                          type="text"
+                          inputMode="decimal"
+                          {...field}
+                          required
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
 
             <DialogFooter>

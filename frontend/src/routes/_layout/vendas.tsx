@@ -1,4 +1,5 @@
-// [mcp-local harness] feature: emprestimo_casco | plano: fd76b143 | 2026-09-07 15:50:50
+// [mcp-local harness] feature: venda_casco_produto | plano: 088582f9 | 2026-09-09 11:57:44
+// Integra toggle de casco na sacola: SacolaItem carrega vendeCasco/precoCascoAtual/comCasco; onToggleCasco atualiza estado; VendaCreate envia com_casco por item
 // Passa cascos={cascos} para ResumoVendaDialog
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
@@ -122,10 +123,14 @@ function Vendas() {
     setDataPagamentoVale((atual) => atual ? atual : somarDiasISO(hojeISO(), 30))
   }, [formaPagamento])
 
-  const total = sacola.reduce(
-    (acc, item) => acc + Number(item.precoUnitario) * item.quantidade,
-    0,
-  )
+  // total inclui casco quando com_casco=true
+  const total = sacola.reduce((acc, item) => {
+    const gas = Number(item.precoUnitario) * item.quantidade
+    const casco = item.comCasco && item.precoCascoAtual
+      ? Number(item.precoCascoAtual) * item.quantidade
+      : 0
+    return acc + gas + casco
+  }, 0)
 
   useEffect(() => {
     if (formaPagamento === "gas_povo") {
@@ -160,7 +165,19 @@ function Vendas() {
           i.produtoId === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i,
         )
       }
-      return [...prev, { produtoId: produto.id, title: produto.title, precoUnitario: produto.preco_atual as string, quantidade: 1 }]
+      return [
+        ...prev,
+        {
+          produtoId: produto.id,
+          title: produto.title,
+          precoUnitario: produto.preco_atual as string,
+          quantidade: 1,
+          // campos de casco — preenchidos a partir do catálogo de preços
+          vendeCasco: produto.vende_casco ?? false,
+          precoCascoAtual: produto.preco_casco_atual ?? null,
+          comCasco: false,
+        },
+      ]
     })
   }
 
@@ -184,6 +201,15 @@ function Vendas() {
   const handleRemover = (produtoId: string) => {
     setSacola((prev) => prev.filter((i) => i.produtoId !== produtoId))
     setCascos((prev) => prev.filter((c) => c.produto_id !== produtoId))
+  }
+
+  // Toggle de casco: ativa/desativa a venda de casco para um item da sacola
+  const handleToggleCasco = (produtoId: string, comCasco: boolean) => {
+    setSacola((prev) =>
+      prev.map((i) =>
+        i.produtoId === produtoId ? { ...i, comCasco } : i,
+      ),
+    )
   }
 
   const resetForm = () => {
@@ -219,7 +245,12 @@ function Vendas() {
           gas_povo_frete: formaPagamento === "gas_povo" && gasPovoFrete ? gasPovoFrete : undefined,
           valor_pago: formaPagamento === "gas_povo" ? (gasPovoValorGov || "0") : valorPago,
           data_venda: dataVenda,
-          itens: sacola.map((i) => ({ produto_id: i.produtoId, quantidade: i.quantidade })),
+          // envia com_casco por item para que o backend registre o snapshot do preço do casco
+          itens: sacola.map((i) => ({
+            produto_id: i.produtoId,
+            quantidade: i.quantidade,
+            com_casco: i.comCasco ?? false,
+          })),
           cascos: cascos.length > 0 ? cascos : [],
         },
       }),
@@ -309,6 +340,7 @@ function Vendas() {
             onIncrementar={handleIncrementar}
             onDecrementar={handleDecrementar}
             onRemover={handleRemover}
+            onToggleCasco={handleToggleCasco}
           />
           <PainelCasco
             itens={sacola}
