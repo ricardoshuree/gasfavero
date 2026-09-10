@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: baixa_mix_fiado | plano: acbcee2e | 2026-09-10 16:08:49
-# Adiciona PATCH /{id}/pagamentos/{pagamento_id}/baixar — endpoint de baixa para fiado em vendas mix. Importa VendaPagamentoBaixarRequest.
+# [mcp-local harness] feature: estorno_recebimento | plano: cc78fca8 | 2026-09-10 16:47:44
+# Adiciona endpoints PATCH /estornar (legado) e /pagamentos/{id}/estornar (mix) ao vendas.py
 import calendar
 import uuid
 from datetime import date, timedelta
@@ -45,6 +45,7 @@ from app.models import (
     VendaBaixarValeRequest,
     VendaCreate,
     VendaEditarRequest,
+    VendaEstornarRequest,
     VendaItem,
     VendaItemPublic,
     VendaLog,
@@ -53,6 +54,7 @@ from app.models import (
     VendaPagamento,
     VendaPagamentoBaixarRequest,
     VendaPagamentoCreate,
+    VendaPagamentoEstornarRequest,
     VendaPagamentoPublic,
     VendaPublic,
     VendasPublic,
@@ -131,7 +133,6 @@ def _nome_usuario(user: User | None) -> str | None:
 
 
 def _pagamentos_public(session: SessionDep, venda_id: uuid.UUID) -> list[VendaPagamentoPublic]:
-    """Busca os recebíveis de uma venda (Tema 2). Retorna lista vazia para vendas antigas."""
     linhas = session.exec(
         select(VendaPagamento).where(VendaPagamento.venda_id == venda_id)
     ).all()
@@ -215,7 +216,6 @@ def _to_venda_public(session: SessionDep, venda: Venda) -> VendaPublic:
             editado_em=log.editado_em,
         ))
 
-    # Recebíveis Tema 2 (vazio para vendas antigas)
     pagamentos = _pagamentos_public(session, venda.id)
 
     return VendaPublic(
@@ -296,7 +296,6 @@ def _validar_e_reservar_vale(
     pgto: VendaPagamentoCreate,
     motorista_id: uuid.UUID,
 ) -> tuple[Vale, date]:
-    """Valida e reserva o vale para uma linha de fiado no mix."""
     if pgto.vale_numero is None:
         raise HTTPException(status_code=400, detail="Informe o numero do vale para pagamento fiado")
     vale = session.exec(select(Vale).where(Vale.numero == pgto.vale_numero)).first()
@@ -305,7 +304,6 @@ def _validar_e_reservar_vale(
     bloco = session.get(BlocoVale, vale.bloco_id)
     if not bloco or bloco.motorista_id != motorista_id:
         raise HTTPException(status_code=400, detail=f"O vale {pgto.vale_numero} pertence ao bloco de outro motorista")
-    # Verifica se já usado em Venda legada OU em VendaPagamento
     if session.exec(select(Venda).where(Venda.vale_id == vale.id)).first():
         raise HTTPException(status_code=400, detail=f"O vale {pgto.vale_numero} ja foi usado em outra venda")
     if session.exec(select(VendaPagamento).where(VendaPagamento.vale_id == vale.id)).first():
@@ -355,7 +353,6 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
     blocos = session.exec(
         select(BlocoVale).where(BlocoVale.motorista_id == motorista_id).order_by(BlocoVale.created_at)
     ).all()
-    # Vales usados em vendas legadas OU em VendaPagamento (Tema 2)
     usados_legado = select(Venda.vale_id).where(col(Venda.vale_id).is_not(None))
     usados_mix = select(VendaPagamento.vale_id).where(col(VendaPagamento.vale_id).is_not(None))
     for bloco in blocos:
@@ -506,11 +503,6 @@ def baixar_pagamento_mix(
     pagamento_id: uuid.UUID,
     body: VendaPagamentoBaixarRequest,
 ) -> Any:
-    """
-    Baixa (parcial ou total) de uma linha de fiado em venda mix.
-    Opera sobre VendaPagamento diretamente — não sobre a Venda pai.
-    Ao final, verifica se todas as linhas pendentes foram pagas e fecha Venda.pago_em.
-    """
     venda = session.get(Venda, id)
     if not venda:
         raise HTTPException(status_code=404, detail="Venda nao encontrada")
@@ -535,30 +527,142 @@ def baixar_pagamento_mix(
     agora = get_datetime_utc()
     pgto.valor_pago = pgto.valor_pago + body.valor_pago
 
-    # Quitação total desta linha
     if pgto.valor_pago >= pgto.valor:
         pgto.valor_pago = pgto.valor
         pgto.pago_em = agora
 
     session.add(pgto)
 
-    # Atualiza valor_pago na Venda pai
     venda.valor_pago = venda.valor_pago + body.valor_pago
 
-    # Verifica se todas as linhas pendentes (vale) foram pagas
     todas_pagas = session.exec(
         select(VendaPagamento)
         .where(VendaPagamento.venda_id == id)
         .where(VendaPagamento.forma_pagamento == "vale")
         .where(col(VendaPagamento.pago_em).is_(None))
-        .where(VendaPagamento.id != pagamento_id)  # exclui a que acabamos de atualizar
+        .where(VendaPagamento.id != pagamento_id)
     ).first() is None
 
     if todas_pagas and pgto.pago_em is not None:
-        # Todas as linhas de fiado pagas → fecha a venda
         venda.pago_em = agora
         venda.recebido_em = agora
         venda.recebido_por_id = current_user.id
+
+    session.add(venda)
+    session.commit()
+    session.refresh(venda)
+    return _to_venda_public(session, venda)
+
+
+@router.patch("/{id}/pagamentos/{pagamento_id}/estornar", response_model=VendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))])
+def estornar_pagamento_mix(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    pagamento_id: uuid.UUID,
+    body: VendaPagamentoEstornarRequest,
+) -> Any:
+    """
+    Estorna um recebimento (parcial ou total) de uma linha de fiado em venda mix.
+    Subtrai valor_estorno de VendaPagamento.valor_pago e de Venda.valor_pago.
+    Se a linha estava quitada (pago_em preenchido), volta para aberta.
+    Se a venda estava fechada (pago_em preenchido), volta para aberta.
+    """
+    venda = session.get(Venda, id)
+    if not venda:
+        raise HTTPException(status_code=404, detail="Venda nao encontrada")
+    if venda.status == "cancelada":
+        raise HTTPException(status_code=400, detail="Venda cancelada")
+
+    pgto = session.get(VendaPagamento, pagamento_id)
+    if not pgto or pgto.venda_id != id:
+        raise HTTPException(status_code=404, detail="Pagamento nao encontrado nesta venda")
+    if pgto.forma_pagamento != "vale":
+        raise HTTPException(status_code=400, detail="Apenas linhas de fiado (vale) podem ser estornadas por este endpoint")
+    if pgto.valor_pago <= Decimal("0"):
+        raise HTTPException(status_code=400, detail="Nao ha valor pago para estornar nesta linha")
+    if body.valor_estorno > pgto.valor_pago:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Valor de estorno (R$ {body.valor_estorno:.2f}) excede o valor pago (R$ {pgto.valor_pago:.2f})"
+        )
+
+    pgto.valor_pago = pgto.valor_pago - body.valor_estorno
+    # Se estava quitada, reabre a linha
+    if pgto.pago_em is not None:
+        pgto.pago_em = None
+
+    session.add(pgto)
+
+    # Subtrai da Venda pai
+    novo_valor_pago_venda = venda.valor_pago - body.valor_estorno
+    venda.valor_pago = max(Decimal("0"), novo_valor_pago_venda)
+
+    # Se a venda estava fechada, reabre
+    if venda.pago_em is not None:
+        venda.pago_em = None
+        venda.recebido_em = None
+        venda.recebido_por_id = None
+
+    _gravar_log_venda(
+        session, venda.id, "estorno_recebimento",
+        f"R$ {body.valor_estorno:.2f} estornado da linha {pagamento_id}",
+        f"valor_pago_linha={pgto.valor_pago:.2f} valor_pago_venda={venda.valor_pago:.2f}",
+        current_user.id
+    )
+
+    session.add(venda)
+    session.commit()
+    session.refresh(venda)
+    return _to_venda_public(session, venda)
+
+
+@router.patch("/{id}/estornar", response_model=VendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))])
+def estornar_recebimento_legado(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    body: VendaEstornarRequest,
+) -> Any:
+    """
+    Estorna um recebimento (parcial ou total) de uma venda legada (forma=vale).
+    Subtrai valor_estorno de Venda.valor_pago.
+    Se a venda estava quitada (pago_em preenchido), volta para aberta.
+    """
+    venda = session.get(Venda, id)
+    if not venda:
+        raise HTTPException(status_code=404, detail="Venda nao encontrada")
+    if venda.forma_pagamento != "vale":
+        raise HTTPException(status_code=400, detail="Este endpoint e apenas para vendas legadas em vale")
+    if venda.status == "cancelada":
+        raise HTTPException(status_code=400, detail="Venda cancelada")
+    if venda.valor_pago <= Decimal("0"):
+        raise HTTPException(status_code=400, detail="Nao ha valor pago para estornar")
+    if body.valor_estorno > venda.valor_pago:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Valor de estorno (R$ {body.valor_estorno:.2f}) excede o valor pago (R$ {venda.valor_pago:.2f})"
+        )
+
+    novo_valor_pago = venda.valor_pago - body.valor_estorno
+    venda.valor_pago = max(Decimal("0"), novo_valor_pago)
+
+    # Se estava quitada, reabre
+    if venda.pago_em is not None:
+        venda.pago_em = None
+        venda.recebido_em = None
+        venda.recebido_por_id = None
+
+    _gravar_log_venda(
+        session, venda.id, "estorno_recebimento",
+        f"R$ {body.valor_estorno:.2f} estornado",
+        f"valor_pago={venda.valor_pago:.2f}",
+        current_user.id
+    )
 
     session.add(venda)
     session.commit()
@@ -950,7 +1054,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
 
     usa_mix = len(venda_in.pagamentos) > 0
 
-    # ── Caminho legado (sem mix) ─────────────────────────────────────────────
     vale = None
     data_pagamento_vale_legado = venda_in.data_pagamento_vale
     vale_gas_bloco_id: uuid.UUID | None = None
@@ -972,7 +1075,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
                 raise HTTPException(status_code=400, detail=f"O vale {venda_in.vale_numero} ja foi usado em outra venda")
             if data_pagamento_vale_legado is None:
                 data_pagamento_vale_legado = _quinto_dia_util_proximo_mes()
-
         elif venda_in.forma_pagamento == "vale_gas":
             pago_em_legado = None
             if venda_in.vale_gas_numero is None:
@@ -991,14 +1093,12 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             if ja_usado:
                 raise HTTPException(status_code=400, detail=f"O vale gas numero {num} ja foi usado em outra venda")
             vale_gas_bloco_id = bloco_gas.id
-
         elif venda_in.forma_pagamento == "gas_povo":
             pago_em_legado = None
             if venda_in.gas_povo_frete is None:
                 raise HTTPException(status_code=400, detail="Informe o valor do frete para vendas Gas do Povo")
             gas_povo_frete_recebido_em = get_datetime_utc()
 
-    # ── Itens da sacola ───────────────────────────────────────────────────────
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 
@@ -1039,7 +1139,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             for item_in, _, subtotal, snap in itens_resolvidos
         )
 
-    # ── Cria a Venda ──────────────────────────────────────────────────────────
     if usa_mix:
         forma_venda = "mix"
         todas_a_vista = all(p.forma_pagamento in FORMAS_A_VISTA for p in venda_in.pagamentos)
@@ -1073,7 +1172,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
     session.add(venda)
     session.flush()
 
-    # ── Itens ─────────────────────────────────────────────────────────────────
     for item_in, preco, subtotal_gas, preco_casco_snap in itens_resolvidos:
         session.add(VendaItem(
             venda_id=venda.id,
@@ -1085,7 +1183,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             preco_casco_snapshot=preco_casco_snap,
         ))
 
-    # ── Empréstimos de casco ──────────────────────────────────────────────────
     qtd_por_produto = {str(i.produto_id): i.quantidade for i in venda_in.itens}
     for casco_in in venda_in.cascos:
         if casco_in.quantidade <= 0:
@@ -1105,7 +1202,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
             cliente_id=venda_in.cliente_id,
         ))
 
-    # ── Recebíveis Tema 2 (mix de formas) ────────────────────────────────────
     if usa_mix:
         agora = get_datetime_utc()
         for pgto in venda_in.pagamentos:
@@ -1117,7 +1213,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
 
             if pgto.forma_pagamento == "vale":
                 pgto_vale, pgto_vcto = _validar_e_reservar_vale(session, pgto, venda_in.motorista_id)
-
             elif pgto.forma_pagamento == "vale_gas":
                 if pgto.vale_gas_numero is None or pgto.vale_gas_bloco_id is None:
                     raise HTTPException(status_code=400, detail="Informe numero e bloco do vale gas")
@@ -1136,7 +1231,6 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
                 if ja_usado_venda or ja_usado_mix:
                     raise HTTPException(status_code=400, detail=f"O vale gas {num} ja foi usado em outra venda")
                 pgto_vale_gas_bloco_id = bloco_gas.id
-
             elif pgto.forma_pagamento == "gas_povo":
                 if pgto.gas_povo_frete is None:
                     raise HTTPException(status_code=400, detail="Informe o valor do frete para Gas do Povo")

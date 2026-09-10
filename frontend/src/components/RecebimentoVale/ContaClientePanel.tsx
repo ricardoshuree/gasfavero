@@ -1,12 +1,7 @@
-// [mcp-local harness] feature: fix_extrato_parcial | plano: 7f4f8900 | 2026-09-10 16:37:18
-// useEffect reage à chave agregada de valor_pago (não só length) — extrato atualiza após pagamentos parciais
+// [mcp-local harness] feature: estorno_recebimento | plano: cc78fca8 | 2026-09-10 16:52:56
+// Estorno real: chama backend para sessão atual e histórico persistido. mutationEstornoSessao e mutationEstornoHistorico substituem o mock.
 // Enter confirma recebimento; histórico sessão com estorno; extrato abre ao carregar; lançamentos locais imediatos
-// Melhorias v3:
-// 1. Folhas mix chamam PATCH /vendas/{id}/pagamentos/{pagamento_id}/baixar (endpoint dedicado)
-// 2. Saldo de folha mix = p.valor - p.valor_pago (não valor_total da venda)
-// 3. onExtrato chamado ao carregar (extrato abre automaticamente)
-// 4. Enter no input de valor confirma recebimento
-// 5. useEffect reage ao valor_pago agregado (não só ao length) para atualizar extrato após parciais
+// v4: estorno real via backend (legado + mix); botão Estornar no histórico persistido também
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertCircle, ArrowDown, ArrowUp, Check, Clock, FileText, Loader2, RotateCcw } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -34,7 +29,10 @@ interface LancamentoSessao {
   valor: number
   data: string
   tipo: "recebimento" | "estorno"
+  // dados necessários para estorno real
   vendaId: string
+  isMix: boolean
+  pagamentoId?: string  // só para mix
 }
 
 interface FolhaFiado {
@@ -44,6 +42,16 @@ interface FolhaFiado {
   valorTotal: number
   valorPago: number
   saldo: number
+  isMix: boolean
+  pagamentoId?: string
+}
+
+// Folhas quitadas para o histórico persistido (com botão estornar)
+interface FolhaQuitada {
+  vendaId: string
+  valeNumero: number | null
+  pagoEm: string | null
+  valorPago: number
   isMix: boolean
   pagamentoId?: string
 }
@@ -66,7 +74,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
 
   const vendas = historico?.data ?? []
 
-  // Chave que muda sempre que qualquer valor_pago muda — garante atualização do extrato após parciais
+  // Chave reativa ao conteúdo — atualiza extrato após pagamentos parciais
   const vendasChave = vendas.map((v) => {
     const pgtosPago = (v.pagamentos ?? []).map((p) => `${p.id}:${p.valor_pago ?? 0}`).join(",")
     return `${v.id}:${v.valor_pago}:${v.pago_em ?? ""}:${pgtosPago}`
@@ -76,22 +84,17 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     if (vendas.length > 0) onExtrato(vendas)
   }, [vendasChave])
 
-  // Folhas em aberto — legadas + mix
+  // Folhas em aberto
   const fiadasAbertas: FolhaFiado[] = []
   for (const v of vendas) {
     if (v.status === "cancelada") continue
-
     if (v.forma_pagamento === "vale" && !v.pago_em) {
       const valorTotal = Number(v.valor_total)
       const valorPago = Number(v.valor_pago)
       fiadasAbertas.push({
-        vendaId: v.id,
-        valeNumero: v.vale_numero ?? null,
+        vendaId: v.id, valeNumero: v.vale_numero ?? null,
         dataPagamentoVale: v.data_pagamento_vale ?? null,
-        valorTotal,
-        valorPago,
-        saldo: valorTotal - valorPago,
-        isMix: false,
+        valorTotal, valorPago, saldo: valorTotal - valorPago, isMix: false,
       })
     } else if (v.forma_pagamento === "mix") {
       for (const p of (v.pagamentos ?? [])) {
@@ -99,14 +102,10 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
           const valorTotal = Number(p.valor)
           const valorPago = Number(p.valor_pago ?? 0)
           fiadasAbertas.push({
-            vendaId: v.id,
-            valeNumero: p.vale_numero ?? null,
+            vendaId: v.id, valeNumero: p.vale_numero ?? null,
             dataPagamentoVale: p.data_pagamento_vale ?? null,
-            valorTotal,
-            valorPago,
-            saldo: valorTotal - valorPago,
-            isMix: true,
-            pagamentoId: p.id,
+            valorTotal, valorPago, saldo: valorTotal - valorPago,
+            isMix: true, pagamentoId: p.id,
           })
         }
       }
@@ -114,10 +113,18 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
   }
   fiadasAbertas.sort((a, b) => (a.dataPagamentoVale ?? "").localeCompare(b.dataPagamentoVale ?? ""))
 
-  const fiadasPagas = vendas
+  // Folhas quitadas (histórico persistido — legado)
+  const fiadasPagas: FolhaQuitada[] = vendas
     .filter((v) => v.forma_pagamento === "vale" && !!v.pago_em && v.status !== "cancelada")
     .sort((a, b) => new Date(b.pago_em!).getTime() - new Date(a.pago_em!).getTime())
     .slice(0, 5)
+    .map((v) => ({
+      vendaId: v.id,
+      valeNumero: v.vale_numero ?? null,
+      pagoEm: v.pago_em ?? null,
+      valorPago: Number(v.valor_pago),
+      isMix: false,
+    }))
 
   const saldoTotal = fiadasAbertas.reduce((s, f) => s + f.saldo, 0)
 
@@ -144,6 +151,14 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     setFeedbacks(simularDistribuicao(val))
   }, [valorInput, fiadasAbertas.length])
 
+  async function _invalidarEAtualizar() {
+    await queryClient.invalidateQueries({ queryKey: ["historico-fiado", clienteId] })
+    await queryClient.invalidateQueries({ queryKey: ["recebimentoValeResumo"] })
+    await queryClient.invalidateQueries({ queryKey: ["vales-recebimento-lista"] })
+    const novo = await VendasService.readHistoricoVendasCliente({ clienteId, limit: 50 })
+    onExtrato(novo.data ?? [])
+  }
+
   const mutation = useMutation({
     mutationFn: async () => {
       const val = parseFloat(valorInput) || 0
@@ -158,20 +173,15 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
         if (folha.isMix) {
           if (!folha.pagamentoId) continue
           await VendasService.baixarPagamentoMix({
-            id: folha.vendaId,
-            pagamentoId: folha.pagamentoId,
+            id: folha.vendaId, pagamentoId: folha.pagamentoId,
             requestBody: { valor_pago: String(valorEstaFolha) },
           })
           const quitou = valorEstaFolha >= folha.saldo
           novosLancamentos.push({
-            id: crypto.randomUUID(),
-            tipo: "recebimento",
-            descricao: quitou
-              ? `Fiado nº ${folha.valeNumero ?? "—"} quitado (mix)`
-              : `Parcial — fiado nº ${folha.valeNumero ?? "—"} (mix)`,
-            valor: valorEstaFolha,
-            data: new Date().toLocaleDateString("pt-BR"),
-            vendaId: folha.vendaId,
+            id: crypto.randomUUID(), tipo: "recebimento",
+            descricao: quitou ? `Fiado nº ${folha.valeNumero ?? "—"} quitado (mix)` : `Parcial — fiado nº ${folha.valeNumero ?? "—"} (mix)`,
+            valor: valorEstaFolha, data: new Date().toLocaleDateString("pt-BR"),
+            vendaId: folha.vendaId, isMix: true, pagamentoId: folha.pagamentoId,
           })
         } else {
           await VendasService.marcarVendaPago({
@@ -184,25 +194,20 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
               requestBody: { valor_pago: String(folha.valorTotal) },
             })
             novosLancamentos.push({
-              id: crypto.randomUUID(),
-              tipo: "recebimento",
+              id: crypto.randomUUID(), tipo: "recebimento",
               descricao: `Fiado nº ${folha.valeNumero ?? "—"} quitado`,
-              valor: valorEstaFolha,
-              data: new Date().toLocaleDateString("pt-BR"),
-              vendaId: folha.vendaId,
+              valor: valorEstaFolha, data: new Date().toLocaleDateString("pt-BR"),
+              vendaId: folha.vendaId, isMix: false,
             })
           } else {
             novosLancamentos.push({
-              id: crypto.randomUUID(),
-              tipo: "recebimento",
+              id: crypto.randomUUID(), tipo: "recebimento",
               descricao: `Parcial — fiado nº ${folha.valeNumero ?? "—"}`,
-              valor: valorEstaFolha,
-              data: new Date().toLocaleDateString("pt-BR"),
-              vendaId: folha.vendaId,
+              valor: valorEstaFolha, data: new Date().toLocaleDateString("pt-BR"),
+              vendaId: folha.vendaId, isMix: false,
             })
           }
         }
-
         resto -= valorEstaFolha
       }
       return novosLancamentos
@@ -212,11 +217,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
       setValorInput("")
       setFeedbacks([])
       setLancamentosSessao((prev) => [...novosLancamentos, ...prev])
-      await queryClient.invalidateQueries({ queryKey: ["historico-fiado", clienteId] })
-      await queryClient.invalidateQueries({ queryKey: ["recebimentoValeResumo"] })
-      await queryClient.invalidateQueries({ queryKey: ["vales-recebimento-lista"] })
-      const novo = await VendasService.readHistoricoVendasCliente({ clienteId, limit: 50 })
-      onExtrato(novo.data ?? [])
+      await _invalidarEAtualizar()
       setTimeout(() => inputRef.current?.focus(), 100)
     },
     onError: (err: any) => {
@@ -224,24 +225,62 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     },
   })
 
-  const mutationEstorno = useMutation({
-    mutationFn: async (lancamento: LancamentoSessao) => lancamento,
-    onSuccess: (lancamento) => {
+  // Estorno real — sessão atual
+  const mutationEstornoSessao = useMutation({
+    mutationFn: async (lancamento: LancamentoSessao) => {
+      if (lancamento.isMix && lancamento.pagamentoId) {
+        await VendasService.estornarPagamentoMix({
+          id: lancamento.vendaId, pagamentoId: lancamento.pagamentoId,
+          requestBody: { valor_estorno: String(lancamento.valor) },
+        })
+      } else {
+        await VendasService.estornarRecebimentoLegado({
+          id: lancamento.vendaId,
+          requestBody: { valor_estorno: String(lancamento.valor) },
+        })
+      }
+      return lancamento
+    },
+    onSuccess: async (lancamento) => {
       showSuccessToast("Estorno registrado")
       setLancamentosSessao((prev) => [
-        {
-          id: crypto.randomUUID(), tipo: "estorno",
-          descricao: `Estorno — ${lancamento.descricao}`,
-          valor: lancamento.valor,
-          data: new Date().toLocaleDateString("pt-BR"),
-          vendaId: lancamento.vendaId,
-        },
+        { id: crypto.randomUUID(), tipo: "estorno", descricao: `Estorno — ${lancamento.descricao}`,
+          valor: lancamento.valor, data: new Date().toLocaleDateString("pt-BR"),
+          vendaId: lancamento.vendaId, isMix: lancamento.isMix, pagamentoId: lancamento.pagamentoId },
         ...prev.filter((l) => l.id !== lancamento.id),
       ])
+      await _invalidarEAtualizar()
       setEstornandoId(null)
     },
-    onError: () => {
-      showErrorToast("Erro ao estornar — entre em contato com o suporte")
+    onError: (err: any) => {
+      showErrorToast(err?.body?.detail ?? "Erro ao estornar")
+      setEstornandoId(null)
+    },
+  })
+
+  // Estorno real — histórico persistido (legado)
+  const mutationEstornoHistorico = useMutation({
+    mutationFn: async (folha: FolhaQuitada) => {
+      await VendasService.estornarRecebimentoLegado({
+        id: folha.vendaId,
+        requestBody: { valor_estorno: String(folha.valorPago) },
+      })
+      return folha
+    },
+    onSuccess: async (folha) => {
+      showSuccessToast("Estorno registrado")
+      setLancamentosSessao((prev) => [
+        { id: crypto.randomUUID(), tipo: "estorno",
+          descricao: `Estorno — fiado nº ${folha.valeNumero ?? "—"} quitado`,
+          valor: folha.valorPago, data: new Date().toLocaleDateString("pt-BR"),
+          vendaId: folha.vendaId, isMix: false },
+        ...prev,
+      ])
+      await _invalidarEAtualizar()
+      setEstornandoId(null)
+    },
+    onError: (err: any) => {
+      showErrorToast(err?.body?.detail ?? "Erro ao estornar")
       setEstornandoId(null)
     },
   })
@@ -323,6 +362,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
             Histórico de recebimentos
           </div>
 
+          {/* Sessão atual */}
           {lancamentosSessao.map((l, i) => (
             <div key={l.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-0">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -346,9 +386,9 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
                     type="button"
                     onClick={() => {
                       setEstornandoId(l.id)
-                      mutationEstorno.mutate(l)
+                      mutationEstornoSessao.mutate(l)
                     }}
-                    disabled={estornandoId === l.id}
+                    disabled={estornandoId === l.id || mutationEstornoSessao.isPending}
                     className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 border border-border rounded px-1.5 py-0.5"
                     title="Estornar este recebimento"
                   >
@@ -362,20 +402,41 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
             </div>
           ))}
 
-          {fiadasPagas.map((v) => (
-            <div key={v.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-0 opacity-70">
-              <div className="w-7 h-7 rounded-full bg-[#00a63e]/10 flex items-center justify-center flex-shrink-0">
-                <ArrowDown className="h-3.5 w-3.5 text-[#00a63e]" />
+          {/* Histórico persistido */}
+          {fiadasPagas.map((f) => {
+            const estornoId = `hist-${f.vendaId}`
+            return (
+              <div key={f.vendaId} className="flex items-center gap-3 px-4 py-2 border-b last:border-0 opacity-80">
+                <div className="w-7 h-7 rounded-full bg-[#00a63e]/10 flex items-center justify-center flex-shrink-0">
+                  <ArrowDown className="h-3.5 w-3.5 text-[#00a63e]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">Fiado nº {f.valeNumero ?? "—"} quitado</p>
+                  <p className="text-xs text-muted-foreground">
+                    {f.pagoEm ? new Date(f.pagoEm).toLocaleDateString("pt-BR") : "—"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-medium text-[#00a63e]">+ {fmt(f.valorPago)}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstornandoId(estornoId)
+                      mutationEstornoHistorico.mutate(f)
+                    }}
+                    disabled={estornandoId === estornoId || mutationEstornoHistorico.isPending}
+                    className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 border border-border rounded px-1.5 py-0.5"
+                    title="Estornar este recebimento"
+                  >
+                    {estornandoId === estornoId
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <><RotateCcw className="h-3 w-3" /> Estornar</>
+                    }
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium">Fiado nº {v.vale_numero ?? "—"} quitado</p>
-                <p className="text-xs text-muted-foreground">
-                  {v.pago_em ? new Date(v.pago_em).toLocaleDateString("pt-BR") : "—"}
-                </p>
-              </div>
-              <p className="text-xs font-medium text-[#00a63e]">+ {fmt(v.valor_pago)}</p>
-            </div>
-          ))}
+            )
+          })}
         </>
       )}
 
@@ -395,10 +456,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
           <div className="flex gap-2">
             <Input
               ref={inputRef}
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
+              type="number" inputMode="decimal" step="0.01" min="0"
               value={valorInput}
               onChange={(e) => setValorInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -406,12 +464,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
               className="h-8 text-sm w-36"
               autoFocus
             />
-            <Button
-              size="sm"
-              onClick={handleReceber}
-              disabled={mutation.isPending || !valorInput}
-              className="h-8"
-            >
+            <Button size="sm" onClick={handleReceber} disabled={mutation.isPending || !valorInput} className="h-8">
               {mutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Receber"}
             </Button>
           </div>

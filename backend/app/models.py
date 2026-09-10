@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: baixa_mix_fiado | plano: acbcee2e | 2026-09-10 16:05:12
-# Adiciona VendaPagamentoBaixarRequest ao final da seção de schemas de Venda
+# [mcp-local harness] feature: estorno_recebimento | plano: cc78fca8 | 2026-09-10 16:43:59
+# Adiciona VendaPagamentoEstornarRequest e VendaEstornarRequest ao models.py
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -13,10 +13,6 @@ from sqlmodel import Field, Relationship, SQLModel
 def get_datetime_utc() -> datetime:
     return datetime.now(UTC)
 
-
-# ---------------------------------------------------------------------------
-# RBAC — Role
-# ---------------------------------------------------------------------------
 
 class Role(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -136,10 +132,6 @@ class ModulePermissionMatrixUpdate(SQLModel):
     entries: list[RolePermissionUpdate]
 
 
-# ---------------------------------------------------------------------------
-# User
-# ---------------------------------------------------------------------------
-
 class UserBase(SQLModel):
     email: EmailStr = Field(unique=True, index=True, max_length=255)
     is_active: bool = True
@@ -207,10 +199,6 @@ class UsersPublicWithRoles(SQLModel):
     count: int
 
 
-# ---------------------------------------------------------------------------
-# Item (Produto)
-# ---------------------------------------------------------------------------
-
 class ItemBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
@@ -248,10 +236,6 @@ class ItemsPublic(SQLModel):
     data: list[ItemPublic]
     count: int
 
-
-# ---------------------------------------------------------------------------
-# Geografia
-# ---------------------------------------------------------------------------
 
 class Cidade(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -333,10 +317,6 @@ class EnderecoPublic(SQLModel):
     longitude: Decimal | None = None
 
 
-# ---------------------------------------------------------------------------
-# Cliente
-# ---------------------------------------------------------------------------
-
 class Cliente(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     nome: str = Field(max_length=255)
@@ -381,10 +361,6 @@ class ClientesPublic(SQLModel):
     count: int
 
 
-# ---------------------------------------------------------------------------
-# Preco
-# ---------------------------------------------------------------------------
-
 class Preco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
@@ -419,10 +395,6 @@ class ProdutoComPrecoPublic(SQLModel):
 class ProdutosComPrecoPublic(SQLModel):
     data: list[ProdutoComPrecoPublic]
 
-
-# ---------------------------------------------------------------------------
-# Bloco de Vale (fiado dos motoristas)
-# ---------------------------------------------------------------------------
 
 class BlocoVale(SQLModel, table=True):
     __tablename__ = "bloco_vale"
@@ -459,10 +431,6 @@ class BlocosValePublic(SQLModel):
     data: list[BlocoValePublic]
 
 
-# ---------------------------------------------------------------------------
-# Venda
-# ---------------------------------------------------------------------------
-
 class Venda(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cliente_id: uuid.UUID = Field(foreign_key="cliente.id", ondelete="RESTRICT")
@@ -489,10 +457,6 @@ class Venda(SQLModel, table=True):
     cancelada_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     cancelada_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
 
-
-# ---------------------------------------------------------------------------
-# VendaPagamento — Tema 2: recebível por forma de pagamento
-# ---------------------------------------------------------------------------
 
 class VendaPagamento(SQLModel, table=True):
     """
@@ -525,13 +489,10 @@ class VendaPagamentoCreate(SQLModel):
     """Uma linha de pagamento no mix. Enviada pelo frontend no array pagamentos[]."""
     forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
     valor: Decimal = Field(gt=0, decimal_places=2)
-    # Fiado
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
-    # Vale Gás
     vale_gas_numero: int | None = None
     vale_gas_bloco_id: uuid.UUID | None = None
-    # Gás do Povo
     gas_povo_frete: Decimal | None = None
 
 
@@ -552,6 +513,16 @@ class VendaPagamentoPublic(SQLModel):
 class VendaPagamentoBaixarRequest(SQLModel):
     """Body para PATCH /vendas/{id}/pagamentos/{pagamento_id}/baixar"""
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
+
+
+class VendaPagamentoEstornarRequest(SQLModel):
+    """Body para PATCH /vendas/{id}/pagamentos/{pagamento_id}/estornar (mix)"""
+    valor_estorno: Decimal = Field(gt=0, decimal_places=2)
+
+
+class VendaEstornarRequest(SQLModel):
+    """Body para PATCH /vendas/{id}/estornar (legado forma=vale)"""
+    valor_estorno: Decimal = Field(gt=0, decimal_places=2)
 
 
 class VendaItem(SQLModel, table=True):
@@ -576,10 +547,6 @@ class VendaLog(SQLModel, table=True):
     editado_por_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
     editado_em: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
-
-# ---------------------------------------------------------------------------
-# Emprestimo de Casco + Log de Auditoria
-# ---------------------------------------------------------------------------
 
 class EmprestimoCasco(SQLModel, table=True):
     __tablename__ = "emprestimo_casco"
@@ -673,10 +640,7 @@ class VendaCreate(SQLModel):
     cliente_id: uuid.UUID
     endereco_id: uuid.UUID | None = None
     motorista_id: uuid.UUID
-    # forma_pagamento: usado quando NÃO há mix (retrocompat + formas exclusivas vale_gas/gas_povo)
     forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
-    # pagamentos: lista de recebíveis para mix de formas (Tema 2)
-    # Se preenchido, substitui forma_pagamento+valor_pago no cálculo de pago_em
     pagamentos: list[VendaPagamentoCreate] = Field(default_factory=list)
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
@@ -724,7 +688,6 @@ class VendaPublic(SQLModel):
     motorista_id: uuid.UUID
     motorista_nome: str
     forma_pagamento: str
-    # pagamentos: lista de recebíveis (preenchida quando há mix; vazia para vendas antigas)
     pagamentos: list[VendaPagamentoPublic] = []
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
@@ -837,10 +800,6 @@ class InadimplentesMotoristaPublic(SQLModel):
 class InadimplentesMotoristasPublic(SQLModel):
     data: list[InadimplentesMotoristaPublic]
 
-
-# ---------------------------------------------------------------------------
-# Chamado (DemandaVenda)
-# ---------------------------------------------------------------------------
 
 class DemandaVenda(SQLModel, table=True):
     __tablename__ = "demanda_venda"
@@ -955,10 +914,6 @@ class MotoristaFcmTokenUpdate(SQLModel):
     fcm_token: str = Field(min_length=1, max_length=255)
 
 
-# ---------------------------------------------------------------------------
-# Auth / Token
-# ---------------------------------------------------------------------------
-
 class Message(SQLModel):
     message: str
 
@@ -976,10 +931,6 @@ class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
 
-
-# ---------------------------------------------------------------------------
-# Plano de Contas + Lancamento Contabil
-# ---------------------------------------------------------------------------
 
 class Conta(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -1036,10 +987,6 @@ class LancamentoContabilPublic(SQLModel):
     created_at: datetime
 
 
-# ---------------------------------------------------------------------------
-# Bloco de Vale Gas
-# ---------------------------------------------------------------------------
-
 class BlocoValeGas(SQLModel, table=True):
     __tablename__ = "bloco_vale_gas"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -1072,10 +1019,6 @@ class BlocoValeGasPublic(SQLModel):
 class BlocosValeGasPublic(SQLModel):
     data: list[BlocoValeGasPublic]
 
-
-# ---------------------------------------------------------------------------
-# Gas do Povo — Recebimento
-# ---------------------------------------------------------------------------
 
 class GasPovoVendaPublic(SQLModel):
     id: uuid.UUID
