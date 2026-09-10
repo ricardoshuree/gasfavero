@@ -1,7 +1,6 @@
-// [mcp-local harness] feature: sacola_reset_e_resumo_valor_pago | plano: 22053e73 | 2026-09-09 17:09:42
-// Valor pago em linha própria com cor âmbar quando desconto; total inclui cascos comprados; lista formas no mix
-// Valor pago exibido em linha própria com cor âmbar quando < total da sacola.
-// Total inclui cascos comprados na venda.
+// [mcp-local harness] feature: fix_folhas_saldo_zero | plano: f0e4f3dd | 2026-09-10 17:49:41
+// Fiado puro mostra 'A receber depois' em azul em vez de 'Desconto' em âmbar
+// fix: fiado puro (valor_pago=0) exibe "A receber depois" em vez de "Desconto"
 import { Package } from "lucide-react"
 
 import type { EnderecoPublic } from "@/client"
@@ -41,7 +40,7 @@ interface ResumoVendaDialogProps {
   itens: SacolaItem[]
   cascos?: CascoItem[]
   formaPagamento: string
-  formasPagamento?: string[]        // lista completa para mix
+  formasPagamento?: string[]
   valeNumero: string
   dataPagamentoVale: string
   valorPago: string
@@ -67,7 +66,6 @@ export function ResumoVendaDialog({
   isPending,
   onConfirm,
 }: ResumoVendaDialogProps) {
-  // Total da sacola inclui gás + cascos comprados (com_casco=true)
   const totalItens = itens.reduce((acc, item) => {
     const gas = Number(item.precoUnitario) * item.quantidade
     const casco = item.comCasco && item.precoCascoAtual
@@ -77,13 +75,15 @@ export function ResumoVendaDialog({
   }, 0)
 
   const valorPagoNum = Number(valorPago) || 0
-  const desconto = valorPagoNum < totalItens
+  const formas = formasPagamento.length > 0 ? formasPagamento : [formaPagamento]
+
+  // Fiado puro: forma única = vale e valor_pago = 0
+  const fiadoPuro = formas.length === 1 && formas[0] === "vale" && valorPagoNum === 0
+  // Desconto real: valor_pago < total mas não é fiado puro
+  const desconto = !fiadoPuro && valorPagoNum < totalItens && valorPagoNum > 0
 
   const tituloPorProduto = Object.fromEntries(itens.map((i) => [i.produtoId, i.title]))
   const totalCascos = cascos.reduce((acc, c) => acc + c.quantidade, 0)
-
-  // Label da forma de pagamento: usa lista completa se houver mix
-  const formas = formasPagamento.length > 0 ? formasPagamento : [formaPagamento]
   const labelFormas = formas.map((f) => LABEL_PAGAMENTO[f] ?? f).join(" + ")
 
   return (
@@ -164,19 +164,28 @@ export function ResumoVendaDialog({
             </p>
             <p className="text-muted-foreground text-xs">Data: {dataVenda}</p>
 
-            {/* Valor pago — âmbar quando há desconto */}
-            <div className="mt-1 flex items-center justify-between rounded-md border px-3 py-2">
-              <span className="text-sm text-muted-foreground">Valor pago</span>
-              <span className={`text-sm font-semibold ${desconto ? "text-amber-500" : "text-[#00a63e]"}`}>
-                {formatMoney(valorPagoNum)}
-              </span>
-            </div>
-
-            {/* Aviso de desconto */}
-            {desconto && (
-              <p className="mt-1 text-xs text-amber-500">
-                ⚠️ Desconto de {formatMoney(totalItens - valorPagoNum)} aplicado
-              </p>
+            {/* Fiado puro: mostra "A receber depois" */}
+            {fiadoPuro ? (
+              <div className="mt-1 flex items-center justify-between rounded-md border border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/30 px-3 py-2">
+                <span className="text-sm text-blue-700 dark:text-blue-300">A receber depois</span>
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  {formatMoney(totalItens)}
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className="mt-1 flex items-center justify-between rounded-md border px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Valor pago</span>
+                  <span className={`text-sm font-semibold ${desconto ? "text-amber-500" : "text-[#00a63e]"}`}>
+                    {formatMoney(valorPagoNum)}
+                  </span>
+                </div>
+                {desconto && (
+                  <p className="mt-1 text-xs text-amber-500">
+                    ⚠️ Desconto de {formatMoney(totalItens - valorPagoNum)} aplicado
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

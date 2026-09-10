@@ -1,7 +1,7 @@
-// [mcp-local harness] feature: estorno_recebimento | plano: cc78fca8 | 2026-09-10 16:52:56
-// Estorno real: chama backend para sessão atual e histórico persistido. mutationEstornoSessao e mutationEstornoHistorico substituem o mock.
-// Enter confirma recebimento; histórico sessão com estorno; extrato abre ao carregar; lançamentos locais imediatos
-// v4: estorno real via backend (legado + mix); botão Estornar no histórico persistido também
+// [mcp-local harness] feature: fix_folhas_saldo_zero | plano: 2d7ae58a | 2026-09-10 17:48:58
+// Filtra saldo > 0 em fiadasAbertas — folhas com valor_pago = valor_total não aparecem como abertas
+// fix: folhas com saldo zero filtradas de fiadasAbertas (legado e mix)
+// v5: saldo > 0 obrigatório para aparecer como folha em aberto
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertCircle, ArrowDown, ArrowUp, Check, Clock, FileText, Loader2, RotateCcw } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -29,10 +29,9 @@ interface LancamentoSessao {
   valor: number
   data: string
   tipo: "recebimento" | "estorno"
-  // dados necessários para estorno real
   vendaId: string
   isMix: boolean
-  pagamentoId?: string  // só para mix
+  pagamentoId?: string
 }
 
 interface FolhaFiado {
@@ -46,7 +45,6 @@ interface FolhaFiado {
   pagamentoId?: string
 }
 
-// Folhas quitadas para o histórico persistido (com botão estornar)
 interface FolhaQuitada {
   vendaId: string
   valeNumero: number | null
@@ -74,7 +72,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
 
   const vendas = historico?.data ?? []
 
-  // Chave reativa ao conteúdo — atualiza extrato após pagamentos parciais
   const vendasChave = vendas.map((v) => {
     const pgtosPago = (v.pagamentos ?? []).map((p) => `${p.id}:${p.valor_pago ?? 0}`).join(",")
     return `${v.id}:${v.valor_pago}:${v.pago_em ?? ""}:${pgtosPago}`
@@ -84,27 +81,32 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     if (vendas.length > 0) onExtrato(vendas)
   }, [vendasChave])
 
-  // Folhas em aberto
+  // Folhas em aberto — obrigatório: pago_em null E saldo > 0
   const fiadasAbertas: FolhaFiado[] = []
   for (const v of vendas) {
     if (v.status === "cancelada") continue
+
     if (v.forma_pagamento === "vale" && !v.pago_em) {
       const valorTotal = Number(v.valor_total)
       const valorPago = Number(v.valor_pago)
+      const saldo = valorTotal - valorPago
+      if (saldo <= 0) continue  // ← ignora folhas com saldo zerado
       fiadasAbertas.push({
         vendaId: v.id, valeNumero: v.vale_numero ?? null,
         dataPagamentoVale: v.data_pagamento_vale ?? null,
-        valorTotal, valorPago, saldo: valorTotal - valorPago, isMix: false,
+        valorTotal, valorPago, saldo, isMix: false,
       })
     } else if (v.forma_pagamento === "mix") {
       for (const p of (v.pagamentos ?? [])) {
         if (p.forma_pagamento === "vale" && !p.pago_em) {
           const valorTotal = Number(p.valor)
           const valorPago = Number(p.valor_pago ?? 0)
+          const saldo = valorTotal - valorPago
+          if (saldo <= 0) continue  // ← ignora linhas mix com saldo zerado
           fiadasAbertas.push({
             vendaId: v.id, valeNumero: p.vale_numero ?? null,
             dataPagamentoVale: p.data_pagamento_vale ?? null,
-            valorTotal, valorPago, saldo: valorTotal - valorPago,
+            valorTotal, valorPago, saldo,
             isMix: true, pagamentoId: p.id,
           })
         }
@@ -225,7 +227,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     },
   })
 
-  // Estorno real — sessão atual
   const mutationEstornoSessao = useMutation({
     mutationFn: async (lancamento: LancamentoSessao) => {
       if (lancamento.isMix && lancamento.pagamentoId) {
@@ -258,7 +259,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     },
   })
 
-  // Estorno real — histórico persistido (legado)
   const mutationEstornoHistorico = useMutation({
     mutationFn: async (folha: FolhaQuitada) => {
       await VendasService.estornarRecebimentoLegado({
@@ -362,7 +362,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
             Histórico de recebimentos
           </div>
 
-          {/* Sessão atual */}
           {lancamentosSessao.map((l, i) => (
             <div key={l.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-0">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -390,7 +389,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
                     }}
                     disabled={estornandoId === l.id || mutationEstornoSessao.isPending}
                     className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 border border-border rounded px-1.5 py-0.5"
-                    title="Estornar este recebimento"
                   >
                     {estornandoId === l.id
                       ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -402,7 +400,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
             </div>
           ))}
 
-          {/* Histórico persistido */}
           {fiadasPagas.map((f) => {
             const estornoId = `hist-${f.vendaId}`
             return (
@@ -426,7 +423,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
                     }}
                     disabled={estornandoId === estornoId || mutationEstornoHistorico.isPending}
                     className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 border border-border rounded px-1.5 py-0.5"
-                    title="Estornar este recebimento"
                   >
                     {estornandoId === estornoId
                       ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -447,7 +443,6 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
         </div>
       )}
 
-      {/* Registrar recebimento */}
       {fiadasAbertas.length > 0 && (
         <div className="px-4 py-3 border-t bg-muted/20 flex flex-col gap-2.5">
           <p className="text-xs font-medium text-muted-foreground">
