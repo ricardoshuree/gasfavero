@@ -1,26 +1,20 @@
-﻿// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835 | 2026-08-05 22:36:49
-// status default 'todos'; link de volta atualizado pra 'ver todos'
-// [mcp-local harness] feature: fix-tabela-todos-status | plano: f9688835
-// status default agora e "todos" (junta aberto+atrasado+aguardando_baixa);
-// "Pagos" filtra pra aguardando_baixa; link de volta atualizado
-// Pagina /recebimento-vale -- gate via modulo 'vendas' (mesma
-// permissao das outras telas de venda). Dashboard + tabela filtravel/
-// paginada + painel de detalhe com o fluxo Pago -> Baixa.
+// [mcp-local harness] feature: fix_prop_extrato_aberto | plano: 015f6ffe | 2026-09-10 14:34:21
+// Remove extratoAberto da chamada de ContaClientePanel
+// Tela de Recebimento de Fiado — conta-corrente por cliente.
+// Layout: painel de métricas + busca de clientes (col 1) + conta do cliente (col 2) + extrato imprimível (col 3).
+// A col 3 abre ao clicar em "Extrato" ou automaticamente após quitação total.
+import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
-import { Search } from "lucide-react"
+import { AlertCircle, Check, Clock, Search } from "lucide-react"
 import { useState } from "react"
 
-import { UsersService } from "@/client"
-import DetalheValeSheet from "@/components/RecebimentoVale/DetalheValeSheet"
-import ResumoCards from "@/components/RecebimentoVale/ResumoCards"
-import ValesTable from "@/components/RecebimentoVale/ValesTable"
+import { UsersService, VendasService, type ClientePublic } from "@/client"
+import ContaClientePanel from "@/components/RecebimentoVale/ContaClientePanel"
+import ReciboPanel from "@/components/RecebimentoVale/ReciboPanel"
+import { ResumoCards } from "@/components/RecebimentoVale/ResumoCards"
 import { Input } from "@/components/ui/input"
 
 const MODULE = "vendas"
-
-type Status = "todos" | "aguardando_baixa"
-type OrderBy = "data_venda" | "valor_total" | "cliente"
-type OrderDir = "asc" | "desc"
 
 export const Route = createFileRoute("/_layout/recebimento-vale")({
   component: RecebimentoVale,
@@ -29,97 +23,233 @@ export const Route = createFileRoute("/_layout/recebimento-vale")({
     const canRead =
       perms.is_superuser ||
       perms.permissions.some((p) => p.module === MODULE && p.can_read)
-    if (!canRead) {
-      throw redirect({ to: "/" })
-    }
+    if (!canRead) throw redirect({ to: "/" })
   },
-  head: () => ({
-    meta: [
-      {
-        title: "Recebimento de Fiado - FastAPI Template",
-      },
-    ],
-  }),
+  head: () => ({ meta: [{ title: "Recebimento de Fiado - FastAPI Template" }] }),
 })
 
+function fmt(v: number | string): string {
+  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+function useClientesComFiado(busca: string) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["vales-recebimento-lista"],
+    queryFn: () => VendasService.readValesRecebimento({ limit: 200, status: "todos" }),
+  })
+
+  const vendas = data?.data ?? []
+
+  const mapaClientes = new Map<string, {
+    cliente_id: string
+    cliente_nome: string
+    saldo: number
+    tem_atraso: boolean
+    vence_breve: boolean
+  }>()
+
+  for (const v of vendas) {
+    const saldo = Number(v.valor_total) - Number(v.valor_pago)
+    if (saldo <= 0) continue
+    const existing = mapaClientes.get(v.cliente_id)
+    const hoje = new Date()
+    const vcto = v.data_pagamento_vale ? new Date(v.data_pagamento_vale) : null
+    const atrasada = vcto ? vcto < hoje : false
+    const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
+
+    if (existing) {
+      existing.saldo += saldo
+      if (atrasada) existing.tem_atraso = true
+      if (vinceBreve) existing.vence_breve = true
+    } else {
+      mapaClientes.set(v.cliente_id, {
+        cliente_id: v.cliente_id,
+        cliente_nome: v.cliente_nome,
+        saldo,
+        tem_atraso: atrasada,
+        vence_breve: vinceBreve,
+      })
+    }
+  }
+
+  const lista = Array.from(mapaClientes.values())
+    .sort((a, b) => {
+      if (a.tem_atraso && !b.tem_atraso) return -1
+      if (!a.tem_atraso && b.tem_atraso) return 1
+      return b.saldo - a.saldo
+    })
+    .filter((c) => {
+      if (!busca.trim()) return true
+      return c.cliente_nome.toLowerCase().includes(busca.toLowerCase())
+    })
+
+  return { lista, isLoading }
+}
+
 function RecebimentoVale() {
-  const [status, setStatus] = useState<Status>("todos")
-  const [buscaTexto, setBuscaTexto] = useState("")
-  const [page, setPage] = useState(0)
-  const [orderBy, setOrderBy] = useState<OrderBy>("data_venda")
-  const [orderDir, setOrderDir] = useState<OrderDir>("desc")
-  const [vendaSelecionada, setVendaSelecionada] = useState<string | null>(null)
+  const [busca, setBusca] = useState("")
+  const [clienteSelecionado, setClienteSelecionado] = useState<{
+    id: string
+    nome: string
+    cpf: string
+  } | null>(null)
+  const [reciboVendas, setReciboVendas] = useState<any[]>([])
+  const [extratoAberto, setExtratoAberto] = useState(false)
 
-  const buscaNumero = buscaTexto.trim() === "" ? undefined : Number(buscaTexto)
+  const { lista, isLoading } = useClientesComFiado(busca)
 
-  function handleStatusChange(novoStatus: Status) {
-    setStatus(novoStatus)
-    setPage(0)
+  const { data: clienteData } = useQuery({
+    queryKey: ["cliente-detalhe", clienteSelecionado?.id],
+    queryFn: () =>
+      fetch(
+        `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/v1/clientes/${clienteSelecionado!.id}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } }
+      ).then((r) => r.json()),
+    enabled: !!clienteSelecionado?.id,
+    select: (data): ClientePublic => data,
+  })
+
+  function handleAbrirCliente(id: string, nome: string) {
+    setClienteSelecionado({ id, nome, cpf: "" })
+    setExtratoAberto(false)
+    setReciboVendas([])
   }
 
-  function handleSortChange(novoOrderBy: OrderBy, novoOrderDir: OrderDir) {
-    setOrderBy(novoOrderBy)
-    setOrderDir(novoOrderDir)
-    setPage(0)
+  function handleExtrato(vendas: any[]) {
+    setReciboVendas(vendas)
+    setExtratoAberto(true)
   }
+
+  function toggleExtrato() {
+    setExtratoAberto((prev) => !prev)
+  }
+
+  const cpf = clienteData?.cpf ?? clienteSelecionado?.cpf ?? "—"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 pb-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Recebimento de Fiado
-        </h1>
-        <p className="text-muted-foreground">
-          Consulta e baixa das vendas em fiado -- separado da venda em si, essa
-          tela é só pra controlar o que já foi (ou ainda precisa ser) recebido.
+        <h1 className="text-2xl font-bold tracking-tight">Recebimento de Fiado</h1>
+        <p className="text-muted-foreground text-sm">
+          Conta-corrente por cliente — pagamentos são abatidos das folhas mais antigas.
         </p>
       </div>
 
-      <ResumoCards onVerPagos={() => handleStatusChange("aguardando_baixa")} />
+      <ResumoCards />
 
-      <div className="flex items-center gap-3">
-        <div className="relative max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Consulta número do fiado..."
-            className="pl-8"
-            type="number"
-            value={buscaTexto}
-            onChange={(e) => {
-              setBuscaTexto(e.target.value)
-              setPage(0)
-            }}
-          />
+      <div
+        className={`grid gap-4 ${
+          extratoAberto && clienteSelecionado
+            ? "grid-cols-1 lg:grid-cols-[280px_1fr_280px]"
+            : "grid-cols-1 lg:grid-cols-[280px_1fr]"
+        }`}
+      >
+        {/* Col 1: lista de clientes */}
+        <div className="flex flex-col gap-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente..."
+              className="pl-8 h-9"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+
+          {isLoading && (
+            <div className="flex flex-col gap-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-xl border bg-muted/30" />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && lista.length === 0 && (
+            <div className="flex items-center justify-center p-6 text-muted-foreground text-sm border rounded-xl border-dashed">
+              <Check className="h-4 w-4 mr-2 text-[#00a63e]" />
+              Sem fiados em aberto
+            </div>
+          )}
+
+          {lista.map((c) => (
+            <button
+              key={c.cliente_id}
+              type="button"
+              onClick={() => handleAbrirCliente(c.cliente_id, c.cliente_nome)}
+              className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                clienteSelecionado?.id === c.cliente_id
+                  ? "border-primary bg-primary/5"
+                  : "bg-card hover:border-border-strong"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium truncate">{c.cliente_nome}</span>
+                <span className="text-sm font-medium text-destructive ml-2 flex-shrink-0">
+                  {fmt(c.saldo)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {c.tem_atraso && (
+                  <span className="inline-flex items-center gap-1 text-xs text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
+                    <AlertCircle className="h-3 w-3" />
+                    Em atraso
+                  </span>
+                )}
+                {!c.tem_atraso && c.vence_breve && (
+                  <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                    <Clock className="h-3 w-3" />
+                    Vence em breve
+                  </span>
+                )}
+                {!c.tem_atraso && !c.vence_breve && (
+                  <span className="inline-flex items-center gap-1 text-xs text-[#00a63e] bg-[#00a63e]/10 px-1.5 py-0.5 rounded">
+                    <Check className="h-3 w-3" />
+                    Em dia
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
         </div>
 
-        {status === "aguardando_baixa" && (
-          <button
-            type="button"
-            className="text-sm text-muted-foreground underline underline-offset-2"
-            onClick={() => handleStatusChange("todos")}
-          >
-            ← ver todos
-          </button>
+        {/* Col 2: conta do cliente */}
+        {clienteSelecionado ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={toggleExtrato}
+                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  extratoAberto
+                    ? "border-primary text-primary bg-primary/5"
+                    : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                }`}
+              >
+                Extrato {extratoAberto ? "▸" : "◂"}
+              </button>
+            </div>
+            <ContaClientePanel
+              clienteId={clienteSelecionado.id}
+              clienteNome={clienteSelecionado.nome}
+              clienteCpf={cpf}
+              onExtrato={handleExtrato}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center rounded-xl border border-dashed p-10 text-muted-foreground text-sm">
+            Selecione um cliente para ver a conta
+          </div>
+        )}
+
+        {/* Col 3: recibo */}
+        {extratoAberto && clienteSelecionado && (
+          <ReciboPanel
+            clienteNome={clienteSelecionado.nome}
+            clienteCpf={cpf}
+            vendas={reciboVendas}
+          />
         )}
       </div>
-
-      <ValesTable
-        status={status}
-        buscaNumero={buscaNumero}
-        page={page}
-        onPageChange={setPage}
-        orderBy={orderBy}
-        orderDir={orderDir}
-        onSortChange={handleSortChange}
-        onRowClick={setVendaSelecionada}
-      />
-
-      <DetalheValeSheet
-        vendaId={vendaSelecionada}
-        onOpenChange={(open) => {
-          if (!open) setVendaSelecionada(null)
-        }}
-      />
     </div>
   )
 }
