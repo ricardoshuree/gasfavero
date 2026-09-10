@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: estorno_recebimento | plano: cc78fca8 | 2026-09-10 16:43:59
-# Adiciona VendaPagamentoEstornarRequest e VendaEstornarRequest ao models.py
+# [mcp-local harness] feature: clientes_com_fiado_endpoint | plano: fb24aa48 | 2026-09-10 16:59:33
+# Adiciona ClienteFiadoPublic e ClientesFiadoPublic ao models.py
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -361,6 +361,21 @@ class ClientesPublic(SQLModel):
     count: int
 
 
+class ClienteFiadoPublic(SQLModel):
+    """Resumo de fiado em aberto por cliente — retornado por GET /vendas/clientes-com-fiado."""
+    cliente_id: str
+    cliente_nome: str
+    saldo: Decimal
+    tem_atraso: bool
+    vence_breve: bool
+    data_vencimento_mais_antiga: date | None = None
+
+
+class ClientesFiadoPublic(SQLModel):
+    data: list[ClienteFiadoPublic]
+    count: int
+
+
 class Preco(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     produto_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
@@ -459,13 +474,6 @@ class Venda(SQLModel, table=True):
 
 
 class VendaPagamento(SQLModel, table=True):
-    """
-    Um registro por forma de pagamento numa venda com mix.
-    Formas à vista: pago_em preenchido na criação.
-    Fiado (vale): pago_em null até a baixa; vale_id + data_pagamento_vale preenchidos.
-    Vale Gás: pago_em null até recebimento do governo.
-    Gás do Povo: gas_povo_frete preenchido; pago_em null até recebimento.
-    """
     __tablename__ = "venda_pagamento"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
@@ -473,20 +481,16 @@ class VendaPagamento(SQLModel, table=True):
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     valor_pago: Decimal = Field(default=Decimal("0"), sa_column=Column(Numeric(10, 2), nullable=False))
     pago_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
-    # Fiado
     vale_id: uuid.UUID | None = Field(default=None, foreign_key="vale.id", ondelete="RESTRICT")
     data_pagamento_vale: date | None = Field(default=None)
-    # Vale Gás
     vale_gas_numero: int | None = Field(default=None)
     vale_gas_bloco_id: uuid.UUID | None = Field(default=None, foreign_key="bloco_vale_gas.id", ondelete="RESTRICT")
-    # Gás do Povo
     gas_povo_frete: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
     gas_povo_frete_recebido_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
 
 
 class VendaPagamentoCreate(SQLModel):
-    """Uma linha de pagamento no mix. Enviada pelo frontend no array pagamentos[]."""
     forma_pagamento: Literal["cartao_debito", "cartao_credito", "pix", "dinheiro", "vale", "vale_gas", "gas_povo"]
     valor: Decimal = Field(gt=0, decimal_places=2)
     vale_numero: int | None = None
@@ -511,17 +515,14 @@ class VendaPagamentoPublic(SQLModel):
 
 
 class VendaPagamentoBaixarRequest(SQLModel):
-    """Body para PATCH /vendas/{id}/pagamentos/{pagamento_id}/baixar"""
     valor_pago: Decimal = Field(gt=0, decimal_places=2)
 
 
 class VendaPagamentoEstornarRequest(SQLModel):
-    """Body para PATCH /vendas/{id}/pagamentos/{pagamento_id}/estornar (mix)"""
     valor_estorno: Decimal = Field(gt=0, decimal_places=2)
 
 
 class VendaEstornarRequest(SQLModel):
-    """Body para PATCH /vendas/{id}/estornar (legado forma=vale)"""
     valor_estorno: Decimal = Field(gt=0, decimal_places=2)
 
 

@@ -1,8 +1,8 @@
-# [mcp-local harness] feature: estorno_recebimento | plano: cc78fca8 | 2026-09-10 16:47:44
-# Adiciona endpoints PATCH /estornar (legado) e /pagamentos/{id}/estornar (mix) ao vendas.py
+# [mcp-local harness] feature: clientes_com_fiado_endpoint | plano: fb24aa48 | 2026-09-10 17:03:30
+# Adiciona GET /vendas/clientes-com-fiado — agrega saldo legado + mix por cliente via SQL puro, sem limit
 import calendar
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -20,6 +20,8 @@ from app.models import (
     BlocoValeGas,
     Cidade,
     Cliente,
+    ClienteFiadoPublic,
+    ClientesFiadoPublic,
     EmprestimoCasco,
     Endereco,
     EnderecoPublic,
@@ -382,6 +384,98 @@ def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
     return query.where(col(Venda.recebido_em).is_not(None))
 
 
+@router.get("/clientes-com-fiado", response_model=ClientesFiadoPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="read"))])
+def read_clientes_com_fiado(session: SessionDep) -> Any:
+    """
+    Agrega saldo de fiado em aberto por cliente diretamente no banco.
+    Cobre legado (forma=vale, pago_em IS NULL) e mix (VendaPagamento.forma='vale', pago_em IS NULL).
+    Sem limit — retorna todos os clientes com qualquer saldo devedor.
+    """
+    hoje = date.today()
+    limite_atraso = hoje - timedelta(days=DIAS_ATRASO_VALE)
+    limite_breve = hoje + timedelta(days=7)
+
+    conn = session.connection()
+
+    # ── Legado: vendas com forma_pagamento='vale' e pago_em IS NULL ──────────
+    rows_legado = conn.execute(sa.text("""
+        SELECT
+            v.cliente_id::text            AS cliente_id,
+            c.nome                        AS cliente_nome,
+            SUM(v.valor_total - v.valor_pago) AS saldo,
+            MIN(v.data_pagamento_vale)    AS data_vcto_mais_antiga
+        FROM venda v
+        JOIN cliente c ON c.id = v.cliente_id
+        WHERE v.forma_pagamento = 'vale'
+          AND v.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (v.valor_total - v.valor_pago) > 0
+        GROUP BY v.cliente_id, c.nome
+    """)).fetchall()
+
+    # ── Mix: VendaPagamento.forma='vale' e pago_em IS NULL ───────────────────
+    rows_mix = conn.execute(sa.text("""
+        SELECT
+            v.cliente_id::text            AS cliente_id,
+            c.nome                        AS cliente_nome,
+            SUM(vp.valor - vp.valor_pago) AS saldo,
+            MIN(vp.data_pagamento_vale)   AS data_vcto_mais_antiga
+        FROM venda_pagamento vp
+        JOIN venda v ON v.id = vp.venda_id
+        JOIN cliente c ON c.id = v.cliente_id
+        WHERE vp.forma_pagamento = 'vale'
+          AND vp.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (vp.valor - vp.valor_pago) > 0
+        GROUP BY v.cliente_id, c.nome
+    """)).fetchall()
+
+    # ── Agregar os dois conjuntos por cliente ─────────────────────────────────
+    mapa: dict[str, dict] = {}
+
+    for row in rows_legado:
+        cid = row.cliente_id
+        saldo = Decimal(str(row.saldo))
+        vcto = row.data_vcto_mais_antiga
+        if cid not in mapa:
+            mapa[cid] = {"cliente_id": cid, "cliente_nome": row.cliente_nome,
+                         "saldo": Decimal("0"), "data_vcto_mais_antiga": None}
+        mapa[cid]["saldo"] += saldo
+        if vcto and (mapa[cid]["data_vcto_mais_antiga"] is None or vcto < mapa[cid]["data_vcto_mais_antiga"]):
+            mapa[cid]["data_vcto_mais_antiga"] = vcto
+
+    for row in rows_mix:
+        cid = row.cliente_id
+        saldo = Decimal(str(row.saldo))
+        vcto = row.data_vcto_mais_antiga
+        if cid not in mapa:
+            mapa[cid] = {"cliente_id": cid, "cliente_nome": row.cliente_nome,
+                         "saldo": Decimal("0"), "data_vcto_mais_antiga": None}
+        mapa[cid]["saldo"] += saldo
+        if vcto and (mapa[cid]["data_vcto_mais_antiga"] is None or vcto < mapa[cid]["data_vcto_mais_antiga"]):
+            mapa[cid]["data_vcto_mais_antiga"] = vcto
+
+    resultado: list[ClienteFiadoPublic] = []
+    for entry in mapa.values():
+        vcto = entry["data_vcto_mais_antiga"]
+        tem_atraso = bool(vcto and vcto <= limite_atraso)
+        vence_breve = bool(vcto and not tem_atraso and vcto <= limite_breve)
+        resultado.append(ClienteFiadoPublic(
+            cliente_id=entry["cliente_id"],
+            cliente_nome=entry["cliente_nome"],
+            saldo=entry["saldo"],
+            tem_atraso=tem_atraso,
+            vence_breve=vence_breve,
+            data_vencimento_mais_antiga=vcto,
+        ))
+
+    # Ordena: em atraso primeiro, depois por saldo desc
+    resultado.sort(key=lambda r: (not r.tem_atraso, -r.saldo))
+
+    return ClientesFiadoPublic(data=resultado, count=len(resultado))
+
+
 @router.get("/vales-recebimento/resumo", response_model=ResumoRecebimentoValePublic,
     dependencies=[Depends(require_module_permission(MODULE, action="read"))])
 def read_resumo_recebimento_vale(session: SessionDep) -> Any:
@@ -564,12 +658,6 @@ def estornar_pagamento_mix(
     pagamento_id: uuid.UUID,
     body: VendaPagamentoEstornarRequest,
 ) -> Any:
-    """
-    Estorna um recebimento (parcial ou total) de uma linha de fiado em venda mix.
-    Subtrai valor_estorno de VendaPagamento.valor_pago e de Venda.valor_pago.
-    Se a linha estava quitada (pago_em preenchido), volta para aberta.
-    Se a venda estava fechada (pago_em preenchido), volta para aberta.
-    """
     venda = session.get(Venda, id)
     if not venda:
         raise HTTPException(status_code=404, detail="Venda nao encontrada")
@@ -590,17 +678,14 @@ def estornar_pagamento_mix(
         )
 
     pgto.valor_pago = pgto.valor_pago - body.valor_estorno
-    # Se estava quitada, reabre a linha
     if pgto.pago_em is not None:
         pgto.pago_em = None
 
     session.add(pgto)
 
-    # Subtrai da Venda pai
     novo_valor_pago_venda = venda.valor_pago - body.valor_estorno
     venda.valor_pago = max(Decimal("0"), novo_valor_pago_venda)
 
-    # Se a venda estava fechada, reabre
     if venda.pago_em is not None:
         venda.pago_em = None
         venda.recebido_em = None
@@ -628,11 +713,6 @@ def estornar_recebimento_legado(
     id: uuid.UUID,
     body: VendaEstornarRequest,
 ) -> Any:
-    """
-    Estorna um recebimento (parcial ou total) de uma venda legada (forma=vale).
-    Subtrai valor_estorno de Venda.valor_pago.
-    Se a venda estava quitada (pago_em preenchido), volta para aberta.
-    """
     venda = session.get(Venda, id)
     if not venda:
         raise HTTPException(status_code=404, detail="Venda nao encontrada")
@@ -651,7 +731,6 @@ def estornar_recebimento_legado(
     novo_valor_pago = venda.valor_pago - body.valor_estorno
     venda.valor_pago = max(Decimal("0"), novo_valor_pago)
 
-    # Se estava quitada, reabre
     if venda.pago_em is not None:
         venda.pago_em = None
         venda.recebido_em = None

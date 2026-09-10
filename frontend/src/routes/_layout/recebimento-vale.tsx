@@ -1,9 +1,6 @@
-// [mcp-local harness] feature: fix_extrato_badge_mix | plano: 0ccece1b | 2026-09-10 16:27:21
-// Corrige useClientesComFiado: saldo de mix calculado via VendaPagamento.vale (p.valor - p.valor_pago)
-// Extrato abre automaticamente ao clicar cliente; onExtrato atualiza sem fechar
-// Melhoria: extrato abre automaticamente ao selecionar cliente (handleAbrirCliente seta extratoAberto=true)
-// onExtrato atualiza reciboVendas sem fechar o extrato
-// fix: saldo de mix calculado via VendaPagamento.vale (não valor_total - valor_pago da Venda pai)
+// [mcp-local harness] feature: clientes_com_fiado_endpoint | plano: fb24aa48 | 2026-09-10 17:07:42
+// useClientesComFiado migrado para readClientesComFiado — endpoint dedicado, sem limit, sem processamento no cliente
+// useClientesComFiado migrado para GET /vendas/clientes-com-fiado (endpoint dedicado, sem limit)
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { AlertCircle, Check, Clock, Search } from "lucide-react"
@@ -36,61 +33,10 @@ function fmt(v: number | string): string {
 function useClientesComFiado(busca: string) {
   const { data, isLoading } = useQuery({
     queryKey: ["vales-recebimento-lista"],
-    queryFn: () => VendasService.readValesRecebimento({ limit: 200, status: "todos" }),
+    queryFn: () => VendasService.readClientesComFiado(),
   })
 
-  const vendas = data?.data ?? []
-  const mapaClientes = new Map<string, {
-    cliente_id: string; cliente_nome: string; saldo: number; tem_atraso: boolean; vence_breve: boolean
-  }>()
-
-  for (const v of vendas) {
-    const hoje = new Date()
-
-    if (v.forma_pagamento === "mix") {
-      // Mix: saldo = soma dos VendaPagamento.vale em aberto
-      const pagamentosVale = (v.pagamentos ?? []).filter(
-        (p) => p.forma_pagamento === "vale" && !p.pago_em
-      )
-      for (const p of pagamentosVale) {
-        const saldo = Number(p.valor) - Number(p.valor_pago ?? 0)
-        if (saldo <= 0) continue
-        const vcto = p.data_pagamento_vale ? new Date(p.data_pagamento_vale) : null
-        const atrasada = vcto ? vcto < hoje : false
-        const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
-        const existing = mapaClientes.get(v.cliente_id)
-        if (existing) {
-          existing.saldo += saldo
-          if (atrasada) existing.tem_atraso = true
-          if (vinceBreve) existing.vence_breve = true
-        } else {
-          mapaClientes.set(v.cliente_id, { cliente_id: v.cliente_id, cliente_nome: v.cliente_nome, saldo, tem_atraso: atrasada, vence_breve: vinceBreve })
-        }
-      }
-    } else {
-      // Legado: saldo = valor_total - valor_pago
-      const saldo = Number(v.valor_total) - Number(v.valor_pago)
-      if (saldo <= 0) continue
-      const vcto = v.data_pagamento_vale ? new Date(v.data_pagamento_vale) : null
-      const atrasada = vcto ? vcto < hoje : false
-      const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
-      const existing = mapaClientes.get(v.cliente_id)
-      if (existing) {
-        existing.saldo += saldo
-        if (atrasada) existing.tem_atraso = true
-        if (vinceBreve) existing.vence_breve = true
-      } else {
-        mapaClientes.set(v.cliente_id, { cliente_id: v.cliente_id, cliente_nome: v.cliente_nome, saldo, tem_atraso: atrasada, vence_breve: vinceBreve })
-      }
-    }
-  }
-
-  const lista = Array.from(mapaClientes.values())
-    .sort((a, b) => {
-      if (a.tem_atraso && !b.tem_atraso) return -1
-      if (!a.tem_atraso && b.tem_atraso) return 1
-      return b.saldo - a.saldo
-    })
+  const lista = (data?.data ?? [])
     .filter((c) => !busca.trim() || c.cliente_nome.toLowerCase().includes(busca.toLowerCase()))
 
   return { lista, isLoading }
