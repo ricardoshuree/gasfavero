@@ -1,8 +1,8 @@
-// [mcp-local harness] feature: fix_campo_valor_fiado_puro | plano: 280d9fad | 2026-09-10 18:16:46
-// Fiado puro: oculta input de valor, exibe tag azul 'Será cobrado depois', rodapé mostra 'A receber depois' em azul
+// [mcp-local harness] feature: fix_fiado_puro_editavel | plano: 90bde99a | 2026-09-10 18:24:41
+// Campo valor fiado puro volta a ser editável — operador define o valor; backend aceita ge=0
 // mutationFn envia pagamentos[] no mix; forma única usa caminho legado
-// fix: valor_pago = 0 quando forma única é vale (fiado puro)
-// fix: campo de valor oculto para fiado puro — exibe tag "Será cobrado depois"
+// fix: campo valor fiado puro editável — valor digitado é respeitado
+// fix: valor_pago = somaFormas para fiado (pode ser menor que total = desconto intencional)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
@@ -226,19 +226,10 @@ function Vendas() {
   )
 
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
+  const totalPago = formasPagamento.includes("gas_povo") ? gasPovoTotal : somaFormas
 
-  // Fiado puro: forma única = vale (não mix)
-  const formasMix = formasPagamento.filter((f) => !FORMAS_EXCLUSIVAS_SET.has(f))
-  const usaMix = formasMix.length > 1
-  const fiadoPuro = !usaMix && formasPagamento.length === 1 && formasPagamento[0] === "vale"
-
-  // Para exibição: fiado puro mostra totalSacola como "a receber"
-  const totalPago = formasPagamento.includes("gas_povo")
-    ? gasPovoTotal
-    : fiadoPuro ? 0 : somaFormas
-
-  const pagamentoOk = formasPagamento.length > 0 && (fiadoPuro || totalPago >= totalSacola)
-  const corPago = fiadoPuro ? "text-blue-500" : pagamentoOk ? COR_VERDE : "text-amber-500"
+  const pagamentoOk = formasPagamento.length > 0 && totalPago >= totalSacola
+  const corPago = pagamentoOk ? COR_VERDE : "text-amber-500"
 
   // ── Handlers valor por forma ──────────────────────────────────────────────
   const handleValorForma = (forma: FormaPagamentoValue, raw: string) => {
@@ -341,13 +332,13 @@ function Vendas() {
     parseFloat(gasPovoValorGov) > 0 && parseFloat(gasPovoFrete) > 0
 
   const formaPrincipal = formasPagamento[0] ?? null
+  const formasMix = formasPagamento.filter((f) => !FORMAS_EXCLUSIVAS_SET.has(f))
+  const usaMix = formasMix.length > 1
 
-  // Fiado puro → valor_pago = "0"; gas_povo → gasPovoTotal; demais → somaFormas
-  const valorPagoEnvio = (() => {
-    if (formasPagamento.includes("gas_povo")) return String(gasPovoTotal)
-    if (fiadoPuro) return "0"
-    return somaFormas.toFixed(2)
-  })()
+  // valor_pago: gas_povo usa total governo+frete; demais usa o que o operador digitou
+  const valorPagoEnvio = formasPagamento.includes("gas_povo")
+    ? String(gasPovoTotal)
+    : somaFormas.toFixed(2)
 
   const podeFinalizar =
     !!cliente && sacola.length > 0 && !!motoristaId && formasPagamento.length > 0 &&
@@ -522,21 +513,12 @@ function Vendas() {
                 <div key={forma} className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <Label className="w-20 shrink-0 text-sm">{LABEL_FORMA[forma]}</Label>
-                    {/* Fiado puro: oculta o input de valor — será cobrado depois */}
-                    {forma === "vale" && fiadoPuro ? (
-                      <div className="flex-1 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-3 py-1.5">
-                        <p className="text-xs text-blue-700 dark:text-blue-300">
-                          Será cobrado depois — {formatMoney(totalSacola)}
-                        </p>
-                      </div>
-                    ) : (
-                      <Input
-                        type="number" inputMode="decimal" step="0.01" min="0"
-                        value={valoresPorForma[forma] ?? ""}
-                        onChange={(e) => handleValorForma(forma, e.target.value)}
-                        placeholder="R$ 0,00" className="flex-1"
-                      />
-                    )}
+                    <Input
+                      type="number" inputMode="decimal" step="0.01" min="0"
+                      value={valoresPorForma[forma] ?? ""}
+                      onChange={(e) => handleValorForma(forma, e.target.value)}
+                      placeholder="R$ 0,00" className="flex-1"
+                    />
                   </div>
                   {forma === "vale" && (
                     <div className="ml-[5.5rem] flex flex-col gap-2 border-l-2 border-border pl-3">
@@ -580,23 +562,16 @@ function Vendas() {
               <span className={`text-sm font-medium ${COR_VERDE}`}>{formatMoney(totalSacola)}</span>
             </div>
             {formasPagamento.length > 0 && (
-              fiadoPuro ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-blue-500">A receber depois</span>
-                  <span className="text-sm font-semibold text-blue-500">{formatMoney(totalSacola)}</span>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm font-medium ${corPago}`}>Pago</span>
-                  <span className={`text-sm font-semibold ${corPago}`}>{formatMoney(totalPago)}</span>
-                </div>
-              )
+              <div className="flex items-center justify-between">
+                <span className={`text-sm font-medium ${corPago}`}>Pago</span>
+                <span className={`text-sm font-semibold ${corPago}`}>{formatMoney(totalPago)}</span>
+              </div>
             )}
             <div className="my-1 border-t" />
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Total</span>
-              <span className={`text-xl font-bold ${fiadoPuro ? "text-blue-500" : formasPagamento.length > 0 ? corPago : ""}`}>
-                {formatMoney(fiadoPuro ? totalSacola : formasPagamento.length > 0 ? totalPago : totalSacola)}
+              <span className={`text-xl font-bold ${formasPagamento.length > 0 ? corPago : ""}`}>
+                {formatMoney(formasPagamento.length > 0 ? totalPago : totalSacola)}
               </span>
             </div>
             <Button size="lg" className="w-full mt-1" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
