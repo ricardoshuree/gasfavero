@@ -374,7 +374,15 @@ def read_proximo_numero_vale(session: SessionDep, motorista_id: uuid.UUID) -> An
 
 
 def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
-    query = select(Venda).where(Venda.forma_pagamento == "vale").where(col(Venda.pago_em).is_(None))
+    venda_ids_mix = select(VendaPagamento.venda_id).where(
+        VendaPagamento.forma_pagamento == "vale"
+    ).where(col(VendaPagamento.pago_em).is_(None))
+    query = select(Venda).where(
+        or_(
+            Venda.forma_pagamento == "vale",
+            col(Venda.id).in_(venda_ids_mix),
+        )
+    ).where(col(Venda.pago_em).is_(None))
     if status == "aberto":
         return query.where(col(Venda.recebido_em).is_(None))
     return query.where(col(Venda.recebido_em).is_not(None))
@@ -418,7 +426,15 @@ def read_vales_recebimento(
     order_dir: Literal["asc", "desc"] = "desc",
     skip: int = 0, limit: int = 20,
 ) -> Any:
-    query = select(Venda).where(Venda.forma_pagamento == "vale").where(col(Venda.pago_em).is_(None))
+    venda_ids_mix = select(VendaPagamento.venda_id).where(
+        VendaPagamento.forma_pagamento == "vale"
+    ).where(col(VendaPagamento.pago_em).is_(None))
+    query = select(Venda).where(
+        or_(
+            Venda.forma_pagamento == "vale",
+            col(Venda.id).in_(venda_ids_mix),
+        )
+    ).where(col(Venda.pago_em).is_(None))
     if status == "aguardando_baixa":
         query = query.where(col(Venda.recebido_em).is_not(None))
     if busca_numero is not None:
