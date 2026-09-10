@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: clientes_com_fiado_endpoint | plano: fb24aa48 | 2026-09-10 17:03:30
-# Adiciona GET /vendas/clientes-com-fiado — agrega saldo legado + mix por cliente via SQL puro, sem limit
+# [mcp-local harness] feature: fix_resumo_recebimento_vale | plano: 94d679d1 | 2026-09-10 19:15:34
+# read_resumo_recebimento_vale: SQL direto, saldo real, legado+mix, card4=próximo mês
 import calendar
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -126,6 +126,17 @@ def _limites_mes_vigente(hoje: date) -> tuple[date, date]:
     else:
         proximo = date(hoje.year, hoje.month + 1, 1)
     return primeiro, proximo
+
+
+def _limites_proximo_mes(hoje: date) -> tuple[date, date]:
+    if hoje.month == 12:
+        primeiro = date(hoje.year + 1, 1, 1)
+        ultimo = date(hoje.year + 1, 1, 31)
+    else:
+        primeiro = date(hoje.year, hoje.month + 1, 1)
+        ultimo_dia = calendar.monthrange(hoje.year, hoje.month + 1)[1]
+        ultimo = date(hoje.year, hoje.month + 1, ultimo_dia)
+    return primeiro, ultimo
 
 
 def _nome_usuario(user: User | None) -> str | None:
@@ -387,18 +398,12 @@ def _query_base_vale_pendente(*, status: Literal["aberto", "aguardando_baixa"]):
 @router.get("/clientes-com-fiado", response_model=ClientesFiadoPublic,
     dependencies=[Depends(require_module_permission(MODULE, action="read"))])
 def read_clientes_com_fiado(session: SessionDep) -> Any:
-    """
-    Agrega saldo de fiado em aberto por cliente diretamente no banco.
-    Cobre legado (forma=vale, pago_em IS NULL) e mix (VendaPagamento.forma='vale', pago_em IS NULL).
-    Sem limit — retorna todos os clientes com qualquer saldo devedor.
-    """
     hoje = date.today()
     limite_atraso = hoje - timedelta(days=DIAS_ATRASO_VALE)
     limite_breve = hoje + timedelta(days=7)
 
     conn = session.connection()
 
-    # ── Legado: vendas com forma_pagamento='vale' e pago_em IS NULL ──────────
     rows_legado = conn.execute(sa.text("""
         SELECT
             v.cliente_id::text            AS cliente_id,
@@ -414,7 +419,6 @@ def read_clientes_com_fiado(session: SessionDep) -> Any:
         GROUP BY v.cliente_id, c.nome
     """)).fetchall()
 
-    # ── Mix: VendaPagamento.forma='vale' e pago_em IS NULL ───────────────────
     rows_mix = conn.execute(sa.text("""
         SELECT
             v.cliente_id::text            AS cliente_id,
@@ -431,7 +435,6 @@ def read_clientes_com_fiado(session: SessionDep) -> Any:
         GROUP BY v.cliente_id, c.nome
     """)).fetchall()
 
-    # ── Agregar os dois conjuntos por cliente ─────────────────────────────────
     mapa: dict[str, dict] = {}
 
     for row in rows_legado:
@@ -470,37 +473,151 @@ def read_clientes_com_fiado(session: SessionDep) -> Any:
             data_vencimento_mais_antiga=vcto,
         ))
 
-    # Ordena: em atraso primeiro, depois por saldo desc
     resultado.sort(key=lambda r: (not r.tem_atraso, -r.saldo))
-
     return ClientesFiadoPublic(data=resultado, count=len(resultado))
 
 
 @router.get("/vales-recebimento/resumo", response_model=ResumoRecebimentoValePublic,
     dependencies=[Depends(require_module_permission(MODULE, action="read"))])
 def read_resumo_recebimento_vale(session: SessionDep) -> Any:
+    """
+    Cards do Recebimento de Fiado — todos calculados via SQL direto,
+    cobrindo legado (forma=vale) e mix (VendaPagamento.forma=vale).
+
+    Card 1 — Crédito na praça: saldo real em aberto (valor_total - valor_pago)
+    Card 2 — Em atraso: saldo com data_pagamento_vale vencida (> 30 dias)
+    Card 3 — Recebido no mês: valor_pago de quitações no mês vigente
+    Card 4 — A vencer no próximo mês: saldo com vcto no mês seguinte
+    """
     hoje = date.today()
     limite_atraso = hoje - timedelta(days=DIAS_ATRASO_VALE)
-    primeiro_dia_mes, primeiro_dia_prox_mes = _limites_mes_vigente(hoje)
+    primeiro_mes, ultimo_mes = _limites_mes_vigente(hoje)
+    primeiro_prox, ultimo_prox = _limites_proximo_mes(hoje)
 
-    em_aberto = session.exec(_query_base_vale_pendente(status="aberto")).all()
-    aguardando_baixa = session.exec(_query_base_vale_pendente(status="aguardando_baixa")).all()
-    atraso = [v for v in em_aberto if v.data_venda <= limite_atraso]
-    pagos_mes = session.exec(
-        select(Venda).where(Venda.forma_pagamento == "vale")
-        .where(col(Venda.pago_em).is_not(None))
-        .where(func.date(Venda.pago_em) >= primeiro_dia_mes)
-        .where(func.date(Venda.pago_em) < primeiro_dia_prox_mes)
-    ).all()
+    conn = session.connection()
 
-    soma_vt = lambda vs: sum((v.valor_total for v in vs), Decimal("0"))
-    soma_vp = lambda vs: sum((v.valor_pago for v in vs), Decimal("0"))
+    # ── Card 1: saldo total em aberto (legado) ────────────────────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(v.valor_total - v.valor_pago), 0)
+        FROM venda v
+        WHERE v.forma_pagamento = 'vale'
+          AND v.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (v.valor_total - v.valor_pago) > 0
+    """)).scalar()
+    saldo_legado = Decimal(str(r))
+
+    # ── Card 1: saldo total em aberto (mix) ──────────────────────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(vp.valor - vp.valor_pago), 0)
+        FROM venda_pagamento vp
+        JOIN venda v ON v.id = vp.venda_id
+        WHERE vp.forma_pagamento = 'vale'
+          AND vp.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (vp.valor - vp.valor_pago) > 0
+    """)).scalar()
+    saldo_mix = Decimal(str(r))
+
+    em_aberto_valor = saldo_legado + saldo_mix
+
+    # ── Card 2: em atraso (legado) — vcto vencido > 30 dias ──────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(v.valor_total - v.valor_pago), 0)
+        FROM venda v
+        WHERE v.forma_pagamento = 'vale'
+          AND v.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (v.valor_total - v.valor_pago) > 0
+          AND v.data_pagamento_vale <= :limite_atraso
+    """), {"limite_atraso": limite_atraso}).scalar()
+    atraso_legado = Decimal(str(r))
+
+    # ── Card 2: em atraso (mix) ───────────────────────────────────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(vp.valor - vp.valor_pago), 0)
+        FROM venda_pagamento vp
+        JOIN venda v ON v.id = vp.venda_id
+        WHERE vp.forma_pagamento = 'vale'
+          AND vp.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (vp.valor - vp.valor_pago) > 0
+          AND vp.data_pagamento_vale <= :limite_atraso
+    """), {"limite_atraso": limite_atraso}).scalar()
+    atraso_mix = Decimal(str(r))
+
+    atraso_valor = atraso_legado + atraso_mix
+
+    # ── Card 3: recebido no mês vigente (legado quitado) ─────────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(v.valor_pago), 0)
+        FROM venda v
+        WHERE v.forma_pagamento = 'vale'
+          AND v.pago_em IS NOT NULL
+          AND v.status != 'cancelada'
+          AND DATE(v.pago_em) >= :primeiro
+          AND DATE(v.pago_em) <= :ultimo
+    """), {"primeiro": primeiro_mes, "ultimo": ultimo_mes}).scalar()
+    pagos_mes_legado = Decimal(str(r))
+
+    # ── Card 3: recebido no mês vigente (mix — valor_pago acumulado) ──────
+    # Soma incrementos de valor_pago em VendaPagamento no mês
+    # (usa updated_at via pago_em para quitações e created_at como proxy p/ parciais)
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(vp.valor_pago), 0)
+        FROM venda_pagamento vp
+        JOIN venda v ON v.id = vp.venda_id
+        WHERE vp.forma_pagamento = 'vale'
+          AND vp.valor_pago > 0
+          AND v.status != 'cancelada'
+          AND (
+            (vp.pago_em IS NOT NULL AND DATE(vp.pago_em) >= :primeiro AND DATE(vp.pago_em) <= :ultimo)
+            OR
+            (vp.pago_em IS NULL AND DATE(vp.created_at) >= :primeiro AND DATE(vp.created_at) <= :ultimo)
+          )
+    """), {"primeiro": primeiro_mes, "ultimo": ultimo_mes}).scalar()
+    pagos_mes_mix = Decimal(str(r))
+
+    pagos_mes_valor = pagos_mes_legado + pagos_mes_mix
+
+    # ── Card 4: a vencer no próximo mês (legado) ─────────────────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(v.valor_total - v.valor_pago), 0)
+        FROM venda v
+        WHERE v.forma_pagamento = 'vale'
+          AND v.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (v.valor_total - v.valor_pago) > 0
+          AND v.data_pagamento_vale >= :primeiro_prox
+          AND v.data_pagamento_vale <= :ultimo_prox
+    """), {"primeiro_prox": primeiro_prox, "ultimo_prox": ultimo_prox}).scalar()
+    prox_mes_legado = Decimal(str(r))
+
+    # ── Card 4: a vencer no próximo mês (mix) ────────────────────────────
+    r = conn.execute(sa.text("""
+        SELECT COALESCE(SUM(vp.valor - vp.valor_pago), 0)
+        FROM venda_pagamento vp
+        JOIN venda v ON v.id = vp.venda_id
+        WHERE vp.forma_pagamento = 'vale'
+          AND vp.pago_em IS NULL
+          AND v.status != 'cancelada'
+          AND (vp.valor - vp.valor_pago) > 0
+          AND vp.data_pagamento_vale >= :primeiro_prox
+          AND vp.data_pagamento_vale <= :ultimo_prox
+    """), {"primeiro_prox": primeiro_prox, "ultimo_prox": ultimo_prox}).scalar()
+    prox_mes_mix = Decimal(str(r))
+
+    proximo_mes_valor = prox_mes_legado + prox_mes_mix
 
     return ResumoRecebimentoValePublic(
-        em_aberto_qtd=len(em_aberto), em_aberto_valor=soma_vt(em_aberto),
-        atraso_qtd=len(atraso), atraso_valor=soma_vt(atraso),
-        aguardando_baixa_qtd=len(aguardando_baixa), aguardando_baixa_valor=soma_vp(aguardando_baixa),
-        pagos_mes_qtd=len(pagos_mes), pagos_mes_valor=soma_vp(pagos_mes),
+        em_aberto_qtd=0,       # mantido por compatibilidade — não exibido nos cards
+        em_aberto_valor=em_aberto_valor,
+        atraso_qtd=0,
+        atraso_valor=atraso_valor,
+        aguardando_baixa_qtd=0,
+        aguardando_baixa_valor=proximo_mes_valor,  # reutiliza campo — card 4 agora é "próximo mês"
+        pagos_mes_qtd=0,
+        pagos_mes_valor=pagos_mes_valor,
     )
 
 
@@ -626,7 +743,6 @@ def baixar_pagamento_mix(
         pgto.pago_em = agora
 
     session.add(pgto)
-
     venda.valor_pago = venda.valor_pago + body.valor_pago
 
     todas_pagas = session.exec(
@@ -680,12 +796,10 @@ def estornar_pagamento_mix(
     pgto.valor_pago = pgto.valor_pago - body.valor_estorno
     if pgto.pago_em is not None:
         pgto.pago_em = None
-
     session.add(pgto)
 
     novo_valor_pago_venda = venda.valor_pago - body.valor_estorno
     venda.valor_pago = max(Decimal("0"), novo_valor_pago_venda)
-
     if venda.pago_em is not None:
         venda.pago_em = None
         venda.recebido_em = None
@@ -697,7 +811,6 @@ def estornar_pagamento_mix(
         f"valor_pago_linha={pgto.valor_pago:.2f} valor_pago_venda={venda.valor_pago:.2f}",
         current_user.id
     )
-
     session.add(venda)
     session.commit()
     session.refresh(venda)
@@ -730,7 +843,6 @@ def estornar_recebimento_legado(
 
     novo_valor_pago = venda.valor_pago - body.valor_estorno
     venda.valor_pago = max(Decimal("0"), novo_valor_pago)
-
     if venda.pago_em is not None:
         venda.pago_em = None
         venda.recebido_em = None
@@ -742,7 +854,6 @@ def estornar_recebimento_legado(
         f"valor_pago={venda.valor_pago:.2f}",
         current_user.id
     )
-
     session.add(venda)
     session.commit()
     session.refresh(venda)

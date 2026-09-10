@@ -1,7 +1,6 @@
-// [mcp-local harness] feature: recebimento_fiado_conta_corrente | plano: 58a35598 | 2026-09-10 13:01:14
-// ResumoCards com cards bordados leves, sem Card/CardContent shadcn
-// ResumoCards atualizado para o novo layout de conta-corrente.
-// Cards com borda leve como no mockup — sem Card/CardContent do shadcn, HTML puro.
+// [mcp-local harness] feature: fix_resumo_recebimento_vale | plano: 8c53b179 | 2026-09-10 19:17:06
+// Card 4: label dinâmico 'A vencer — {próximo mês}' em vez de 'Aguardando baixa'
+// fix: card 4 muda de 'Aguardando baixa' para 'A vencer — {próximo mês}'
 import { useQuery } from "@tanstack/react-query"
 import { VendasService } from "@/client"
 
@@ -15,6 +14,12 @@ const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
 function mesLabel(): string {
   const d = new Date()
   return `${MESES[d.getMonth()]} ${d.getFullYear()}`
+}
+
+function proxMesLabel(): string {
+  const d = new Date()
+  const prox = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+  return `${MESES[prox.getMonth()]} ${prox.getFullYear()}`
 }
 
 interface MetricCardProps {
@@ -43,7 +48,6 @@ function MetricCard({ label, valor, cor = "muted", loading }: MetricCardProps) {
   )
 }
 
-// onVerPagos mantido para retrocompat — não usado na nova tela mas pode ser chamado de fora
 interface ResumoCardsProps {
   onVerPagos?: () => void
 }
@@ -56,10 +60,10 @@ export function ResumoCards({ onVerPagos: _ }: ResumoCardsProps) {
 
   return (
     <div className="flex flex-wrap gap-3">
-      <MetricCard label="Crédito na praça"      valor={data?.em_aberto_valor  ?? "0"} cor="danger"  loading={isLoading} />
-      <MetricCard label="Em atraso"              valor={data?.atraso_valor     ?? "0"} cor="warning" loading={isLoading} />
-      <MetricCard label={`Recebido — ${mesLabel()}`} valor={data?.pagos_mes_valor ?? "0"} cor="success" loading={isLoading} />
-      <MetricCard label="Aguardando baixa"       valor={data?.aguardando_baixa_valor ?? "0"} cor="muted" loading={isLoading} />
+      <MetricCard label="Crédito na praça"             valor={data?.em_aberto_valor        ?? "0"} cor="danger"  loading={isLoading} />
+      <MetricCard label="Em atraso"                     valor={data?.atraso_valor            ?? "0"} cor="warning" loading={isLoading} />
+      <MetricCard label={`Recebido — ${mesLabel()}`}    valor={data?.pagos_mes_valor         ?? "0"} cor="success" loading={isLoading} />
+      <MetricCard label={`A vencer — ${proxMesLabel()}`} valor={data?.aguardando_baixa_valor ?? "0"} cor="muted"   loading={isLoading} />
     </div>
   )
 }
