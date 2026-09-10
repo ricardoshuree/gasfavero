@@ -1,8 +1,7 @@
-// [mcp-local harness] feature: recebimento_fiado_conta_corrente | plano: 58a35598 | 2026-09-10 13:02:25
+// [mcp-local harness] feature: fix_extrato_badge_mix | plano: 0ccece1b | 2026-09-10 16:27:56
+// ReciboPanel: inclui folhas mix (VendaPagamento.vale), pagamentos parciais, saldo correto para mix
 // ReciboPanel: extrato imprimível com folhas em aberto, pagamentos recentes e saldo devedor
-// ReciboPanel: coluna da direita — extrato imprimível do cliente.
-// Aparece ao clicar em "Extrato" ou automaticamente após quitação total.
-// Botão "Imprimir" usa window.print() — CSS @media print oculta o resto da página.
+// fix: inclui folhas mix (VendaPagamento.vale) e calcula saldo corretamente para mix
 import { Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { VendaPublic } from "@/client"
@@ -11,6 +10,23 @@ interface Props {
   clienteNome: string
   clienteCpf: string
   vendas: VendaPublic[]
+}
+
+interface FolhaExtrato {
+  id: string
+  valeNumero: number | null
+  vencimento: string | null
+  valor: number
+  saldo: number
+  isMix: boolean
+}
+
+interface PagamentoExtrato {
+  id: string
+  valeNumero: number | null
+  pagoEm: string | null
+  valorPago: number
+  descricao: string
 }
 
 function fmt(v: number | string): string {
@@ -22,17 +38,73 @@ function hoje(): string {
 }
 
 export function ReciboPanel({ clienteNome, clienteCpf, vendas }: Props) {
-  const abertas = vendas
-    .filter((v) => v.forma_pagamento === "vale" && !v.pago_em && v.status !== "cancelada")
-    .sort((a, b) => new Date(a.data_venda).getTime() - new Date(b.data_venda).getTime())
+  const abertas: FolhaExtrato[] = []
+  const pagamentos: PagamentoExtrato[] = []
 
-  const pagas = vendas
-    .filter((v) => v.forma_pagamento === "vale" && !!v.pago_em && v.status !== "cancelada")
-    .sort((a, b) => new Date(b.pago_em!).getTime() - new Date(a.pago_em!).getTime())
-    .slice(0, 5)
+  for (const v of vendas) {
+    if (v.status === "cancelada") continue
 
-  const saldoTotal = abertas.reduce((s, v) => s + Number(v.valor_total) - Number(v.valor_pago), 0)
-  const totalRecebido = pagas.reduce((s, v) => s + Number(v.valor_pago), 0)
+    if (v.forma_pagamento === "vale") {
+      // Legado: fiado puro
+      if (!v.pago_em) {
+        abertas.push({
+          id: v.id,
+          valeNumero: v.vale_numero ?? null,
+          vencimento: v.data_pagamento_vale ?? null,
+          valor: Number(v.valor_total),
+          saldo: Number(v.valor_total) - Number(v.valor_pago),
+          isMix: false,
+        })
+      } else {
+        pagamentos.push({
+          id: v.id,
+          valeNumero: v.vale_numero ?? null,
+          pagoEm: v.pago_em,
+          valorPago: Number(v.valor_pago),
+          descricao: `nº ${v.vale_numero ?? "—"} quitado`,
+        })
+      }
+    } else if (v.forma_pagamento === "mix") {
+      // Mix: cada linha VendaPagamento.vale
+      for (const p of (v.pagamentos ?? [])) {
+        if (p.forma_pagamento !== "vale") continue
+        const valorPago = Number(p.valor_pago ?? 0)
+        const valor = Number(p.valor)
+        if (!p.pago_em) {
+          abertas.push({
+            id: p.id,
+            valeNumero: p.vale_numero ?? null,
+            vencimento: p.data_pagamento_vale ?? null,
+            valor,
+            saldo: valor - valorPago,
+            isMix: true,
+          })
+        }
+        if (valorPago > 0) {
+          pagamentos.push({
+            id: p.id,
+            valeNumero: p.vale_numero ?? null,
+            pagoEm: p.pago_em ?? null,
+            valorPago,
+            descricao: p.pago_em
+              ? `nº ${p.vale_numero ?? "—"} quitado (mix)`
+              : `nº ${p.vale_numero ?? "—"} parcial (mix)`,
+          })
+        }
+      }
+    }
+  }
+
+  // Ordena abertas: mais antigas primeiro
+  abertas.sort((a, b) => (a.vencimento ?? "").localeCompare(b.vencimento ?? ""))
+
+  // Pagamentos: mais recentes primeiro, limita 5
+  const pagamentosRecentes = pagamentos
+    .sort((a, b) => new Date(b.pagoEm ?? 0).getTime() - new Date(a.pagoEm ?? 0).getTime())
+    .slice(0, 8)
+
+  const saldoTotal = abertas.reduce((s, f) => s + f.saldo, 0)
+  const totalRecebido = pagamentosRecentes.reduce((s, p) => s + p.valorPago, 0)
 
   return (
     <div className="flex flex-col rounded-xl border bg-card overflow-hidden print:shadow-none" id="recibo-print">
@@ -78,40 +150,40 @@ export function ReciboPanel({ clienteNome, clienteCpf, vendas }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {abertas.map((v) => {
-                  const saldo = Number(v.valor_total) - Number(v.valor_pago)
-                  return (
-                    <tr key={v.id} className="border-b last:border-0">
-                      <td className="py-1.5">nº {v.vale_numero ?? "—"}</td>
-                      <td className="py-1.5 text-muted-foreground">{v.data_pagamento_vale ?? "—"}</td>
-                      <td className="py-1.5 text-right">{fmt(v.valor_total)}</td>
-                      <td className={`py-1.5 text-right font-medium ${saldo > 0 ? "text-destructive" : "text-[#00a63e]"}`}>
-                        {fmt(saldo)}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {abertas.map((f) => (
+                  <tr key={f.id} className="border-b last:border-0">
+                    <td className="py-1.5">
+                      nº {f.valeNumero ?? "—"}
+                      {f.isMix && <span className="ml-1 text-muted-foreground">(mix)</span>}
+                    </td>
+                    <td className="py-1.5 text-muted-foreground">{f.vencimento ?? "—"}</td>
+                    <td className="py-1.5 text-right">{fmt(f.valor)}</td>
+                    <td className={`py-1.5 text-right font-medium ${f.saldo > 0 ? "text-destructive" : "text-[#00a63e]"}`}>
+                      {fmt(f.saldo)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* Pagamentos recentes */}
-        {pagas.length > 0 && (
+        {/* Pagamentos recebidos */}
+        {pagamentosRecentes.length > 0 && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
               Pagamentos recebidos
             </p>
             <table className="w-full text-xs border-collapse">
               <tbody>
-                {pagas.map((v) => (
-                  <tr key={v.id} className="border-b last:border-0">
-                    <td className="py-1.5">nº {v.vale_numero ?? "—"} quitado</td>
+                {pagamentosRecentes.map((p) => (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="py-1.5">{p.descricao}</td>
                     <td className="py-1.5 text-muted-foreground">
-                      {v.pago_em ? new Date(v.pago_em).toLocaleDateString("pt-BR") : "—"}
+                      {p.pagoEm ? new Date(p.pagoEm).toLocaleDateString("pt-BR") : "—"}
                     </td>
                     <td className="py-1.5 text-right font-medium text-[#00a63e]">
-                      + {fmt(v.valor_pago)}
+                      + {fmt(p.valorPago)}
                     </td>
                   </tr>
                 ))}

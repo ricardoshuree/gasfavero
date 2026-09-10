@@ -1,7 +1,9 @@
-// [mcp-local harness] feature: recebimento_melhorias_v2 | plano: 28e6cf57 | 2026-09-10 15:32:52
+// [mcp-local harness] feature: fix_extrato_badge_mix | plano: 0ccece1b | 2026-09-10 16:27:21
+// Corrige useClientesComFiado: saldo de mix calculado via VendaPagamento.vale (p.valor - p.valor_pago)
 // Extrato abre automaticamente ao clicar cliente; onExtrato atualiza sem fechar
-// Melhoria: extrato abre automaticamente ao clicar no cliente (handleAbrirCliente seta extratoAberto=true)
+// Melhoria: extrato abre automaticamente ao selecionar cliente (handleAbrirCliente seta extratoAberto=true)
 // onExtrato atualiza reciboVendas sem fechar o extrato
+// fix: saldo de mix calculado via VendaPagamento.vale (não valor_total - valor_pago da Venda pai)
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { AlertCircle, Check, Clock, Search } from "lucide-react"
@@ -43,19 +45,43 @@ function useClientesComFiado(busca: string) {
   }>()
 
   for (const v of vendas) {
-    const saldo = Number(v.valor_total) - Number(v.valor_pago)
-    if (saldo <= 0) continue
-    const existing = mapaClientes.get(v.cliente_id)
     const hoje = new Date()
-    const vcto = v.data_pagamento_vale ? new Date(v.data_pagamento_vale) : null
-    const atrasada = vcto ? vcto < hoje : false
-    const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
-    if (existing) {
-      existing.saldo += saldo
-      if (atrasada) existing.tem_atraso = true
-      if (vinceBreve) existing.vence_breve = true
+
+    if (v.forma_pagamento === "mix") {
+      // Mix: saldo = soma dos VendaPagamento.vale em aberto
+      const pagamentosVale = (v.pagamentos ?? []).filter(
+        (p) => p.forma_pagamento === "vale" && !p.pago_em
+      )
+      for (const p of pagamentosVale) {
+        const saldo = Number(p.valor) - Number(p.valor_pago ?? 0)
+        if (saldo <= 0) continue
+        const vcto = p.data_pagamento_vale ? new Date(p.data_pagamento_vale) : null
+        const atrasada = vcto ? vcto < hoje : false
+        const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
+        const existing = mapaClientes.get(v.cliente_id)
+        if (existing) {
+          existing.saldo += saldo
+          if (atrasada) existing.tem_atraso = true
+          if (vinceBreve) existing.vence_breve = true
+        } else {
+          mapaClientes.set(v.cliente_id, { cliente_id: v.cliente_id, cliente_nome: v.cliente_nome, saldo, tem_atraso: atrasada, vence_breve: vinceBreve })
+        }
+      }
     } else {
-      mapaClientes.set(v.cliente_id, { cliente_id: v.cliente_id, cliente_nome: v.cliente_nome, saldo, tem_atraso: atrasada, vence_breve: vinceBreve })
+      // Legado: saldo = valor_total - valor_pago
+      const saldo = Number(v.valor_total) - Number(v.valor_pago)
+      if (saldo <= 0) continue
+      const vcto = v.data_pagamento_vale ? new Date(v.data_pagamento_vale) : null
+      const atrasada = vcto ? vcto < hoje : false
+      const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
+      const existing = mapaClientes.get(v.cliente_id)
+      if (existing) {
+        existing.saldo += saldo
+        if (atrasada) existing.tem_atraso = true
+        if (vinceBreve) existing.vence_breve = true
+      } else {
+        mapaClientes.set(v.cliente_id, { cliente_id: v.cliente_id, cliente_nome: v.cliente_nome, saldo, tem_atraso: atrasada, vence_breve: vinceBreve })
+      }
     }
   }
 
@@ -92,12 +118,10 @@ function RecebimentoVale() {
   function handleAbrirCliente(id: string, nome: string) {
     setClienteSelecionado({ id, nome, cpf: "" })
     setReciboVendas([])
-    // Abre extrato automaticamente ao selecionar cliente
     setExtratoAberto(true)
   }
 
   function handleExtrato(vendas: any[]) {
-    // Atualiza vendas do recibo sem fechar o extrato
     setReciboVendas(vendas)
   }
 
