@@ -1,10 +1,5 @@
-# [mcp-local harness] feature: tema2_multiplas_formas_backend | plano: 38d656ed | 2026-09-09 17:49:30
-# create_venda processa pagamentos[] mix; _to_venda_public expõe pagamentos; proximo-vale-numero verifica VendaPagamento também
-# Tema 2: create_venda processa pagamentos[] (mix de formas).
-# Formas à vista: pago_em preenchido na criação.
-# Fiado no mix: pago_em=null, vale_id+data_vcto gravados em VendaPagamento.
-# pago_em da Venda só fecha quando todos os recebíveis estiverem pagos.
-# Retrocompat: vendas sem pagamentos[] continuam usando forma_pagamento da Venda.
+# [mcp-local harness] feature: baixa_mix_fiado | plano: acbcee2e | 2026-09-10 16:08:49
+# Adiciona PATCH /{id}/pagamentos/{pagamento_id}/baixar — endpoint de baixa para fiado em vendas mix. Importa VendaPagamentoBaixarRequest.
 import calendar
 import uuid
 from datetime import date, timedelta
@@ -56,6 +51,7 @@ from app.models import (
     VendaLogPublic,
     VendaMarcarPagoRequest,
     VendaPagamento,
+    VendaPagamentoBaixarRequest,
     VendaPagamentoCreate,
     VendaPagamentoPublic,
     VendaPublic,
@@ -158,6 +154,7 @@ def _pagamentos_public(session: SessionDep, venda_id: uuid.UUID) -> list[VendaPa
             id=linha.id,
             forma_pagamento=linha.forma_pagamento,
             valor=linha.valor,
+            valor_pago=linha.valor_pago,
             pago_em=linha.pago_em,
             vale_numero=vale_num,
             data_pagamento_vale=linha.data_pagamento_vale,
@@ -493,6 +490,76 @@ def baixar_vale(*, session: SessionDep, id: uuid.UUID, body: VendaBaixarValeRequ
         raise HTTPException(status_code=400, detail="O valor pago nao pode ser maior que o valor total da venda")
     venda.valor_pago = valor_pago
     venda.pago_em = get_datetime_utc()
+    session.add(venda)
+    session.commit()
+    session.refresh(venda)
+    return _to_venda_public(session, venda)
+
+
+@router.patch("/{id}/pagamentos/{pagamento_id}/baixar", response_model=VendaPublic,
+    dependencies=[Depends(require_module_permission(MODULE, action="update"))])
+def baixar_pagamento_mix(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    pagamento_id: uuid.UUID,
+    body: VendaPagamentoBaixarRequest,
+) -> Any:
+    """
+    Baixa (parcial ou total) de uma linha de fiado em venda mix.
+    Opera sobre VendaPagamento diretamente — não sobre a Venda pai.
+    Ao final, verifica se todas as linhas pendentes foram pagas e fecha Venda.pago_em.
+    """
+    venda = session.get(Venda, id)
+    if not venda:
+        raise HTTPException(status_code=404, detail="Venda nao encontrada")
+    if venda.status == "cancelada":
+        raise HTTPException(status_code=400, detail="Venda cancelada")
+
+    pgto = session.get(VendaPagamento, pagamento_id)
+    if not pgto or pgto.venda_id != id:
+        raise HTTPException(status_code=404, detail="Pagamento nao encontrado nesta venda")
+    if pgto.forma_pagamento != "vale":
+        raise HTTPException(status_code=400, detail="Apenas linhas de fiado (vale) podem ser baixadas por este endpoint")
+    if pgto.pago_em is not None:
+        raise HTTPException(status_code=400, detail="Esta linha de fiado ja foi baixada")
+
+    saldo_restante = pgto.valor - pgto.valor_pago
+    if body.valor_pago > saldo_restante:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Valor informado (R$ {body.valor_pago:.2f}) excede o saldo restante (R$ {saldo_restante:.2f})"
+        )
+
+    agora = get_datetime_utc()
+    pgto.valor_pago = pgto.valor_pago + body.valor_pago
+
+    # Quitação total desta linha
+    if pgto.valor_pago >= pgto.valor:
+        pgto.valor_pago = pgto.valor
+        pgto.pago_em = agora
+
+    session.add(pgto)
+
+    # Atualiza valor_pago na Venda pai
+    venda.valor_pago = venda.valor_pago + body.valor_pago
+
+    # Verifica se todas as linhas pendentes (vale) foram pagas
+    todas_pagas = session.exec(
+        select(VendaPagamento)
+        .where(VendaPagamento.venda_id == id)
+        .where(VendaPagamento.forma_pagamento == "vale")
+        .where(col(VendaPagamento.pago_em).is_(None))
+        .where(VendaPagamento.id != pagamento_id)  # exclui a que acabamos de atualizar
+    ).first() is None
+
+    if todas_pagas and pgto.pago_em is not None:
+        # Todas as linhas de fiado pagas → fecha a venda
+        venda.pago_em = agora
+        venda.recebido_em = agora
+        venda.recebido_por_id = current_user.id
+
     session.add(venda)
     session.commit()
     session.refresh(venda)
@@ -931,7 +998,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
                 raise HTTPException(status_code=400, detail="Informe o valor do frete para vendas Gas do Povo")
             gas_povo_frete_recebido_em = get_datetime_utc()
 
-    # ── Itens da sacola (comum a ambos os caminhos) ───────────────────────────
+    # ── Itens da sacola ───────────────────────────────────────────────────────
     if not venda_in.itens:
         raise HTTPException(status_code=400, detail="A venda precisa ter ao menos 1 item")
 
@@ -973,11 +1040,8 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
         )
 
     # ── Cria a Venda ──────────────────────────────────────────────────────────
-    # Para mix: forma_pagamento da Venda = "mix"; pago_em depende das formas
-    # Para legado: comportamento original
     if usa_mix:
         forma_venda = "mix"
-        # pago_em: fecha imediatamente se todas as formas forem à vista
         todas_a_vista = all(p.forma_pagamento in FORMAS_A_VISTA for p in venda_in.pagamentos)
         pago_em_venda: Any = get_datetime_utc() if todas_a_vista else None
         valor_pago_venda = sum(
@@ -1083,6 +1147,7 @@ def create_venda(*, session: SessionDep, current_user: CurrentUser, venda_in: Ve
                 venda_id=venda.id,
                 forma_pagamento=pgto.forma_pagamento,
                 valor=pgto.valor,
+                valor_pago=pgto.valor if a_vista else Decimal("0"),
                 pago_em=agora if a_vista else None,
                 vale_id=pgto_vale.id if pgto_vale else None,
                 data_pagamento_vale=pgto_vcto,

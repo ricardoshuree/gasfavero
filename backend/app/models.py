@@ -1,8 +1,5 @@
-# [mcp-local harness] feature: tema2_multiplas_formas_backend | plano: 38d656ed | 2026-09-09 17:46:06
-# Adiciona VendaPagamento model+schemas; VendaCreate aceita pagamentos[]; VendaPublic expõe pagamentos[]
-# Adiciona VendaPagamento (Tema 2) e schemas relacionados.
-# VendaCreate agora aceita pagamentos[] opcionalmente.
-# Retrocompat: vendas antigas sem linhas em venda_pagamento continuam funcionando.
+# [mcp-local harness] feature: baixa_mix_fiado | plano: acbcee2e | 2026-09-10 16:05:12
+# Adiciona VendaPagamentoBaixarRequest ao final da seção de schemas de Venda
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -510,6 +507,7 @@ class VendaPagamento(SQLModel, table=True):
     venda_id: uuid.UUID = Field(foreign_key="venda.id", ondelete="CASCADE")
     forma_pagamento: str = Field(max_length=20)
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    valor_pago: Decimal = Field(default=Decimal("0"), sa_column=Column(Numeric(10, 2), nullable=False))
     pago_em: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     # Fiado
     vale_id: uuid.UUID | None = Field(default=None, foreign_key="vale.id", ondelete="RESTRICT")
@@ -541,6 +539,7 @@ class VendaPagamentoPublic(SQLModel):
     id: uuid.UUID
     forma_pagamento: str
     valor: Decimal
+    valor_pago: Decimal = Decimal("0")
     pago_em: datetime | None = None
     vale_numero: int | None = None
     data_pagamento_vale: date | None = None
@@ -548,6 +547,11 @@ class VendaPagamentoPublic(SQLModel):
     vale_gas_estabelecimento: str | None = None
     gas_povo_frete: Decimal | None = None
     gas_povo_frete_recebido_em: datetime | None = None
+
+
+class VendaPagamentoBaixarRequest(SQLModel):
+    """Body para PATCH /vendas/{id}/pagamentos/{pagamento_id}/baixar"""
+    valor_pago: Decimal = Field(gt=0, decimal_places=2)
 
 
 class VendaItem(SQLModel, table=True):

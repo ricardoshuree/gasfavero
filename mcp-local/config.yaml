@@ -19,6 +19,10 @@ allowed_extensions:
   - .java
   - .mp3
   - .gradle
+  - .css
+  - .md
+  - .sql
+  - .yml
 blocked_dirs:
   - node_modules
   - .git
