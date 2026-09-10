@@ -1,8 +1,9 @@
-// [mcp-local harness] feature: fix_fiado_puro_editavel | plano: 90bde99a | 2026-09-10 18:24:41
-// Campo valor fiado puro volta a ser editável — operador define o valor; backend aceita ge=0
+// [mcp-local harness] feature: fix_borda_amber_pagamento | plano: 2508b369 | 2026-09-10 20:09:52
+// Borda âmbar no painel de formas de pagamento quando há formas selecionadas
 // mutationFn envia pagamentos[] no mix; forma única usa caminho legado
 // fix: campo valor fiado puro editável — valor digitado é respeitado
 // fix: valor_pago = somaFormas para fiado (pode ser menor que total = desconto intencional)
+// ux: borda âmbar no painel de formas de pagamento quando há formas selecionadas
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
@@ -335,7 +336,6 @@ function Vendas() {
   const formasMix = formasPagamento.filter((f) => !FORMAS_EXCLUSIVAS_SET.has(f))
   const usaMix = formasMix.length > 1
 
-  // valor_pago: gas_povo usa total governo+frete; demais usa o que o operador digitou
   const valorPagoEnvio = formasPagamento.includes("gas_povo")
     ? String(gasPovoTotal)
     : somaFormas.toFixed(2)
@@ -464,8 +464,11 @@ function Vendas() {
 
           <PainelCasco itens={sacola} cascos={cascos} onChange={setCascos} />
 
+          {/* Painel de formas de pagamento — borda âmbar quando há formas selecionadas */}
           {formasPagamento.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border p-3">
+            <div className={`flex flex-col gap-2 rounded-lg border p-3 transition-colors ${
+              formasPagamento.length > 0 ? "border-amber-400" : ""
+            }`}>
 
               {formasPagamento.includes("gas_povo") && (
                 <>
