@@ -1,7 +1,6 @@
-// [mcp-local harness] feature: livro_vendas_mix_detalhe | plano: 716e32fa | 2026-09-10 18:59:15
-// MixPagamentosDetalhe: desdobra pagamentos[] com forma, valor, folha e status para vendas mix no painel de detalhes
-// [mcp-local harness] feature: livro_vendas_mix_detalhe
-// VendaEditPanel: desdobra pagamentos[] para vendas mix
+// [mcp-local harness] feature: fix_mix_readonly | plano: 75f7234e | 2026-09-10 19:40:49
+// Venda mix somente leitura: campos valor_pago e data_venda ocultos, botões Salvar/Cancelar edição removidos
+// fix: venda mix somente leitura no VendaEditPanel — sem campos editáveis
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
@@ -100,52 +99,23 @@ function formatEndereco(venda: VendaPublic): { full: string; display: string } |
   return { full, display }
 }
 
-function StatusBadge({
-  venda,
-  temCascoAberto,
-}: {
-  venda: VendaPublic
-  temCascoAberto: boolean
-}) {
+function StatusBadge({ venda, temCascoAberto }: { venda: VendaPublic; temCascoAberto: boolean }) {
   let badge: React.ReactNode
-
   if (venda.status === "cancelada") {
-    badge = (
-      <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-medium text-white">
-        Cancelada
-      </span>
-    )
+    badge = <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-medium text-white">Cancelada</span>
   } else if (venda.pago_em) {
-    badge = (
-      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
-        Pago
-      </span>
-    )
+    badge = <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">Pago</span>
   } else if (venda.forma_pagamento === "vale" && isAtrasado(venda.data_venda)) {
-    badge = (
-      <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs text-destructive">
-        Em atraso
-      </span>
-    )
+    badge = <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs text-destructive">Em atraso</span>
   } else {
-    badge = (
-      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-        Em aberto
-      </span>
-    )
+    badge = <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Em aberto</span>
   }
-
   return (
     <div className="flex items-center gap-1.5">
       {badge}
       {temCascoAberto && (
-        <span
-          title="Casco emprestado"
-          className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400"
-          aria-label="Casco emprestado"
-        >
-          <Package className="h-3.5 w-3.5" aria-hidden="true" />
-          ⚠️
+        <span title="Casco emprestado" className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400" aria-label="Casco emprestado">
+          <Package className="h-3.5 w-3.5" aria-hidden="true" />⚠️
         </span>
       )}
     </div>
@@ -174,7 +144,6 @@ function ultimoDiaMesAtualISO(): string {
 function MixPagamentosDetalhe({ venda }: { venda: VendaPublic }) {
   const pagamentos = venda.pagamentos ?? []
   if (pagamentos.length === 0) return null
-
   return (
     <div className="flex flex-col gap-1">
       <div className="rounded-md border divide-y">
@@ -210,7 +179,6 @@ function MixPagamentosDetalhe({ venda }: { venda: VendaPublic }) {
             </div>
           )
         })}
-        {/* Total */}
         <div className="flex justify-between px-3 py-2 text-sm font-semibold bg-muted/20">
           <span>Total</span>
           <span>{formatMoney(venda.valor_total)}</span>
@@ -221,18 +189,10 @@ function MixPagamentosDetalhe({ venda }: { venda: VendaPublic }) {
 }
 
 // ---------------------------------------------------------------------------
-// Panel lateral de edicao
+// Panel lateral de edição
 // ---------------------------------------------------------------------------
 
-function VendaEditPanel({
-  venda,
-  onClose,
-  canEdit,
-}: {
-  venda: VendaPublic
-  onClose: () => void
-  canEdit: boolean
-}) {
+function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClose: () => void; canEdit: boolean }) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
@@ -267,31 +227,20 @@ function VendaEditPanel({
           data_venda: dataVenda !== venda.data_venda ? dataVenda : undefined,
         },
       }),
-    onSuccess: () => {
-      showSuccessToast("Venda atualizada")
-      invalidateQueries()
-      onClose()
-    },
-    onError: (err: any) => {
-      showErrorToast(err?.body?.detail ?? "Erro ao editar venda")
-    },
+    onSuccess: () => { showSuccessToast("Venda atualizada"); invalidateQueries(); onClose() },
+    onError: (err: any) => { showErrorToast(err?.body?.detail ?? "Erro ao editar venda") },
   })
 
   const mutCancelar = useMutation({
     mutationFn: () => VendasService.cancelarVenda({ id: venda.id }),
-    onSuccess: () => {
-      showSuccessToast("Venda cancelada e estorno lançado")
-      invalidateQueries()
-      onClose()
-    },
-    onError: (err: any) => {
-      showErrorToast(err?.body?.detail ?? "Erro ao cancelar venda")
-    },
+    onSuccess: () => { showSuccessToast("Venda cancelada e estorno lançado"); invalidateQueries(); onClose() },
+    onError: (err: any) => { showErrorToast(err?.body?.detail ?? "Erro ao cancelar venda") },
   })
 
   return (
     <div className="flex flex-col gap-5 p-1">
-      {/* Info resumo */}
+
+      {/* Resumo */}
       <div className="rounded-lg border bg-muted/30 p-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Cliente</span>
@@ -313,8 +262,7 @@ function VendaEditPanel({
           <div className="flex justify-between items-center mt-1">
             <span className="text-muted-foreground">Edições</span>
             <span className="flex items-center gap-1 text-amber-600 text-xs font-medium">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {qtdEdicoes} edição(ões)
+              <AlertTriangle className="h-3.5 w-3.5" />{qtdEdicoes} edição(ões)
             </span>
           </div>
         )}
@@ -323,9 +271,7 @@ function VendaEditPanel({
       {isCancelada && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2">
           <p className="text-sm font-medium text-destructive">Venda cancelada</p>
-          <p className="text-xs text-destructive/80">
-            por {venda.cancelada_por_nome ?? "?"} em {formatDateTime(venda.cancelada_em)}
-          </p>
+          <p className="text-xs text-destructive/80">por {venda.cancelada_por_nome ?? "?"} em {formatDateTime(venda.cancelada_em)}</p>
         </div>
       )}
 
@@ -336,34 +282,31 @@ function VendaEditPanel({
           <div className="grid gap-1.5">
             <Label>Forma de pagamento</Label>
 
-            {/* Mix: mostra detalhe das linhas em vez do select */}
             {isMix ? (
+              /* Mix: detalhe somente leitura + aviso — sem campos editáveis */
               <>
                 <MixPagamentosDetalhe venda={venda} />
                 <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
                   <p className="text-xs text-amber-800">
-                    ⚠️ Vendas em mix não permitem troca de forma de pagamento. Para alterar, cancele e registre uma nova.
+                    ⚠️ Vendas em mix não permitem alterações. Para corrigir, cancele e registre uma nova.
                   </p>
                 </div>
               </>
             ) : (
+              /* Formas simples: select editável */
               <>
                 <Select value={formaPagamento} onValueChange={setFormaPagamento}>
-                  <SelectTrigger id="ep-forma">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger id="ep-forma"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(LABEL_FORMA_PAGAMENTO)
                       .filter(([v]) => v !== "mix")
-                      .map(([v, l]) => (
-                        <SelectItem key={v} value={v}>{l}</SelectItem>
-                      ))}
+                      .map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {trocouParaComplexo && (
                   <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 mt-1">
                     <p className="text-xs text-amber-800">
-                      ⚠️ Para alterar para {LABEL_FORMA_PAGAMENTO[formaPagamento]}, cancele esta venda e registre uma nova.
+                      ⚠️ Para alterar para {LABEL_FORMA_PAGAMENTO[formaPagamento]}, cancele e registre uma nova.
                     </p>
                   </div>
                 )}
@@ -378,27 +321,31 @@ function VendaEditPanel({
             )}
           </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="ep-valor">Valor pago (R$)</Label>
-            <Input id="ep-valor" type="number" step="0.01" min="0" value={valorPago} onChange={(e) => setValorPago(e.target.value)} />
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="ep-data">Data da venda</Label>
-            <Input id="ep-data" type="date" value={dataVenda} onChange={(e) => setDataVenda(e.target.value)} />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Button onClick={() => mutEditar.mutate()} disabled={mutEditar.isPending || trocouParaComplexo || !houveAlteracao}>
-              {mutEditar.isPending ? "Salvando..." : "Salvar alterações"}
-            </Button>
-            <Button onClick={onClose} disabled={mutEditar.isPending} style={{ backgroundColor: "#f97316", color: "#fff", borderColor: "#f97316" }}>
-              Cancelar edição
-            </Button>
-          </div>
+          {/* Valor pago e data — ocultos para mix */}
+          {!isMix && (
+            <>
+              <div className="grid gap-1.5">
+                <Label htmlFor="ep-valor">Valor pago (R$)</Label>
+                <Input id="ep-valor" type="number" step="0.01" min="0" value={valorPago} onChange={(e) => setValorPago(e.target.value)} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="ep-data">Data da venda</Label>
+                <Input id="ep-data" type="date" value={dataVenda} onChange={(e) => setDataVenda(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button onClick={() => mutEditar.mutate()} disabled={mutEditar.isPending || trocouParaComplexo || !houveAlteracao}>
+                  {mutEditar.isPending ? "Salvando..." : "Salvar alterações"}
+                </Button>
+                <Button onClick={onClose} disabled={mutEditar.isPending} style={{ backgroundColor: "#f97316", color: "#fff", borderColor: "#f97316" }}>
+                  Cancelar edição
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
+      {/* Histórico de edições */}
       {venda.logs_edicao && venda.logs_edicao.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico de edições</p>
@@ -421,12 +368,12 @@ function VendaEditPanel({
         </div>
       )}
 
+      {/* Cancelar venda */}
       {!isCancelada && canEdit && (
         <div className="border-t pt-4 mt-2">
           {!confirmandoCancelamento ? (
             <Button variant="destructive" className="w-full" onClick={() => setConfirmandoCancelamento(true)}>
-              <XCircle className="h-4 w-4 mr-2" />
-              Cancelar venda
+              <XCircle className="h-4 w-4 mr-2" />Cancelar venda
             </Button>
           ) : (
             <div className="flex flex-col gap-3 rounded-lg border-2 border-destructive bg-destructive/5 p-4">
@@ -476,35 +423,25 @@ export function LivroVendasTable() {
   const canEdit = canUpdate("vendas")
   const { showErrorToast } = useCustomToast()
 
-  function handleBuscar() {
-    setFiltro({ inicio: inicioInput, fim: fimInput })
-    setPage(0)
-  }
-
-  function handleStatusChange(value: StatusFiltro) {
-    setStatusFiltro(value)
-    setPage(0)
-  }
+  function handleBuscar() { setFiltro({ inicio: inicioInput, fim: fimInput }); setPage(0) }
+  function handleStatusChange(value: StatusFiltro) { setStatusFiltro(value); setPage(0) }
 
   async function handleRowClick(venda: VendaPublic) {
     try {
       const fresh = await VendasService.readVenda({ id: venda.id })
       setVendaSelecionada(fresh)
-    } catch {
-      showErrorToast("Erro ao carregar venda")
-    }
+    } catch { showErrorToast("Erro ao carregar venda") }
   }
 
   const { data, isFetching } = useQuery({
     queryKey: ["livroVendas", filtro.inicio, filtro.fim, statusFiltro, page],
-    queryFn: () =>
-      VendasService.readLivroVendas({
-        dataInicio: filtro.inicio || undefined,
-        dataFim: filtro.fim || undefined,
-        status: statusFiltro,
-        skip: page * PAGE_SIZE,
-        limit: PAGE_SIZE,
-      }),
+    queryFn: () => VendasService.readLivroVendas({
+      dataInicio: filtro.inicio || undefined,
+      dataFim: filtro.fim || undefined,
+      status: statusFiltro,
+      skip: page * PAGE_SIZE,
+      limit: PAGE_SIZE,
+    }),
   })
 
   const { data: cascosEmAberto } = useQuery({
@@ -514,9 +451,7 @@ export function LivroVendasTable() {
   })
 
   const vendasComCascoAberto = new Set<string>(
-    (cascosEmAberto?.data ?? [])
-      .filter((c) => c.status !== "devolvido")
-      .map((c) => c.venda_id)
+    (cascosEmAberto?.data ?? []).filter((c) => c.status !== "devolvido").map((c) => c.venda_id)
   )
 
   const vendas = data?.data ?? []
@@ -543,13 +478,9 @@ export function LivroVendasTable() {
             <div className="flex flex-col gap-1">
               <Label htmlFor="livro-status" className="text-xs">Status</Label>
               <Select value={statusFiltro} onValueChange={handleStatusChange}>
-                <SelectTrigger id="livro-status" className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger id="livro-status" className="w-44"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
+                  {STATUS_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -585,9 +516,7 @@ export function LivroVendasTable() {
                     <TableRow key={venda.id} className="cursor-pointer" onClick={() => handleRowClick(venda)}>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          <span className={venda.status === "cancelada" ? "line-through text-muted-foreground" : ""}>
-                            {venda.cliente_nome}
-                          </span>
+                          <span className={venda.status === "cancelada" ? "line-through text-muted-foreground" : ""}>{venda.cliente_nome}</span>
                           {(venda.qtd_edicoes ?? 0) > 0 && venda.status !== "cancelada" && (
                             <span className="text-amber-500" title={`${venda.qtd_edicoes} edição(ões)`}>
                               <AlertTriangle className="h-3.5 w-3.5" />
@@ -596,23 +525,16 @@ export function LivroVendasTable() {
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[160px] text-muted-foreground">
-                        {end
-                          ? <span title={end.full} className="cursor-default">{end.display}</span>
-                          : "—"}
+                        {end ? <span title={end.full} className="cursor-default">{end.display}</span> : "—"}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatItens(venda.itens)}
-                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatItens(venda.itens)}</TableCell>
                       <TableCell>{LABEL_FORMA_PAGAMENTO[venda.forma_pagamento] ?? venda.forma_pagamento}</TableCell>
                       <TableCell>{formatDate(venda.data_venda)}</TableCell>
                       <TableCell>{formatDate(venda.pago_em ?? venda.data_pagamento_vale)}</TableCell>
                       <TableCell className="text-right">{formatMoney(venda.valor_total)}</TableCell>
                       <TableCell className="text-right">{formatMoney(venda.valor_pago)}</TableCell>
                       <TableCell>
-                        <StatusBadge
-                          venda={venda}
-                          temCascoAberto={vendasComCascoAberto.has(venda.id)}
-                        />
+                        <StatusBadge venda={venda} temCascoAberto={vendasComCascoAberto.has(venda.id)} />
                       </TableCell>
                     </TableRow>
                   )
@@ -650,9 +572,7 @@ export function LivroVendasTable() {
       <Sheet open={!!vendaSelecionada} onOpenChange={(open) => { if (!open) setVendaSelecionada(null) }}>
         <SheetContent className="w-[420px] sm:w-[480px] overflow-y-auto">
           <SheetHeader className="mb-4">
-            <SheetTitle>
-              {vendaSelecionada?.status === "cancelada" ? "Venda cancelada" : "Detalhes da venda"}
-            </SheetTitle>
+            <SheetTitle>{vendaSelecionada?.status === "cancelada" ? "Venda cancelada" : "Detalhes da venda"}</SheetTitle>
           </SheetHeader>
           {vendaSelecionada && (
             <VendaEditPanel venda={vendaSelecionada} onClose={() => setVendaSelecionada(null)} canEdit={canEdit} />
