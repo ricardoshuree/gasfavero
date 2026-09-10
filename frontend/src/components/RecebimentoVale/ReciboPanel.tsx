@@ -1,7 +1,8 @@
-// [mcp-local harness] feature: fix_extrato_badge_mix | plano: 0ccece1b | 2026-09-10 16:27:56
-// ReciboPanel: inclui folhas mix (VendaPagamento.vale), pagamentos parciais, saldo correto para mix
+// [mcp-local harness] feature: fix_extrato_parcial | plano: 7f4f8900 | 2026-09-10 16:37:57
+// ReciboPanel: pagamentos parciais aparecem mesmo sem pago_em; usa created_at como data de referência para mix
 // ReciboPanel: extrato imprimível com folhas em aberto, pagamentos recentes e saldo devedor
 // fix: inclui folhas mix (VendaPagamento.vale) e calcula saldo corretamente para mix
+// fix: pagamentos parciais de mix aparecem mesmo sem pago_em (usa created_at como data de referência)
 import { Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { VendaPublic } from "@/client"
@@ -23,10 +24,9 @@ interface FolhaExtrato {
 
 interface PagamentoExtrato {
   id: string
-  valeNumero: number | null
-  pagoEm: string | null
-  valorPago: number
   descricao: string
+  dataRef: string | null  // pago_em ou created_at — para ordenação e exibição
+  valorPago: number
 }
 
 function fmt(v: number | string): string {
@@ -35,6 +35,11 @@ function fmt(v: number | string): string {
 
 function hoje(): string {
   return new Date().toLocaleDateString("pt-BR")
+}
+
+function fmtData(iso: string | null | undefined): string {
+  if (!iso) return hoje()
+  return new Date(iso).toLocaleDateString("pt-BR")
 }
 
 export function ReciboPanel({ clienteNome, clienteCpf, vendas }: Props) {
@@ -47,21 +52,33 @@ export function ReciboPanel({ clienteNome, clienteCpf, vendas }: Props) {
     if (v.forma_pagamento === "vale") {
       // Legado: fiado puro
       if (!v.pago_em) {
-        abertas.push({
-          id: v.id,
-          valeNumero: v.vale_numero ?? null,
-          vencimento: v.data_pagamento_vale ?? null,
-          valor: Number(v.valor_total),
-          saldo: Number(v.valor_total) - Number(v.valor_pago),
-          isMix: false,
-        })
+        const saldo = Number(v.valor_total) - Number(v.valor_pago)
+        if (saldo > 0) {
+          abertas.push({
+            id: v.id,
+            valeNumero: v.vale_numero ?? null,
+            vencimento: v.data_pagamento_vale ?? null,
+            valor: Number(v.valor_total),
+            saldo,
+            isMix: false,
+          })
+        }
+        // Se há valor parcial pago, mostra como pagamento
+        if (Number(v.valor_pago) > 0) {
+          pagamentos.push({
+            id: `${v.id}-parcial`,
+            descricao: `nº ${v.vale_numero ?? "—"} parcial`,
+            dataRef: v.recebido_em ?? v.created_at,
+            valorPago: Number(v.valor_pago),
+          })
+        }
       } else {
+        // Quitado
         pagamentos.push({
           id: v.id,
-          valeNumero: v.vale_numero ?? null,
-          pagoEm: v.pago_em,
-          valorPago: Number(v.valor_pago),
           descricao: `nº ${v.vale_numero ?? "—"} quitado`,
+          dataRef: v.pago_em,
+          valorPago: Number(v.valor_pago),
         })
       }
     } else if (v.forma_pagamento === "mix") {
@@ -70,37 +87,40 @@ export function ReciboPanel({ clienteNome, clienteCpf, vendas }: Props) {
         if (p.forma_pagamento !== "vale") continue
         const valorPago = Number(p.valor_pago ?? 0)
         const valor = Number(p.valor)
-        if (!p.pago_em) {
+        const saldo = valor - valorPago
+
+        if (!p.pago_em && saldo > 0) {
           abertas.push({
             id: p.id,
             valeNumero: p.vale_numero ?? null,
             vencimento: p.data_pagamento_vale ?? null,
             valor,
-            saldo: valor - valorPago,
+            saldo,
             isMix: true,
           })
         }
+
+        // Qualquer valor pago (parcial ou total) aparece em pagamentos
         if (valorPago > 0) {
           pagamentos.push({
-            id: p.id,
-            valeNumero: p.vale_numero ?? null,
-            pagoEm: p.pago_em ?? null,
-            valorPago,
+            id: `${p.id}-pago`,
             descricao: p.pago_em
               ? `nº ${p.vale_numero ?? "—"} quitado (mix)`
               : `nº ${p.vale_numero ?? "—"} parcial (mix)`,
+            dataRef: p.pago_em ?? v.created_at,
+            valorPago,
           })
         }
       }
     }
   }
 
-  // Ordena abertas: mais antigas primeiro
+  // Ordena abertas: mais antigas primeiro (por vencimento)
   abertas.sort((a, b) => (a.vencimento ?? "").localeCompare(b.vencimento ?? ""))
 
-  // Pagamentos: mais recentes primeiro, limita 5
+  // Pagamentos: mais recentes primeiro, limita 8
   const pagamentosRecentes = pagamentos
-    .sort((a, b) => new Date(b.pagoEm ?? 0).getTime() - new Date(a.pagoEm ?? 0).getTime())
+    .sort((a, b) => new Date(b.dataRef ?? 0).getTime() - new Date(a.dataRef ?? 0).getTime())
     .slice(0, 8)
 
   const saldoTotal = abertas.reduce((s, f) => s + f.saldo, 0)
@@ -179,9 +199,7 @@ export function ReciboPanel({ clienteNome, clienteCpf, vendas }: Props) {
                 {pagamentosRecentes.map((p) => (
                   <tr key={p.id} className="border-b last:border-0">
                     <td className="py-1.5">{p.descricao}</td>
-                    <td className="py-1.5 text-muted-foreground">
-                      {p.pagoEm ? new Date(p.pagoEm).toLocaleDateString("pt-BR") : "—"}
-                    </td>
+                    <td className="py-1.5 text-muted-foreground">{fmtData(p.dataRef)}</td>
                     <td className="py-1.5 text-right font-medium text-[#00a63e]">
                       + {fmt(p.valorPago)}
                     </td>
