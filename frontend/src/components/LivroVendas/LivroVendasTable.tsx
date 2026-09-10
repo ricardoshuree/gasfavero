@@ -1,6 +1,7 @@
-// [mcp-local harness] feature: fix_mix_readonly | plano: 75f7234e | 2026-09-10 19:40:49
-// Venda mix somente leitura: campos valor_pago e data_venda ocultos, botões Salvar/Cancelar edição removidos
+// [mcp-local harness] feature: livro_vendas_default_7dias | plano: dd100eb4 | 2026-09-10 20:00:11
+// Padrão tabela: últimos 7 dias em vez do mês inteiro — reduz carga na API
 // fix: venda mix somente leitura no VendaEditPanel — sem campos editáveis
+// perf: tabela padrão últimos 7 dias em vez do mês inteiro
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
@@ -122,19 +123,15 @@ function StatusBadge({ venda, temCascoAberto }: { venda: VendaPublic; temCascoAb
   )
 }
 
-function primeiroDiaMesAtualISO(): string {
-  const hoje = new Date()
-  const y = hoje.getFullYear()
-  const m = String(hoje.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}-01`
+// Padrão: últimos 7 dias — universo pequeno, cobre semana operacional
+function hojeISO(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
-function ultimoDiaMesAtualISO(): string {
-  const hoje = new Date()
-  const y = hoje.getFullYear()
-  const ultimoDia = new Date(y, hoje.getMonth() + 1, 0).getDate()
-  const m = String(hoje.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}-${String(ultimoDia).padStart(2, "0")}`
+function setesDiasAtrasISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 7)
+  return d.toISOString().slice(0, 10)
 }
 
 // ---------------------------------------------------------------------------
@@ -277,13 +274,9 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
 
       {!isCancelada && canEdit && (
         <div className="flex flex-col gap-4">
-
-          {/* Forma de pagamento */}
           <div className="grid gap-1.5">
             <Label>Forma de pagamento</Label>
-
             {isMix ? (
-              /* Mix: detalhe somente leitura + aviso — sem campos editáveis */
               <>
                 <MixPagamentosDetalhe venda={venda} />
                 <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
@@ -293,7 +286,6 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
                 </div>
               </>
             ) : (
-              /* Formas simples: select editável */
               <>
                 <Select value={formaPagamento} onValueChange={setFormaPagamento}>
                   <SelectTrigger id="ep-forma"><SelectValue /></SelectTrigger>
@@ -321,7 +313,6 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
             )}
           </div>
 
-          {/* Valor pago e data — ocultos para mix */}
           {!isMix && (
             <>
               <div className="grid gap-1.5">
@@ -345,7 +336,6 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
         </div>
       )}
 
-      {/* Histórico de edições */}
       {venda.logs_edicao && venda.logs_edicao.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico de edições</p>
@@ -368,7 +358,6 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
         </div>
       )}
 
-      {/* Cancelar venda */}
       {!isCancelada && canEdit && (
         <div className="border-t pt-4 mt-2">
           {!confirmandoCancelamento ? (
@@ -409,11 +398,11 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
 // ---------------------------------------------------------------------------
 
 export function LivroVendasTable() {
-  const [inicioInput, setInicioInput] = useState(primeiroDiaMesAtualISO())
-  const [fimInput, setFimInput] = useState(ultimoDiaMesAtualISO())
+  const [inicioInput, setInicioInput] = useState(setesDiasAtrasISO())
+  const [fimInput, setFimInput] = useState(hojeISO())
   const [filtro, setFiltro] = useState<{ inicio: string; fim: string }>({
-    inicio: primeiroDiaMesAtualISO(),
-    fim: ultimoDiaMesAtualISO(),
+    inicio: setesDiasAtrasISO(),
+    fim: hojeISO(),
   })
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("todos")
   const [page, setPage] = useState(0)
