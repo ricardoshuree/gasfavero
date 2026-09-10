@@ -1,6 +1,7 @@
-﻿// [mcp-local harness] feature: livro_vendas_endereco_truncado | plano: 3298f586 | 2026-09-09 13:20:22
-// Endereço truncado em 38 chars com tooltip no hover
-// Adiciona coluna Produtos entre Endereço e Tipo pagamento; trunca endereço em 40 chars
+// [mcp-local harness] feature: livro_vendas_mix_detalhe | plano: 716e32fa | 2026-09-10 18:59:15
+// MixPagamentosDetalhe: desdobra pagamentos[] com forma, valor, folha e status para vendas mix no painel de detalhes
+// [mcp-local harness] feature: livro_vendas_mix_detalhe
+// VendaEditPanel: desdobra pagamentos[] para vendas mix
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
@@ -45,6 +46,7 @@ const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
   vale:           "Fiado",
   vale_gas:       "Vale Gás",
   gas_povo:       "Gás do Povo",
+  mix:            "Mix",
 }
 
 const FORMAS_SIMPLES = ["cartao_debito", "cartao_credito", "pix", "dinheiro"]
@@ -166,6 +168,59 @@ function ultimoDiaMesAtualISO(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Bloco de detalhe do mix de pagamentos
+// ---------------------------------------------------------------------------
+
+function MixPagamentosDetalhe({ venda }: { venda: VendaPublic }) {
+  const pagamentos = venda.pagamentos ?? []
+  if (pagamentos.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="rounded-md border divide-y">
+        {pagamentos.map((p) => {
+          const label = LABEL_FORMA_PAGAMENTO[p.forma_pagamento] ?? p.forma_pagamento
+          const valorPago = Number(p.valor_pago ?? 0)
+          const valor = Number(p.valor)
+          const quitado = !!p.pago_em
+          const parcial = !quitado && valorPago > 0
+          return (
+            <div key={p.id} className="flex items-start justify-between px-3 py-2 text-sm">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-medium">{label}</span>
+                {p.forma_pagamento === "vale" && (
+                  <span className="text-xs text-muted-foreground">
+                    Folha nº {p.vale_numero ?? "—"} · vcto {formatDate(p.data_pagamento_vale)}
+                  </span>
+                )}
+                {p.forma_pagamento === "vale" && (
+                  <span className={`text-xs font-medium ${
+                    quitado ? "text-[#00a63e]" : parcial ? "text-amber-500" : "text-destructive"
+                  }`}>
+                    {quitado ? "Quitado" : parcial ? `Parcial — ${formatMoney(valorPago)} recebido` : "Em aberto"}
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="font-medium">{formatMoney(valor)}</p>
+                {p.forma_pagamento !== "vale" && (
+                  <p className="text-xs text-[#00a63e]">recebido</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        {/* Total */}
+        <div className="flex justify-between px-3 py-2 text-sm font-semibold bg-muted/20">
+          <span>Total</span>
+          <span>{formatMoney(venda.valor_total)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Panel lateral de edicao
 // ---------------------------------------------------------------------------
 
@@ -187,6 +242,7 @@ function VendaEditPanel({
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false)
 
   const isCancelada = venda.status === "cancelada"
+  const isMix = venda.forma_pagamento === "mix"
   const formaAtualEhSimples = FORMAS_SIMPLES.includes(venda.forma_pagamento)
   const trocouParaComplexo = !FORMAS_SIMPLES.includes(formaPagamento) && formaPagamento !== venda.forma_pagamento
   const qtdEdicoes = venda.qtd_edicoes ?? 0
@@ -235,6 +291,7 @@ function VendaEditPanel({
 
   return (
     <div className="flex flex-col gap-5 p-1">
+      {/* Info resumo */}
       <div className="rounded-lg border bg-muted/30 p-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Cliente</span>
@@ -274,31 +331,50 @@ function VendaEditPanel({
 
       {!isCancelada && canEdit && (
         <div className="flex flex-col gap-4">
+
+          {/* Forma de pagamento */}
           <div className="grid gap-1.5">
-            <Label htmlFor="ep-forma">Forma de pagamento</Label>
-            <Select value={formaPagamento} onValueChange={setFormaPagamento}>
-              <SelectTrigger id="ep-forma">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(LABEL_FORMA_PAGAMENTO).map(([v, l]) => (
-                  <SelectItem key={v} value={v}>{l}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {trocouParaComplexo && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 mt-1">
-                <p className="text-xs text-amber-800">
-                  ⚠️ Para alterar para {LABEL_FORMA_PAGAMENTO[formaPagamento]}, cancele esta venda e registre uma nova.
-                </p>
-              </div>
-            )}
-            {!formaAtualEhSimples && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 mt-1">
-                <p className="text-xs text-amber-800">
-                  ⚠️ Vendas em {LABEL_FORMA_PAGAMENTO[venda.forma_pagamento]} não permitem troca de forma de pagamento. Para alterar, cancele e registre uma nova.
-                </p>
-              </div>
+            <Label>Forma de pagamento</Label>
+
+            {/* Mix: mostra detalhe das linhas em vez do select */}
+            {isMix ? (
+              <>
+                <MixPagamentosDetalhe venda={venda} />
+                <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
+                  <p className="text-xs text-amber-800">
+                    ⚠️ Vendas em mix não permitem troca de forma de pagamento. Para alterar, cancele e registre uma nova.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Select value={formaPagamento} onValueChange={setFormaPagamento}>
+                  <SelectTrigger id="ep-forma">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LABEL_FORMA_PAGAMENTO)
+                      .filter(([v]) => v !== "mix")
+                      .map(([v, l]) => (
+                        <SelectItem key={v} value={v}>{l}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {trocouParaComplexo && (
+                  <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 mt-1">
+                    <p className="text-xs text-amber-800">
+                      ⚠️ Para alterar para {LABEL_FORMA_PAGAMENTO[formaPagamento]}, cancele esta venda e registre uma nova.
+                    </p>
+                  </div>
+                )}
+                {!formaAtualEhSimples && !isMix && (
+                  <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 mt-1">
+                    <p className="text-xs text-amber-800">
+                      ⚠️ Vendas em {LABEL_FORMA_PAGAMENTO[venda.forma_pagamento]} não permitem troca de forma de pagamento. Para alterar, cancele e registre uma nova.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
