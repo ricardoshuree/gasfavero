@@ -122,3 +122,37 @@
     cursor: pointer;
   }
 }
+
+/* ── Impressão: só o extrato do cliente ─────────────────────────────────── */
+@media print {
+  /* Oculta tudo */
+  body * {
+    visibility: hidden !important;
+  }
+  /* Mostra só o recibo e seus filhos */
+  #recibo-print,
+  #recibo-print * {
+    visibility: visible !important;
+  }
+  /* Posiciona o recibo no canto superior esquerdo */
+  #recibo-print {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 1rem !important;
+  }
+  /* Força texto preto em todas as classes de cor */
+  #recibo-print * {
+    color: black !important;
+    background: white !important;
+    border-color: #ccc !important;
+  }
+  /* Vermelho para saldo devedor, verde para pago */
+  #recibo-print .text-destructive { color: #c0392b !important; }
+  #recibo-print .text-\[#00a63e\] { color: #00a63e !important; }
+}
