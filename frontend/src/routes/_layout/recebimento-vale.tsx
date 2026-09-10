@@ -1,8 +1,7 @@
-// [mcp-local harness] feature: fix_prop_extrato_aberto | plano: 015f6ffe | 2026-09-10 14:34:21
-// Remove extratoAberto da chamada de ContaClientePanel
-// Tela de Recebimento de Fiado — conta-corrente por cliente.
-// Layout: painel de métricas + busca de clientes (col 1) + conta do cliente (col 2) + extrato imprimível (col 3).
-// A col 3 abre ao clicar em "Extrato" ou automaticamente após quitação total.
+// [mcp-local harness] feature: recebimento_melhorias_v2 | plano: 28e6cf57 | 2026-09-10 15:32:52
+// Extrato abre automaticamente ao clicar cliente; onExtrato atualiza sem fechar
+// Melhoria: extrato abre automaticamente ao clicar no cliente (handleAbrirCliente seta extratoAberto=true)
+// onExtrato atualiza reciboVendas sem fechar o extrato
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { AlertCircle, Check, Clock, Search } from "lucide-react"
@@ -39,13 +38,8 @@ function useClientesComFiado(busca: string) {
   })
 
   const vendas = data?.data ?? []
-
   const mapaClientes = new Map<string, {
-    cliente_id: string
-    cliente_nome: string
-    saldo: number
-    tem_atraso: boolean
-    vence_breve: boolean
+    cliente_id: string; cliente_nome: string; saldo: number; tem_atraso: boolean; vence_breve: boolean
   }>()
 
   for (const v of vendas) {
@@ -56,19 +50,12 @@ function useClientesComFiado(busca: string) {
     const vcto = v.data_pagamento_vale ? new Date(v.data_pagamento_vale) : null
     const atrasada = vcto ? vcto < hoje : false
     const vinceBreve = vcto ? !atrasada && (vcto.getTime() - hoje.getTime()) < 7 * 86400000 : false
-
     if (existing) {
       existing.saldo += saldo
       if (atrasada) existing.tem_atraso = true
       if (vinceBreve) existing.vence_breve = true
     } else {
-      mapaClientes.set(v.cliente_id, {
-        cliente_id: v.cliente_id,
-        cliente_nome: v.cliente_nome,
-        saldo,
-        tem_atraso: atrasada,
-        vence_breve: vinceBreve,
-      })
+      mapaClientes.set(v.cliente_id, { cliente_id: v.cliente_id, cliente_nome: v.cliente_nome, saldo, tem_atraso: atrasada, vence_breve: vinceBreve })
     }
   }
 
@@ -78,21 +65,14 @@ function useClientesComFiado(busca: string) {
       if (!a.tem_atraso && b.tem_atraso) return 1
       return b.saldo - a.saldo
     })
-    .filter((c) => {
-      if (!busca.trim()) return true
-      return c.cliente_nome.toLowerCase().includes(busca.toLowerCase())
-    })
+    .filter((c) => !busca.trim() || c.cliente_nome.toLowerCase().includes(busca.toLowerCase()))
 
   return { lista, isLoading }
 }
 
 function RecebimentoVale() {
   const [busca, setBusca] = useState("")
-  const [clienteSelecionado, setClienteSelecionado] = useState<{
-    id: string
-    nome: string
-    cpf: string
-  } | null>(null)
+  const [clienteSelecionado, setClienteSelecionado] = useState<{ id: string; nome: string; cpf: string } | null>(null)
   const [reciboVendas, setReciboVendas] = useState<any[]>([])
   const [extratoAberto, setExtratoAberto] = useState(false)
 
@@ -111,13 +91,14 @@ function RecebimentoVale() {
 
   function handleAbrirCliente(id: string, nome: string) {
     setClienteSelecionado({ id, nome, cpf: "" })
-    setExtratoAberto(false)
     setReciboVendas([])
+    // Abre extrato automaticamente ao selecionar cliente
+    setExtratoAberto(true)
   }
 
   function handleExtrato(vendas: any[]) {
+    // Atualiza vendas do recibo sem fechar o extrato
     setReciboVendas(vendas)
-    setExtratoAberto(true)
   }
 
   function toggleExtrato() {
@@ -137,32 +118,22 @@ function RecebimentoVale() {
 
       <ResumoCards />
 
-      <div
-        className={`grid gap-4 ${
-          extratoAberto && clienteSelecionado
-            ? "grid-cols-1 lg:grid-cols-[280px_1fr_280px]"
-            : "grid-cols-1 lg:grid-cols-[280px_1fr]"
-        }`}
-      >
-        {/* Col 1: lista de clientes */}
+      <div className={`grid gap-4 ${
+        extratoAberto && clienteSelecionado
+          ? "grid-cols-1 lg:grid-cols-[280px_1fr_280px]"
+          : "grid-cols-1 lg:grid-cols-[280px_1fr]"
+      }`}>
+
+        {/* Col 1: lista */}
         <div className="flex flex-col gap-3">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar cliente..."
-              className="pl-8 h-9"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
+            <Input placeholder="Buscar cliente..." className="pl-8 h-9" value={busca} onChange={(e) => setBusca(e.target.value)} />
           </div>
 
-          {isLoading && (
-            <div className="flex flex-col gap-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 animate-pulse rounded-xl border bg-muted/30" />
-              ))}
-            </div>
-          )}
+          {isLoading && [1,2,3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-xl border bg-muted/30" />
+          ))}
 
           {!isLoading && lista.length === 0 && (
             <div className="flex items-center justify-center p-6 text-muted-foreground text-sm border rounded-xl border-dashed">
@@ -172,39 +143,30 @@ function RecebimentoVale() {
           )}
 
           {lista.map((c) => (
-            <button
-              key={c.cliente_id}
-              type="button"
+            <button key={c.cliente_id} type="button"
               onClick={() => handleAbrirCliente(c.cliente_id, c.cliente_nome)}
               className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
-                clienteSelecionado?.id === c.cliente_id
-                  ? "border-primary bg-primary/5"
-                  : "bg-card hover:border-border-strong"
+                clienteSelecionado?.id === c.cliente_id ? "border-primary bg-primary/5" : "bg-card hover:border-border-strong"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-medium truncate">{c.cliente_nome}</span>
-                <span className="text-sm font-medium text-destructive ml-2 flex-shrink-0">
-                  {fmt(c.saldo)}
-                </span>
+                <span className="text-sm font-medium text-destructive ml-2 flex-shrink-0">{fmt(c.saldo)}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 {c.tem_atraso && (
                   <span className="inline-flex items-center gap-1 text-xs text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
-                    <AlertCircle className="h-3 w-3" />
-                    Em atraso
+                    <AlertCircle className="h-3 w-3" />Em atraso
                   </span>
                 )}
                 {!c.tem_atraso && c.vence_breve && (
                   <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                    <Clock className="h-3 w-3" />
-                    Vence em breve
+                    <Clock className="h-3 w-3" />Vence em breve
                   </span>
                 )}
                 {!c.tem_atraso && !c.vence_breve && (
                   <span className="inline-flex items-center gap-1 text-xs text-[#00a63e] bg-[#00a63e]/10 px-1.5 py-0.5 rounded">
-                    <Check className="h-3 w-3" />
-                    Em dia
+                    <Check className="h-3 w-3" />Em dia
                   </span>
                 )}
               </div>
@@ -212,17 +174,13 @@ function RecebimentoVale() {
           ))}
         </div>
 
-        {/* Col 2: conta do cliente */}
+        {/* Col 2: conta */}
         {clienteSelecionado ? (
           <div className="flex flex-col gap-2">
             <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={toggleExtrato}
+              <button type="button" onClick={toggleExtrato}
                 className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                  extratoAberto
-                    ? "border-primary text-primary bg-primary/5"
-                    : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                  extratoAberto ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:border-primary hover:text-primary"
                 }`}
               >
                 Extrato {extratoAberto ? "▸" : "◂"}
@@ -243,11 +201,7 @@ function RecebimentoVale() {
 
         {/* Col 3: recibo */}
         {extratoAberto && clienteSelecionado && (
-          <ReciboPanel
-            clienteNome={clienteSelecionado.nome}
-            clienteCpf={cpf}
-            vendas={reciboVendas}
-          />
+          <ReciboPanel clienteNome={clienteSelecionado.nome} clienteCpf={cpf} vendas={reciboVendas} />
         )}
       </div>
     </div>

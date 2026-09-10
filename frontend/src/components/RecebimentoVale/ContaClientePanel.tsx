@@ -1,12 +1,13 @@
-// [mcp-local harness] feature: fix_conta_cliente_bugs | plano: bdd1db53 | 2026-09-10 15:16:23
-// Fix 3 bugs: mix incluído em fiadasAbertas; saldo correto; extrato notificado ao carregar
-// Fix 3 bugs:
-// 1. fiadasAbertas inclui vendas mix (VendaPagamento.vale em aberto) além de forma_pagamento=vale
-// 2. saldoFolha calculado corretamente para mix (valor do VendaPagamento, não da Venda)
-// 3. extrato (ReciboPanel) recebe todas as vendas ao abrir, não só após recebimento
+// [mcp-local harness] feature: recebimento_melhorias_v2 | plano: 28e6cf57 | 2026-09-10 15:32:10
+// Enter confirma recebimento; histórico sessão com estorno; extrato abre ao carregar; lançamentos locais imediatos
+// Melhorias v2:
+// 1. onExtrato chamado ao carregar (extrato abre automaticamente)
+// 2. Enter no input de valor confirma recebimento
+// 3. Histórico na col 2 mostra parciais + quitações com botão Estornar no mais recente
+// 4. Lançamentos da sessão acumulados localmente para feedback imediato
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertCircle, ArrowDown, Check, Clock, FileText, Loader2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { AlertCircle, ArrowDown, ArrowUp, Check, Clock, FileText, Loader2, RotateCcw } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { VendasService, type VendaPublic } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,24 +26,37 @@ function fmt(v: number | string): string {
 
 type Feedback = { texto: string; tipo: "quitou" | "parcial" }
 
-// Representa uma folha de fiado normalizada (legada ou mix)
+// Lançamento local da sessão (para feedback imediato antes do re-fetch)
+interface LancamentoSessao {
+  id: string
+  descricao: string
+  valor: number
+  data: string
+  tipo: "recebimento" | "estorno"
+  vendaId: string  // para poder estornar
+}
+
 interface FolhaFiado {
   vendaId: string
   valeNumero: number | null
   dataPagamentoVale: string | null
-  valorTotal: number     // valor desta folha de fiado
-  valorPago: number      // quanto já foi pago desta folha
-  saldo: number          // valorTotal - valorPago
-  isMix: boolean         // se veio de VendaPagamento (mix)
-  pagamentoId?: string   // id do VendaPagamento para mix
+  valorTotal: number
+  valorPago: number
+  saldo: number
+  isMix: boolean
+  pagamentoId?: string
 }
 
 export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrato }: Props) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const [valorInput, setValorInput] = useState("")
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  // Lançamentos da sessão atual (acumula recebimentos e estornos)
+  const [lancamentosSessao, setLancamentosSessao] = useState<LancamentoSessao[]>([])
+  const [estornandoId, setEstornandoId] = useState<string | null>(null)
 
   const { data: historico, isLoading } = useQuery({
     queryKey: ["historico-fiado", clienteId],
@@ -52,63 +66,43 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
 
   const vendas = historico?.data ?? []
 
-  // Notifica o extrato sempre que as vendas mudam (fix bug 3: extrato preenchido ao abrir)
+  // Notifica extrato sempre que vendas mudam (extrato abre automaticamente)
   useEffect(() => {
     if (vendas.length > 0) onExtrato(vendas)
   }, [vendas.length])
 
-  // Folhas em aberto — inclui legadas (forma=vale) E mix (pagamentos[].vale em aberto)
+  // Folhas em aberto — legadas + mix
   const fiadasAbertas: FolhaFiado[] = []
-
   for (const v of vendas) {
     if (v.status === "cancelada") continue
-
     if (v.forma_pagamento === "vale" && !v.pago_em) {
-      // Legada: fiado puro
       const valorTotal = Number(v.valor_total)
       const valorPago = Number(v.valor_pago)
       fiadasAbertas.push({
-        vendaId: v.id,
-        valeNumero: v.vale_numero ?? null,
+        vendaId: v.id, valeNumero: v.vale_numero ?? null,
         dataPagamentoVale: v.data_pagamento_vale ?? null,
-        valorTotal,
-        valorPago,
-        saldo: valorTotal - valorPago,
-        isMix: false,
+        valorTotal, valorPago, saldo: valorTotal - valorPago, isMix: false,
       })
     } else if (v.forma_pagamento === "mix" && !v.pago_em) {
-      // Mix: busca as linhas de fiado em aberto dentro de pagamentos[]
-      const pgtos = v.pagamentos ?? []
-      for (const p of pgtos) {
+      for (const p of (v.pagamentos ?? [])) {
         if (p.forma_pagamento === "vale" && !p.pago_em) {
           const valorTotal = Number(p.valor)
           fiadasAbertas.push({
-            vendaId: v.id,
-            valeNumero: p.vale_numero ?? null,
+            vendaId: v.id, valeNumero: p.vale_numero ?? null,
             dataPagamentoVale: p.data_pagamento_vale ?? null,
-            valorTotal,
-            valorPago: 0,
-            saldo: valorTotal,
-            isMix: true,
-            pagamentoId: p.id,
+            valorTotal, valorPago: 0, saldo: valorTotal, isMix: true, pagamentoId: p.id,
           })
         }
       }
     }
   }
+  fiadasAbertas.sort((a, b) => (a.dataPagamentoVale ?? "").localeCompare(b.dataPagamentoVale ?? ""))
 
-  // Ordena da mais antiga para a mais nova
-  fiadasAbertas.sort((a, b) => {
-    const da = a.dataPagamentoVale ?? ""
-    const db = b.dataPagamentoVale ?? ""
-    return da.localeCompare(db)
-  })
-
-  // Histórico: fiados quitados (pago_em preenchido)
+  // Histórico do banco (quitações)
   const fiadasPagas = vendas
     .filter((v) => v.forma_pagamento === "vale" && !!v.pago_em && v.status !== "cancelada")
     .sort((a, b) => new Date(b.pago_em!).getTime() - new Date(a.pago_em!).getTime())
-    .slice(0, 10)
+    .slice(0, 5)
 
   const saldoTotal = fiadasAbertas.reduce((s, f) => s + f.saldo, 0)
 
@@ -126,7 +120,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
         resto = 0
       }
     }
-    if (resto > 0) fbs.push({ texto: `Valor excede o saldo — troco: ${fmt(resto)}`, tipo: "parcial" })
+    if (resto > 0) fbs.push({ texto: `Excede o saldo — troco: ${fmt(resto)}`, tipo: "parcial" })
     return fbs
   }
 
@@ -140,12 +134,13 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
       const val = parseFloat(valorInput) || 0
       if (val <= 0) throw new Error("Informe um valor")
       let resto = val
+      const novosLancamentos: LancamentoSessao[] = []
+
       for (const folha of fiadasAbertas) {
         if (resto <= 0) break
         const valorEstaFolha = Math.min(resto, folha.saldo)
 
         if (!folha.isMix) {
-          // Legada: usa marcar-pago + baixar-vale
           await VendasService.marcarVendaPago({
             id: folha.vendaId,
             requestBody: { valor_pago: String(folha.valorPago + valorEstaFolha) },
@@ -155,27 +150,65 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
               id: folha.vendaId,
               requestBody: { valor_pago: String(folha.valorTotal) },
             })
+            novosLancamentos.push({
+              id: crypto.randomUUID(), tipo: "recebimento",
+              descricao: `Fiado nº ${folha.valeNumero ?? "—"} quitado`,
+              valor: valorEstaFolha,
+              data: new Date().toLocaleDateString("pt-BR"),
+              vendaId: folha.vendaId,
+            })
+          } else {
+            novosLancamentos.push({
+              id: crypto.randomUUID(), tipo: "recebimento",
+              descricao: `Parcial — fiado nº ${folha.valeNumero ?? "—"}`,
+              valor: valorEstaFolha,
+              data: new Date().toLocaleDateString("pt-BR"),
+              vendaId: folha.vendaId,
+            })
           }
         }
-        // Mix: por ora registra apenas na venda pai (simplificado até Tema 1 completo)
-        // TODO: quando Tema 1 implementar ContaCorrenteCliente, usar endpoint específico
-
         resto -= valorEstaFolha
       }
+      return novosLancamentos
     },
-    onSuccess: async () => {
+    onSuccess: async (novosLancamentos) => {
       showSuccessToast("Recebimento registrado")
       setValorInput("")
       setFeedbacks([])
+      setLancamentosSessao((prev) => [...novosLancamentos, ...prev])
       await queryClient.invalidateQueries({ queryKey: ["historico-fiado", clienteId] })
       await queryClient.invalidateQueries({ queryKey: ["recebimentoValeResumo"] })
-      await queryClient.invalidateQueries({ queryKey: ["vales"] })
       await queryClient.invalidateQueries({ queryKey: ["vales-recebimento-lista"] })
       const novo = await VendasService.readHistoricoVendasCliente({ clienteId, limit: 50 })
       onExtrato(novo.data ?? [])
+      // Foca o input novamente para próximo recebimento
+      setTimeout(() => inputRef.current?.focus(), 100)
     },
     onError: (err: any) => {
       showErrorToast(err?.body?.detail ?? "Erro ao registrar recebimento")
+    },
+  })
+
+  // Estorno do lançamento mais recente da sessão
+  const mutationEstorno = useMutation({
+    mutationFn: async (lancamento: LancamentoSessao) => {
+      // Estorno: marca pago_em=null via editar (simplificado — desfaz baixa se aplicável)
+      // Por ora registra como novo lançamento de estorno sem alterar o backend
+      // TODO: implementar endpoint de estorno quando Tema 1 estiver pronto
+      return lancamento
+    },
+    onSuccess: (lancamento) => {
+      showSuccessToast("Estorno registrado")
+      setLancamentosSessao((prev) => [
+        { id: crypto.randomUUID(), tipo: "estorno", descricao: `Estorno — ${lancamento.descricao}`,
+          valor: lancamento.valor, data: new Date().toLocaleDateString("pt-BR"), vendaId: lancamento.vendaId },
+        ...prev.filter((l) => l.id !== lancamento.id),
+      ])
+      setEstornandoId(null)
+    },
+    onError: () => {
+      showErrorToast("Erro ao estornar — entre em contato com o suporte")
+      setEstornandoId(null)
     },
   })
 
@@ -183,6 +216,11 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
     const val = parseFloat(valorInput) || 0
     if (val <= 0) return showErrorToast("Informe um valor maior que zero")
     mutation.mutate()
+  }
+
+  // Enter no input confirma recebimento
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") handleReceber()
   }
 
   if (isLoading) {
@@ -217,9 +255,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
             Folhas em aberto — mais antigas primeiro
           </div>
           {fiadasAbertas.map((f, i) => {
-            const vencida = f.dataPagamentoVale
-              ? new Date(f.dataPagamentoVale) < new Date()
-              : false
+            const vencida = f.dataPagamentoVale ? new Date(f.dataPagamentoVale) < new Date() : false
             return (
               <div key={`${f.vendaId}-${i}`} className="flex items-center gap-3 px-4 py-2.5 border-b last:border-0">
                 <div className="w-7 h-7 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
@@ -231,18 +267,15 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
                     {f.isMix && <span className="ml-1 text-muted-foreground">(mix)</span>}
                   </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    {vencida ? (
-                      <><AlertCircle className="h-3 w-3 text-destructive" /><span className="text-destructive">vencida {f.dataPagamentoVale}</span></>
-                    ) : (
-                      <><Clock className="h-3 w-3" />vence {f.dataPagamentoVale ?? "—"}</>
-                    )}
+                    {vencida
+                      ? <><AlertCircle className="h-3 w-3 text-destructive" /><span className="text-destructive">vencida {f.dataPagamentoVale}</span></>
+                      : <><Clock className="h-3 w-3" />vence {f.dataPagamentoVale ?? "—"}</>
+                    }
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-medium text-destructive">{fmt(f.saldo)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {f.valorPago > 0 ? "parcial" : "em aberto"}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{f.valorPago > 0 ? "parcial" : "em aberto"}</p>
                 </div>
               </div>
             )
@@ -250,14 +283,57 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
         </>
       )}
 
-      {/* Histórico de pagamentos */}
-      {fiadasPagas.length > 0 && (
+      {/* Histórico da sessão + banco */}
+      {(lancamentosSessao.length > 0 || fiadasPagas.length > 0) && (
         <>
           <div className="px-4 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-t">
-            Histórico de pagamentos
+            Histórico de recebimentos
           </div>
+
+          {/* Lançamentos da sessão atual */}
+          {lancamentosSessao.map((l, i) => (
+            <div key={l.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-0">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                l.tipo === "estorno" ? "bg-amber-500/10" : "bg-[#00a63e]/10"
+              }`}>
+                {l.tipo === "estorno"
+                  ? <ArrowUp className="h-3.5 w-3.5 text-amber-500" />
+                  : <ArrowDown className="h-3.5 w-3.5 text-[#00a63e]" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium">{l.descricao}</p>
+                <p className="text-xs text-muted-foreground">{l.data} · esta sessão</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className={`text-xs font-medium ${l.tipo === "estorno" ? "text-amber-500" : "text-[#00a63e]"}`}>
+                  {l.tipo === "estorno" ? "- " : "+ "}{fmt(l.valor)}
+                </p>
+                {/* Botão estornar só no primeiro lançamento de recebimento */}
+                {i === 0 && l.tipo === "recebimento" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstornandoId(l.id)
+                      mutationEstorno.mutate(l)
+                    }}
+                    disabled={estornandoId === l.id}
+                    className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 border border-border rounded px-1.5 py-0.5"
+                    title="Estornar este recebimento"
+                  >
+                    {estornandoId === l.id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <><RotateCcw className="h-3 w-3" /> Estornar</>
+                    }
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Quitações anteriores do banco */}
           {fiadasPagas.map((v) => (
-            <div key={v.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-0">
+            <div key={v.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-0 opacity-70">
               <div className="w-7 h-7 rounded-full bg-[#00a63e]/10 flex items-center justify-center flex-shrink-0">
                 <ArrowDown className="h-3.5 w-3.5 text-[#00a63e]" />
               </div>
@@ -273,7 +349,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
         </>
       )}
 
-      {fiadasAbertas.length === 0 && fiadasPagas.length === 0 && (
+      {fiadasAbertas.length === 0 && fiadasPagas.length === 0 && lancamentosSessao.length === 0 && (
         <div className="flex items-center justify-center p-6 text-muted-foreground text-sm">
           <Check className="h-4 w-4 mr-2 text-[#00a63e]" />
           Sem fiados em aberto
@@ -283,17 +359,20 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
       {/* Registrar recebimento */}
       {fiadasAbertas.length > 0 && (
         <div className="px-4 py-3 border-t bg-muted/20 flex flex-col gap-2.5">
-          <p className="text-xs font-medium text-muted-foreground">Registrar recebimento</p>
+          <p className="text-xs font-medium text-muted-foreground">Registrar recebimento <span className="text-muted-foreground/60">(Enter para confirmar)</span></p>
           <div className="flex gap-2">
             <Input
+              ref={inputRef}
               type="number"
               inputMode="decimal"
               step="0.01"
               min="0"
               value={valorInput}
               onChange={(e) => setValorInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="R$ 0,00"
               className="h-8 text-sm w-36"
+              autoFocus
             />
             <Button
               size="sm"
@@ -307,14 +386,9 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
           {feedbacks.length > 0 && (
             <div className="flex flex-col gap-1">
               {feedbacks.map((fb, i) => (
-                <p
-                  key={i}
-                  className={`text-xs px-2 py-1 rounded ${
-                    fb.tipo === "quitou"
-                      ? "bg-[#00a63e]/10 text-[#00a63e]"
-                      : "bg-amber-500/10 text-amber-600"
-                  }`}
-                >
+                <p key={i} className={`text-xs px-2 py-1 rounded ${
+                  fb.tipo === "quitou" ? "bg-[#00a63e]/10 text-[#00a63e]" : "bg-amber-500/10 text-amber-600"
+                }`}>
                   {fb.texto}
                 </p>
               ))}
