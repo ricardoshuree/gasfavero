@@ -1,10 +1,11 @@
-// [mcp-local harness] feature: sacola_verde_fixo | plano: 13548fa0 | 2026-09-09 17:34:19
-// Sacola sempre verde fixo; Pago e Total variam verde/âmbar
+// [mcp-local harness] feature: tema2_frontend_payload | plano: 84638ff0 | 2026-09-09 22:45:31
+// mutationFn envia pagamentos[] no mix; forma única usa caminho legado
+// Tema 2 completo: mutationFn envia pagamentos[] quando há mix de formas.
+// Forma única → caminho legado (forma_pagamento + valor_pago, sem pagamentos[]).
+// Mix de formas → pagamentos[] com valor por forma; backend grava VendaPagamento.
 // Sacola sempre verde fixo (#00a63e) — é a meta/alvo.
 // Pago e Total variam entre verde e âmbar dependendo do desconto.
-// Quando sacola muda (produto add/remove/qty), valoresPorForma é resetado:
-//   - forma única → repreenche com novo total automaticamente
-//   - mix → fica vazio para o operador redistribuir
+// Quando sacola muda (produto add/remove/qty), valoresPorForma é resetado.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
@@ -42,6 +43,9 @@ const NOME_DISTRIBUIDORA = "Distribuidora Gás Favero"
 const ROLES_PERMITIDAS = ["gerente", "motorista"]
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
 const COR_VERDE = "text-[#00a63e]"
+
+// Formas exclusivas não entram no mix de pagamentos[]
+const FORMAS_EXCLUSIVAS_SET = new Set<FormaPagamentoValue>(["vale_gas", "gas_povo"])
 
 const LABEL_FORMA: Record<FormaPagamentoValue, string> = {
   cartao_debito:  "Débito",
@@ -228,8 +232,6 @@ function Vendas() {
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
   const totalPago = formasPagamento.includes("gas_povo") ? gasPovoTotal : somaFormas
 
-  // Sacola: sempre verde fixo (é a meta)
-  // Pago e Total: verde quando pago >= sacola, âmbar quando há desconto
   const pagamentoOk = formasPagamento.length > 0 && totalPago >= totalSacola
   const corPago = pagamentoOk ? COR_VERDE : "text-amber-500"
 
@@ -335,6 +337,10 @@ function Vendas() {
 
   const formaPrincipal = formasPagamento[0] ?? null
 
+  // Mix: há 2+ formas que não são exclusivas (vale_gas/gas_povo)
+  const formasMix = formasPagamento.filter((f) => !FORMAS_EXCLUSIVAS_SET.has(f))
+  const usaMix = formasMix.length > 1
+
   const valorPagoEnvio = formasPagamento.includes("gas_povo")
     ? String(gasPovoTotal)
     : somaFormas.toFixed(2)
@@ -357,27 +363,60 @@ function Vendas() {
     setShowResumo(true)
   }
 
+  // ── Mutation ──────────────────────────────────────────────────────────────
   const mutation = useMutation({
-    mutationFn: () =>
-      VendasService.createVenda({
+    mutationFn: () => {
+      // Constrói pagamentos[] para mix de formas (Tema 2)
+      // Formas exclusivas (vale_gas, gas_povo) ficam no caminho legado
+      const pagamentos = usaMix
+        ? formasMix.map((forma) => {
+            const valor = parseFloat(valoresPorForma[forma] ?? "0") || 0
+            const base: Record<string, unknown> = {
+              forma_pagamento: forma,
+              valor,
+            }
+            if (forma === "vale") {
+              base.vale_numero = valeNumero ? Number(valeNumero) : undefined
+              base.data_pagamento_vale = dataPagamentoVale || undefined
+            }
+            return base
+          })
+        : []
+
+      return VendasService.createVenda({
         requestBody: {
           cliente_id: cliente?.id ?? "",
           endereco_id: endereco?.id,
           motorista_id: motoristaId,
+          // forma_pagamento: campo legado obrigatório no schema
+          // No mix usa o primeiro da lista; o backend usa pagamentos[] e ignora este campo
           forma_pagamento: formaPrincipal as
             | "cartao_debito" | "cartao_credito" | "pix" | "dinheiro"
             | "vale" | "vale_gas" | "gas_povo",
-          vale_numero: formasPagamento.includes("vale") && valeNumero ? Number(valeNumero) : undefined,
-          data_pagamento_vale: formasPagamento.includes("vale") && dataPagamentoVale ? dataPagamentoVale : undefined,
-          vale_gas_numero: formasPagamento.includes("vale_gas") && valeGasNumero ? Number(valeGasNumero) : undefined,
-          vale_gas_bloco_id: formasPagamento.includes("vale_gas") ? (valeGasBlocoId ?? undefined) : undefined,
-          gas_povo_frete: formasPagamento.includes("gas_povo") && gasPovoFrete ? gasPovoFrete : undefined,
+          // pagamentos[]: preenchido apenas no mix — backend detecta e usa
+          pagamentos: pagamentos as any,
+          // Campos legados: usados quando há forma única ou exclusiva
+          vale_numero: !usaMix && formasPagamento.includes("vale") && valeNumero
+            ? Number(valeNumero) : undefined,
+          data_pagamento_vale: !usaMix && formasPagamento.includes("vale") && dataPagamentoVale
+            ? dataPagamentoVale : undefined,
+          vale_gas_numero: formasPagamento.includes("vale_gas") && valeGasNumero
+            ? Number(valeGasNumero) : undefined,
+          vale_gas_bloco_id: formasPagamento.includes("vale_gas")
+            ? (valeGasBlocoId ?? undefined) : undefined,
+          gas_povo_frete: formasPagamento.includes("gas_povo") && gasPovoFrete
+            ? gasPovoFrete : undefined,
           valor_pago: valorPagoEnvio,
           data_venda: dataVenda,
-          itens: sacola.map((i) => ({ produto_id: i.produtoId, quantidade: i.quantidade, com_casco: i.comCasco ?? false })),
+          itens: sacola.map((i) => ({
+            produto_id: i.produtoId,
+            quantidade: i.quantidade,
+            com_casco: i.comCasco ?? false,
+          })),
           cascos: cascos.length > 0 ? cascos : [],
         },
-      }),
+      })
+    },
     onSuccess: () => { showSuccessToast("Venda registrada com sucesso"); resetForm() },
     onError: (err: ApiError) => { handleError.call(showErrorToast, err); setShowResumo(false) },
     onSettled: () => {
@@ -535,31 +574,23 @@ function Vendas() {
 
           {/* Sacola · Pago · Total + Finalizar */}
           <div className="flex flex-col gap-2 rounded-lg border p-3">
-
-            {/* Sacola: sempre verde fixo — é a meta */}
             <div className="flex items-center justify-between">
               <span className={`text-sm font-medium ${COR_VERDE}`}>Sacola</span>
               <span className={`text-sm font-medium ${COR_VERDE}`}>{formatMoney(totalSacola)}</span>
             </div>
-
-            {/* Pago: verde quando fecha, âmbar quando há desconto */}
             {formasPagamento.length > 0 && (
               <div className="flex items-center justify-between">
                 <span className={`text-sm font-medium ${corPago}`}>Pago</span>
                 <span className={`text-sm font-semibold ${corPago}`}>{formatMoney(totalPago)}</span>
               </div>
             )}
-
             <div className="my-1 border-t" />
-
-            {/* Total: mesma cor que Pago */}
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Total</span>
               <span className={`text-xl font-bold ${formasPagamento.length > 0 ? corPago : ""}`}>
                 {formatMoney(formasPagamento.length > 0 ? totalPago : totalSacola)}
               </span>
             </div>
-
             <Button size="lg" className="w-full mt-1" disabled={!podeFinalizar} onClick={handleAbrirResumo}>
               Finalizar Venda
             </Button>
