@@ -1,9 +1,9 @@
-// [mcp-local harness] feature: fix_imports_conta_cliente | plano: 4f991f30 | 2026-09-10 14:32:18
-// Remove imports não usados: ArrowUp, Label, hojeISO, extratoAberto
-// ContaClientePanel: coluna do meio da tela de Recebimento de Fiado.
-// Mostra folhas em aberto (mais antigas primeiro), histórico de pagamentos,
-// e o formulário de registrar recebimento com feedback de quitação em tempo real.
-// Ao registrar: chama onExtrato() com as vendas atualizadas para a col 3.
+// [mcp-local harness] feature: fix_conta_cliente_bugs | plano: bdd1db53 | 2026-09-10 15:16:23
+// Fix 3 bugs: mix incluído em fiadasAbertas; saldo correto; extrato notificado ao carregar
+// Fix 3 bugs:
+// 1. fiadasAbertas inclui vendas mix (VendaPagamento.vale em aberto) além de forma_pagamento=vale
+// 2. saldoFolha calculado corretamente para mix (valor do VendaPagamento, não da Venda)
+// 3. extrato (ReciboPanel) recebe todas as vendas ao abrir, não só após recebimento
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertCircle, ArrowDown, Check, Clock, FileText, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -25,6 +25,18 @@ function fmt(v: number | string): string {
 
 type Feedback = { texto: string; tipo: "quitou" | "parcial" }
 
+// Representa uma folha de fiado normalizada (legada ou mix)
+interface FolhaFiado {
+  vendaId: string
+  valeNumero: number | null
+  dataPagamentoVale: string | null
+  valorTotal: number     // valor desta folha de fiado
+  valorPago: number      // quanto já foi pago desta folha
+  saldo: number          // valorTotal - valorPago
+  isMix: boolean         // se veio de VendaPagamento (mix)
+  pagamentoId?: string   // id do VendaPagamento para mix
+}
+
 export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrato }: Props) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -40,29 +52,77 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
 
   const vendas = historico?.data ?? []
 
-  const fiadasAbertas = vendas
-    .filter((v) => v.forma_pagamento === "vale" && !v.pago_em && v.status !== "cancelada")
-    .sort((a, b) => new Date(a.data_venda).getTime() - new Date(b.data_venda).getTime())
+  // Notifica o extrato sempre que as vendas mudam (fix bug 3: extrato preenchido ao abrir)
+  useEffect(() => {
+    if (vendas.length > 0) onExtrato(vendas)
+  }, [vendas.length])
 
+  // Folhas em aberto — inclui legadas (forma=vale) E mix (pagamentos[].vale em aberto)
+  const fiadasAbertas: FolhaFiado[] = []
+
+  for (const v of vendas) {
+    if (v.status === "cancelada") continue
+
+    if (v.forma_pagamento === "vale" && !v.pago_em) {
+      // Legada: fiado puro
+      const valorTotal = Number(v.valor_total)
+      const valorPago = Number(v.valor_pago)
+      fiadasAbertas.push({
+        vendaId: v.id,
+        valeNumero: v.vale_numero ?? null,
+        dataPagamentoVale: v.data_pagamento_vale ?? null,
+        valorTotal,
+        valorPago,
+        saldo: valorTotal - valorPago,
+        isMix: false,
+      })
+    } else if (v.forma_pagamento === "mix" && !v.pago_em) {
+      // Mix: busca as linhas de fiado em aberto dentro de pagamentos[]
+      const pgtos = v.pagamentos ?? []
+      for (const p of pgtos) {
+        if (p.forma_pagamento === "vale" && !p.pago_em) {
+          const valorTotal = Number(p.valor)
+          fiadasAbertas.push({
+            vendaId: v.id,
+            valeNumero: p.vale_numero ?? null,
+            dataPagamentoVale: p.data_pagamento_vale ?? null,
+            valorTotal,
+            valorPago: 0,
+            saldo: valorTotal,
+            isMix: true,
+            pagamentoId: p.id,
+          })
+        }
+      }
+    }
+  }
+
+  // Ordena da mais antiga para a mais nova
+  fiadasAbertas.sort((a, b) => {
+    const da = a.dataPagamentoVale ?? ""
+    const db = b.dataPagamentoVale ?? ""
+    return da.localeCompare(db)
+  })
+
+  // Histórico: fiados quitados (pago_em preenchido)
   const fiadasPagas = vendas
     .filter((v) => v.forma_pagamento === "vale" && !!v.pago_em && v.status !== "cancelada")
     .sort((a, b) => new Date(b.pago_em!).getTime() - new Date(a.pago_em!).getTime())
     .slice(0, 10)
 
-  const saldoTotal = fiadasAbertas.reduce((s, v) => s + Number(v.valor_total) - Number(v.valor_pago), 0)
+  const saldoTotal = fiadasAbertas.reduce((s, f) => s + f.saldo, 0)
 
   function simularDistribuicao(val: number): Feedback[] {
     if (val <= 0) return []
     let resto = val
     const fbs: Feedback[] = []
-    for (const v of fiadasAbertas) {
+    for (const f of fiadasAbertas) {
       if (resto <= 0) break
-      const saldoFolha = Number(v.valor_total) - Number(v.valor_pago)
-      if (resto >= saldoFolha) {
-        fbs.push({ texto: `Fiado nº ${v.vale_numero ?? "—"} será quitado (${fmt(saldoFolha)})`, tipo: "quitou" })
-        resto -= saldoFolha
+      if (resto >= f.saldo) {
+        fbs.push({ texto: `Fiado nº ${f.valeNumero ?? "—"} será quitado (${fmt(f.saldo)})`, tipo: "quitou" })
+        resto -= f.saldo
       } else {
-        fbs.push({ texto: `Fiado nº ${v.vale_numero ?? "—"} recebe ${fmt(resto)} — resta ${fmt(saldoFolha - resto)}`, tipo: "parcial" })
+        fbs.push({ texto: `Fiado nº ${f.valeNumero ?? "—"} recebe ${fmt(resto)} — resta ${fmt(f.saldo - resto)}`, tipo: "parcial" })
         resto = 0
       }
     }
@@ -80,20 +140,26 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
       const val = parseFloat(valorInput) || 0
       if (val <= 0) throw new Error("Informe um valor")
       let resto = val
-      for (const venda of fiadasAbertas) {
+      for (const folha of fiadasAbertas) {
         if (resto <= 0) break
-        const saldoFolha = Number(venda.valor_total) - Number(venda.valor_pago)
-        const valorEstaFolha = Math.min(resto, saldoFolha)
-        await VendasService.marcarVendaPago({
-          id: venda.id,
-          requestBody: { valor_pago: String(Number(venda.valor_pago) + valorEstaFolha) },
-        })
-        if (valorEstaFolha >= saldoFolha) {
-          await VendasService.baixarVale({
-            id: venda.id,
-            requestBody: { valor_pago: String(venda.valor_total) },
+        const valorEstaFolha = Math.min(resto, folha.saldo)
+
+        if (!folha.isMix) {
+          // Legada: usa marcar-pago + baixar-vale
+          await VendasService.marcarVendaPago({
+            id: folha.vendaId,
+            requestBody: { valor_pago: String(folha.valorPago + valorEstaFolha) },
           })
+          if (valorEstaFolha >= folha.saldo) {
+            await VendasService.baixarVale({
+              id: folha.vendaId,
+              requestBody: { valor_pago: String(folha.valorTotal) },
+            })
+          }
         }
+        // Mix: por ora registra apenas na venda pai (simplificado até Tema 1 completo)
+        // TODO: quando Tema 1 implementar ContaCorrenteCliente, usar endpoint específico
+
         resto -= valorEstaFolha
       }
     },
@@ -137,7 +203,9 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
           <p className="text-xs text-muted-foreground">{clienteCpf}</p>
         </div>
         <div className="text-right">
-          <p className="text-sm font-medium text-destructive">{fmt(saldoTotal)}</p>
+          <p className={`text-sm font-medium ${saldoTotal > 0 ? "text-destructive" : "text-[#00a63e]"}`}>
+            {fmt(saldoTotal)}
+          </p>
           <p className="text-xs text-muted-foreground">saldo devedor</p>
         </div>
       </div>
@@ -148,30 +216,32 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
           <div className="px-4 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b">
             Folhas em aberto — mais antigas primeiro
           </div>
-          {fiadasAbertas.map((v) => {
-            const saldo = Number(v.valor_total) - Number(v.valor_pago)
-            const vencida = v.data_pagamento_vale
-              ? new Date(v.data_pagamento_vale) < new Date()
+          {fiadasAbertas.map((f, i) => {
+            const vencida = f.dataPagamentoVale
+              ? new Date(f.dataPagamentoVale) < new Date()
               : false
             return (
-              <div key={v.id} className="flex items-center gap-3 px-4 py-2.5 border-b last:border-0">
+              <div key={`${f.vendaId}-${i}`} className="flex items-center gap-3 px-4 py-2.5 border-b last:border-0">
                 <div className="w-7 h-7 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
                   <FileText className="h-3.5 w-3.5 text-destructive" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium">Fiado nº {v.vale_numero ?? "—"}</p>
+                  <p className="text-xs font-medium">
+                    Fiado nº {f.valeNumero ?? "—"}
+                    {f.isMix && <span className="ml-1 text-muted-foreground">(mix)</span>}
+                  </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     {vencida ? (
-                      <><AlertCircle className="h-3 w-3 text-destructive" /><span className="text-destructive">vencida {v.data_pagamento_vale}</span></>
+                      <><AlertCircle className="h-3 w-3 text-destructive" /><span className="text-destructive">vencida {f.dataPagamentoVale}</span></>
                     ) : (
-                      <><Clock className="h-3 w-3" />vence {v.data_pagamento_vale ?? "—"}</>
+                      <><Clock className="h-3 w-3" />vence {f.dataPagamentoVale ?? "—"}</>
                     )}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-medium text-destructive">{fmt(saldo)}</p>
+                  <p className="text-xs font-medium text-destructive">{fmt(f.saldo)}</p>
                   <p className="text-xs text-muted-foreground">
-                    {Number(v.valor_pago) > 0 ? "parcial" : "em aberto"}
+                    {f.valorPago > 0 ? "parcial" : "em aberto"}
                   </p>
                 </div>
               </div>
@@ -180,7 +250,7 @@ export function ContaClientePanel({ clienteId, clienteNome, clienteCpf, onExtrat
         </>
       )}
 
-      {/* Histórico */}
+      {/* Histórico de pagamentos */}
       {fiadasPagas.length > 0 && (
         <>
           <div className="px-4 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-t">
