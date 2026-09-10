@@ -1,5 +1,5 @@
-# [mcp-local harness] feature: clientes_com_fiado_endpoint | plano: fb24aa48 | 2026-09-10 16:59:33
-# Adiciona ClienteFiadoPublic e ClientesFiadoPublic ao models.py
+# [mcp-local harness] feature: fix_valor_pago_ge_zero | plano: d348404e | 2026-09-10 17:41:41
+# VendaCreate.valor_pago: gt=0 → ge=0 para permitir fiado puro com valor_pago=0
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -648,7 +648,7 @@ class VendaCreate(SQLModel):
     vale_gas_numero: int | None = None
     vale_gas_bloco_id: uuid.UUID | None = None
     gas_povo_frete: Decimal | None = Field(default=None, gt=0, decimal_places=2)
-    valor_pago: Decimal = Field(gt=0, decimal_places=2)
+    valor_pago: Decimal = Field(ge=0, decimal_places=2)  # ge=0: fiado puro nasce com valor_pago=0
     data_venda: date | None = None
     itens: list[VendaItemCreate] = Field(min_length=1)
     cascos: list[CascoItemCreate] = Field(default_factory=list)
