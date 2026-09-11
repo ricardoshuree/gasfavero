@@ -17,6 +17,7 @@ import { Route as SignupB2cDisabledRouteImport } from './routes/signup-b2c-disab
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAberturaDiaRouteImport } from './routes/_layout/abertura-dia'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutAvisosMapaRouteImport } from './routes/_layout/avisos-mapa'
 import { Route as LayoutChamadoRouteImport } from './routes/_layout/chamado'
 import { Route as LayoutChamadosAtivosRouteImport } from './routes/_layout/chamados-ativos'
 import { Route as LayoutClientesRouteImport } from './routes/_layout/clientes'
@@ -74,6 +75,11 @@ const LayoutAberturaDiaRoute = LayoutAberturaDiaRouteImport.update({
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutAvisosMapaRoute = LayoutAvisosMapaRouteImport.update({
+  id: '/avisos-mapa',
+  path: '/avisos-mapa',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutChamadoRoute = LayoutChamadoRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/abertura-dia': typeof LayoutAberturaDiaRoute
   '/admin': typeof LayoutAdminRoute
+  '/avisos-mapa': typeof LayoutAvisosMapaRoute
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/abertura-dia': typeof LayoutAberturaDiaRoute
   '/admin': typeof LayoutAdminRoute
+  '/avisos-mapa': typeof LayoutAvisosMapaRoute
   '/chamado': typeof LayoutChamadoRoute
   '/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/clientes': typeof LayoutClientesRoute
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   '/signup-b2c-disabled': typeof SignupB2cDisabledRoute
   '/_layout/abertura-dia': typeof LayoutAberturaDiaRoute
   '/_layout/admin': typeof LayoutAdminRoute
+  '/_layout/avisos-mapa': typeof LayoutAvisosMapaRoute
   '/_layout/chamado': typeof LayoutChamadoRoute
   '/_layout/chamados-ativos': typeof LayoutChamadosAtivosRoute
   '/_layout/clientes': typeof LayoutClientesRoute
@@ -270,6 +279,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/abertura-dia'
     | '/admin'
+    | '/avisos-mapa'
     | '/chamado'
     | '/chamados-ativos'
     | '/clientes'
@@ -297,6 +307,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/abertura-dia'
     | '/admin'
+    | '/avisos-mapa'
     | '/chamado'
     | '/chamados-ativos'
     | '/clientes'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/signup-b2c-disabled'
     | '/_layout/abertura-dia'
     | '/_layout/admin'
+    | '/_layout/avisos-mapa'
     | '/_layout/chamado'
     | '/_layout/chamados-ativos'
     | '/_layout/clientes'
@@ -412,6 +424,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof LayoutAdminRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/avisos-mapa': {
+      id: '/_layout/avisos-mapa'
+      path: '/avisos-mapa'
+      fullPath: '/avisos-mapa'
+      preLoaderRoute: typeof LayoutAvisosMapaRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/chamado': {
@@ -553,6 +572,7 @@ declare module '@tanstack/react-router' {
 interface LayoutRouteChildren {
   LayoutAberturaDiaRoute: typeof LayoutAberturaDiaRoute
   LayoutAdminRoute: typeof LayoutAdminRoute
+  LayoutAvisosMapaRoute: typeof LayoutAvisosMapaRoute
   LayoutChamadoRoute: typeof LayoutChamadoRoute
   LayoutChamadosAtivosRoute: typeof LayoutChamadosAtivosRoute
   LayoutClientesRoute: typeof LayoutClientesRoute
@@ -578,6 +598,7 @@ interface LayoutRouteChildren {
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAberturaDiaRoute: LayoutAberturaDiaRoute,
   LayoutAdminRoute: LayoutAdminRoute,
+  LayoutAvisosMapaRoute: LayoutAvisosMapaRoute,
   LayoutChamadoRoute: LayoutChamadoRoute,
   LayoutChamadosAtivosRoute: LayoutChamadosAtivosRoute,
   LayoutClientesRoute: LayoutClientesRoute,

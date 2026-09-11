@@ -1,8 +1,11 @@
+// [mcp-local harness] feature: avisos-mapa-pagina | plano: 68dba915 | 2026-09-11 20:25:32
+// Adiciona "Avisos do Mapa" (BellDot, /avisos-mapa, módulo mapa) no grupo Operações
 // [mcp-local harness] feature: emprestimo_casco | plano: 1b682768 | 2026-09-07 16:11:45
 // Sidebar: novo grupo Recebimentos (Cascos + Vale Gás + Gás do Povo), Bloco de Vale Gás move para Cadastros, grupos Vale Gás e Gás do Povo removidos
 import {
   AlertTriangle,
   Banknote,
+  BellDot,
   Book,
   Box,
   Flame,
@@ -75,6 +78,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { module: "fechamento", icon: Moon,            title: "Fechamento do Dia",   path: "/fechamento-dia" },
       { module: "fechamento", icon: LayoutDashboard, title: "Dashboard de Saldos", path: "/dashboard-saldos" },
       { module: "mapa",       icon: MapPin,          title: "Mapa",                path: "/mapa" },
+      { module: "mapa",       icon: BellDot,         title: "Avisos do Mapa",      path: "/avisos-mapa" },
       { module: "delegacao",  icon: PhoneCall,       title: "Chamado",             path: "/chamado" },
       { module: "delegacao",  action: "can_delete" as PermissionAction, icon: ListChecks, title: "Chamados Ativos", path: "/chamados-ativos" },
     ],
