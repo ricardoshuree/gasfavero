@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: avisos-mapa-pagina | plano: 68dba915 | 2026-09-11 20:23:54
-// Remove ConfiguracaoAvisos — mapa.tsx volta ao layout original limpo
+// [mcp-local harness] feature: painel-lateral-ux | plano: 1a17d113 | 2026-09-11 20:45:36
+// Botão fullscreen menor: p-1.5, ícone h-4 w-4, posição top-2 right-2
 // Layout /mapa — mapa + painel lateral (Ranking + Chamadas + PlayerAvisos)
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { Maximize, Minimize } from "lucide-react"
@@ -60,16 +60,17 @@ function Mapa() {
           isFullscreen && "h-screen w-screen bg-background p-4",
         )}
       >
+        {/* Botão fullscreen menor — p-1.5, ícone h-4 w-4 */}
         <button
           type="button"
           onClick={toggleFullscreen}
           title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
-          className="absolute top-3 right-3 z-10 rounded-md border bg-background/90 p-2 shadow-sm hover:bg-muted"
+          className="absolute top-2 right-2 z-10 rounded-md border bg-background/90 p-1.5 shadow-sm hover:bg-muted"
         >
           {isFullscreen ? (
-            <Minimize className="h-5 w-5" />
+            <Minimize className="h-4 w-4" />
           ) : (
-            <Maximize className="h-5 w-5" />
+            <Maximize className="h-4 w-4" />
           )}
         </button>
 

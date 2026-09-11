@@ -1,7 +1,8 @@
-// [mcp-local harness] feature: fix-build-errors | plano: 1097e958 | 2026-09-11 20:08:07
-// Substitui AvisosMapaService por fetch direto + exporta helpers para mapa.tsx
+// [mcp-local harness] feature: painel-lateral-ux | plano: 1a17d113 | 2026-09-11 20:45:20
+// PlayerAvisos: h-28 → h-36 (+25px), letreiro converte \n em espaço
 // Painel lateral da tela Mapa — pensado para rodar numa TV no escritório.
 // fix: AvisosMapaService via fetch direto enquanto client é regenerado
+// ajuste: PlayerAvisos h-36 (+25px), texto base maior
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -37,7 +38,7 @@ function formatEnderecoCurto(demanda: DemandaVendaPublic): string {
 // AvisosMapaService local — fetch direto até o client ser regenerado
 // ---------------------------------------------------------------------------
 
-type AvisoMapaPublic = {
+export type AvisoMapaPublic = {
   id: string
   texto: string
   animacao_interna: string
@@ -53,16 +54,6 @@ async function fetchAvisosAtivos(): Promise<{ data: AvisoMapaPublic[]; count: nu
   const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
   const base = OpenAPI.BASE ?? ""
   const res = await fetch(`${base}/api/v1/avisos-mapa/ativos`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) return { data: [], count: 0 }
-  return res.json()
-}
-
-async function fetchAvisosTodos(): Promise<{ data: AvisoMapaPublic[]; count: number }> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
-  const base = OpenAPI.BASE ?? ""
-  const res = await fetch(`${base}/api/v1/avisos-mapa/`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!res.ok) return { data: [], count: 0 }
@@ -108,7 +99,7 @@ function injetarKeyframes() {
 }
 
 // ---------------------------------------------------------------------------
-// Bloco 1 — PlayerAvisos
+// Bloco 1 — PlayerAvisos (h-36 = ~144px, +25px vs h-28=112px)
 // ---------------------------------------------------------------------------
 
 function PlayerAvisos() {
@@ -196,7 +187,7 @@ function PlayerAvisos() {
 
   if (!display) {
     return (
-      <div className="flex h-28 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs text-slate-400">
+      <div className="flex h-36 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs text-slate-400">
         Nenhum aviso configurado
       </div>
     )
@@ -207,9 +198,14 @@ function PlayerAvisos() {
       ? ANIM_CSS.letreiro
       : TRANS_CSS[display.transEntrada] || ANIM_CSS[display.animInterna] || ""
 
+  // Letreiro: quebras de linha viram espaço
+  const textoExibido = display.letreiro
+    ? display.texto.replace(/\n/g, " ")
+    : display.texto
+
   return (
     <div
-      className="relative flex h-28 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+      className="relative flex h-36 shrink-0 items-center justify-center overflow-hidden rounded-lg"
       style={{
         background: display.corFundo,
         animation: display.pulso ? "pulsoBgPlayer 2s ease-in-out infinite" : undefined,
@@ -221,11 +217,12 @@ function PlayerAvisos() {
           color: "#f1f5f9",
           textShadow: "0 1px 3px rgba(0,0,0,0.4)",
           animation: msgAnim || undefined,
-          whiteSpace: display.letreiro ? "nowrap" : undefined,
+          whiteSpace: display.letreiro ? "nowrap" : "pre-wrap",
         }}
       >
-        {display.texto}
+        {textoExibido}
       </p>
+      {/* Barra de progresso */}
       <div
         className="absolute bottom-0 left-0 h-[3px]"
         style={{
@@ -387,9 +384,6 @@ function ChamadasHoje() {
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
-
-export { fetchAvisosAtivos, fetchAvisosTodos }
-export type { AvisoMapaPublic }
 
 export function PainelLateral() {
   return (
