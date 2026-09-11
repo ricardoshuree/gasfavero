@@ -1,34 +1,43 @@
-// [mcp-local harness] feature: fonte-menor-nome-motorista | plano: a35ae2e9 | 2026-08-07 12:30:40
-// Fonte do nome no mapa: 12px -> 11px
-// Componente do mapa com polling de localizacao dos motoristas +
+// [mcp-local harness] feature: mapa-motorista-status | plano: d4714bf5 | 2026-09-11 17:32:47
+// 4 imagens on/off × direita/esquerda, bolinha verde/cinza no nome, polling 3s, threshold inativo 2min
+// Componente do mapa com polling de localização dos motoristas +
 // pins de destino dos chamados ativos (pendente/aceita) de hoje.
+//
+// Imagens de caminhão (4 variantes em /images/):
+//   caminhao-motorista_on_frente_direita.png   — ativo, movendo para direita
+//   caminhao-motorista_on_frente_esquerda.png  — ativo, movendo para esquerda
+//   caminhao-motorista_off_frente_direita.png  — inativo, última direção = direita
+//   caminhao-motorista_off_frente_esquerda.png — inativo, última direção = esquerda
+//
+// Ativo = atualizado_em há menos de 120s (threshold 2 minutos).
+// Direção = comparação longitude atual vs anterior; sem histórico = direita (default).
+// Bolinha verde (#22c55e) ou cinza (#94a3b8) ao final do nome conforme estado.
+// Polling a cada 3s.
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef } from "react"
 
 import { DelegacaoService } from "@/client"
 import { useGoogleMapsScript } from "@/hooks/useGoogleMapsScript"
 
-// Centro padrão: Veranópolis/RS -- mesma cidade fixa usada na
-// geocodificação (ver CIDADE_UF_PADRAO em
-// backend/app/core/geocoding.py). Zoom 14 mostra a cidade inteira
-// sem precisar dar zoom out manual.
 const CENTRO_VERANOPOLIS: google.maps.LatLngLiteral = {
   lat: -28.9339,
   lng: -51.5528,
 }
 
-// Polling a cada 12s -- dentro da faixa combinada no plano da Fase 3
-// (10-15s). Hoje os pontos só aparecem se alguém gravar via PUT
-// /motoristas/{id}/localizacao manualmente (não existe app do
-// motorista ainda, isso é Fase 4) -- mas o polling já fica pronto
-// pra quando o app existir de verdade.
-const POLLING_MS = 12_000
+const POLLING_MS = 3_000
+const INATIVO_THRESHOLD_MS = 120_000 // 2 minutos
+const ICONE_SIZE_PX = 56
 
-// Ícone customizado do marcador de motorista, fornecido pelo Ricardo
-// -- ver frontend/public/images/. Tamanho em pixels ajustável aqui
-// (era 40px, aumentado a pedido do Ricardo -- "parece bem pequeno").
-const ICONE_MOTORISTA_SRC = "/images/caminhao-motorista.png"
-const ICONE_MOTORISTA_SIZE_PX = 56
+// Seleciona a imagem correta baseado em estado e direção
+function resolverIconeSrc(ativo: boolean, paráDireita: boolean): string {
+  const estado = ativo ? "on" : "off"
+  const direcao = paráDireita ? "direita" : "esquerda"
+  return `/images/caminhao-motorista_${estado}_frente_${direcao}.png`
+}
+
+function isAtivo(atualizadoEm: string): boolean {
+  return Date.now() - new Date(atualizadoEm).getTime() < INATIVO_THRESHOLD_MS
+}
 
 function formatarAtualizadoEm(atualizadoEm: string): string {
   const segundos = Math.floor(
@@ -42,29 +51,19 @@ function formatarAtualizadoEm(atualizadoEm: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Marcador customizado do motorista -- o Marker padrão do Google não
-// suporta "ícone + texto sempre visível abaixo" (o `label` da API só
-// aceita texto curto sobreposto ao ícone, não uma legenda separada
-// embaixo). Um OverlayView desenha um <div> HTML de verdade (imagem +
-// nome) ancorado na posição lat/lng, atualizado a cada pan/zoom via
-// draw() -- é o jeito "correto" do Google Maps pra isso, mesmo dando
-// mais código que um Marker simples.
-//
-// A classe só pode ser definida DEPOIS do script do Google carregar
-// (precisa herdar de window.google.maps.OverlayView, que não existe
-// antes disso) -- por isso a definição fica atrás de
-// getMotoristaOverlayCtor(), memoizada em variável de módulo (só
-// precisa existir 1 vez, não por instância do componente).
+// MotoristaOverlay — OverlayView com ícone + legenda (nome + bolinha)
 // ---------------------------------------------------------------------------
 
 interface MotoristaOverlayInstance extends google.maps.OverlayView {
   setPosition(position: google.maps.LatLngLiteral): void
-  setLabel(label: string): void
+  setEstado(nome: string, ativo: boolean, paraDireita: boolean): void
 }
 
 type MotoristaOverlayCtor = new (
   position: google.maps.LatLngLiteral,
-  label: string,
+  nome: string,
+  ativo: boolean,
+  paraDireita: boolean,
   onClick: () => void,
 ) => MotoristaOverlayInstance
 
@@ -78,18 +77,26 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
     implements MotoristaOverlayInstance
   {
     private position: google.maps.LatLngLiteral
-    private label: string
+    private nome: string
+    private ativo: boolean
+    private paraDireita: boolean
     private onClickHandler: () => void
     private div: HTMLDivElement | null = null
+    private img: HTMLImageElement | null = null
+    private bolinha: HTMLSpanElement | null = null
 
     constructor(
       position: google.maps.LatLngLiteral,
-      label: string,
+      nome: string,
+      ativo: boolean,
+      paraDireita: boolean,
       onClick: () => void,
     ) {
       super()
       this.position = position
-      this.label = label
+      this.nome = nome
+      this.ativo = ativo
+      this.paraDireita = paraDireita
       this.onClickHandler = onClick
     }
 
@@ -105,14 +112,14 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
       div.style.userSelect = "none"
 
       const img = document.createElement("img")
-      img.src = ICONE_MOTORISTA_SRC
-      img.style.width = `${ICONE_MOTORISTA_SIZE_PX}px`
-      img.style.height = `${ICONE_MOTORISTA_SIZE_PX}px`
+      img.src = resolverIconeSrc(this.ativo, this.paraDireita)
+      img.style.width = `${ICONE_SIZE_PX}px`
+      img.style.height = `${ICONE_SIZE_PX}px`
       img.style.display = "block"
       img.draggable = false
 
-      const caption = document.createElement("span")
-      caption.textContent = this.label
+      // Legenda: [nome] [●]
+      const caption = document.createElement("div")
       caption.style.marginTop = "2px"
       caption.style.padding = "1px 6px"
       caption.style.borderRadius = "4px"
@@ -122,12 +129,31 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
       caption.style.fontWeight = "600"
       caption.style.whiteSpace = "nowrap"
       caption.style.boxShadow = "0 1px 3px rgba(0,0,0,0.35)"
+      caption.style.display = "flex"
+      caption.style.alignItems = "center"
+      caption.style.gap = "4px"
+
+      const nomeSpan = document.createElement("span")
+      nomeSpan.textContent = this.nome
+
+      const bolinha = document.createElement("span")
+      bolinha.style.width = "8px"
+      bolinha.style.height = "8px"
+      bolinha.style.borderRadius = "50%"
+      bolinha.style.display = "inline-block"
+      bolinha.style.flexShrink = "0"
+      bolinha.style.backgroundColor = this.ativo ? "#22c55e" : "#94a3b8"
+
+      caption.appendChild(nomeSpan)
+      caption.appendChild(bolinha)
 
       div.appendChild(img)
       div.appendChild(caption)
       div.addEventListener("click", () => this.onClickHandler())
 
       this.div = div
+      this.img = img
+      this.bolinha = bolinha
       this.getPanes()?.overlayMouseTarget.appendChild(div)
     }
 
@@ -143,6 +169,8 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
     onRemove() {
       this.div?.remove()
       this.div = null
+      this.img = null
+      this.bolinha = null
     }
 
     setPosition(position: google.maps.LatLngLiteral) {
@@ -150,10 +178,23 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
       this.draw()
     }
 
-    setLabel(label: string) {
-      this.label = label
-      const caption = this.div?.querySelector("span")
-      if (caption) caption.textContent = label
+    setEstado(nome: string, ativo: boolean, paraDireita: boolean) {
+      this.nome = nome
+      this.ativo = ativo
+      this.paraDireita = paraDireita
+
+      if (this.img) {
+        this.img.src = resolverIconeSrc(ativo, paraDireita)
+      }
+      if (this.bolinha) {
+        this.bolinha.style.backgroundColor = ativo ? "#22c55e" : "#94a3b8"
+      }
+      // Atualiza o nome no caption (primeiro filho do caption div)
+      const caption = this.div?.querySelector("div")
+      if (caption) {
+        const nomeSpan = caption.querySelector("span")
+        if (nomeSpan) nomeSpan.textContent = nome
+      }
     }
   }
 
@@ -161,10 +202,9 @@ function getMotoristaOverlayCtor(): MotoristaOverlayCtor {
   return motoristaOverlayCtor
 }
 
+// ---------------------------------------------------------------------------
+
 interface MapaMotoristasProps {
-  /** Classe aplicada no <div> do mapa em si -- por padrão ocupa toda
-   * a altura do container pai (ver uso em mapa.tsx, que controla a
-   * altura via flexbox/fullscreen). */
   className?: string
 }
 
@@ -182,6 +222,11 @@ export function MapaMotoristas({
   )
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null)
 
+  // Guarda a última longitude conhecida por motorista para calcular direção
+  const ultimaLongRef = useRef<globalThis.Map<string, number>>(
+    new globalThis.Map(),
+  )
+
   const {
     data,
     isLoading,
@@ -193,10 +238,6 @@ export function MapaMotoristas({
     enabled: loaded,
   })
 
-  // Chamados ATIVOS de hoje (pendente/aceita) -- vira os pins de
-  // destino. Some sozinho da lista quando o motorista marca
-  // "cheguei" (status vira concluida), então o pin desaparece do
-  // mapa no próximo polling sem precisar de lógica extra aqui.
   const { data: demandasHoje } = useQuery({
     queryKey: ["demandasHoje"],
     queryFn: () => DelegacaoService.readDemandasHoje(),
@@ -204,7 +245,6 @@ export function MapaMotoristas({
     enabled: loaded,
   })
 
-  // Inicializa o mapa uma única vez, assim que o script carregar
   useEffect(() => {
     if (!loaded || !mapDivRef.current || mapRef.current || !window.google) {
       return
@@ -219,19 +259,17 @@ export function MapaMotoristas({
     infoWindowRef.current = new window.google.maps.InfoWindow()
   }, [loaded])
 
-  // Sincroniza os marcadores de MOTORISTA com os dados mais recentes
-  // -- upsert por motorista_id (mesma lógica de upsert do backend:
-  // sobrescreve posição/legenda do overlay existente, nunca acumula
-  // duplicado)
   useEffect(() => {
     if (!mapRef.current || !data || !window.google) return
 
     const idsAtuais = new Set(data.data.map((m) => m.motorista_id))
 
+    // Remove overlays de motoristas que saíram da lista
     for (const [id, overlay] of overlaysRef.current) {
       if (!idsAtuais.has(id)) {
         overlay.setMap(null)
         overlaysRef.current.delete(id)
+        ultimaLongRef.current.delete(id)
       }
     }
 
@@ -240,33 +278,43 @@ export function MapaMotoristas({
         lat: Number(motorista.latitude),
         lng: Number(motorista.longitude),
       }
+      const lngAtual = Number(motorista.longitude)
+      const lngAnterior = ultimaLongRef.current.get(motorista.motorista_id)
+
+      // Direção: compara com última longitude conhecida; sem histórico = direita
+      const paraDireita =
+        lngAnterior === undefined ? true : lngAtual >= lngAnterior
+
+      // Atualiza histórico de longitude
+      ultimaLongRef.current.set(motorista.motorista_id, lngAtual)
+
+      const ativo = isAtivo(motorista.atualizado_em)
       const existente = overlaysRef.current.get(motorista.motorista_id)
 
       if (existente) {
         existente.setPosition(position)
-        existente.setLabel(motorista.motorista_nome)
+        existente.setEstado(motorista.motorista_nome, ativo, paraDireita)
       } else {
         const OverlayCtor = getMotoristaOverlayCtor()
-        const overlay = new OverlayCtor(position, motorista.motorista_nome, () => {
-          infoWindowRef.current?.setContent(
-            `<div style="color:#0f172a"><strong>${motorista.motorista_nome}</strong><br/>Atualizado ${formatarAtualizadoEm(motorista.atualizado_em)}</div>`,
-          )
-          infoWindowRef.current?.setPosition(position)
-          infoWindowRef.current?.open(mapRef.current ?? undefined)
-        })
+        const overlay = new OverlayCtor(
+          position,
+          motorista.motorista_nome,
+          ativo,
+          paraDireita,
+          () => {
+            infoWindowRef.current?.setContent(
+              `<div style="color:#0f172a"><strong>${motorista.motorista_nome}</strong><br/>Atualizado ${formatarAtualizadoEm(motorista.atualizado_em)}</div>`,
+            )
+            infoWindowRef.current?.setPosition(position)
+            infoWindowRef.current?.open(mapRef.current ?? undefined)
+          },
+        )
         overlay.setMap(mapRef.current)
         overlaysRef.current.set(motorista.motorista_id, overlay)
       }
     }
   }, [data])
 
-  // Sincroniza os pins de DESTINO com os chamados ativos de hoje --
-  // upsert por demanda.id. Sem linha ligando motorista↔destino de
-  // propósito (decisão do Ricardo: evitar custo de Directions API) --
-  // o InfoWindow do pin já deixa explícito qual motorista aceitou
-  // (ou "Aberto", se ainda não tiver dono). Continua usando o Marker
-  // padrão do Google (pin vermelho) -- só o marcador de motorista
-  // virou overlay customizado.
   useEffect(() => {
     if (!mapRef.current || !demandasHoje || !window.google) return
 
@@ -302,7 +350,7 @@ export function MapaMotoristas({
         marker.addListener("click", () => {
           const quemAceitou = demanda.motorista_nome
             ? `Motorista: ${demanda.motorista_nome}`
-            : "Aberto -- qualquer motorista"
+            : "Aberto — qualquer motorista"
           infoWindowRef.current?.setContent(
             `<div style="color:#0f172a"><strong>${demanda.cliente_nome}</strong><br/>${demanda.endereco.rua_nome}, ${demanda.endereco.numero}<br/>${quemAceitou}</div>`,
           )
@@ -316,8 +364,7 @@ export function MapaMotoristas({
   if (scriptError) {
     return (
       <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-        {scriptError}. Confirme VITE_GOOGLE_MAPS_API_KEY no
-        frontend/.env.
+        {scriptError}. Confirme VITE_GOOGLE_MAPS_API_KEY no frontend/.env.
       </div>
     )
   }
