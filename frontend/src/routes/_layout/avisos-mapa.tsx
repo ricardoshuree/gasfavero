@@ -1,7 +1,7 @@
-// [mcp-local harness] feature: avisos-mapa-ux | plano: 625710e0 | 2026-09-11 20:38:23
-// avisos-mapa v2: estado controlado, preview em tempo real, botão salvar por slide, cor aplicada, botão forçar preview (Eye)
+// [mcp-local harness] feature: avisos-mapa-ux | plano: 625710e0 | 2026-09-11 20:50:46
+// v3: pre-wrap correto por modo, letreiro mostra aviso amarelo, textarea Enter funciona
 // Página /avisos-mapa — configuração dos slides de avisos exibidos na TV
-// v2: estado controlado por slide, preview em tempo real, botão salvar, cor aplicada, botão forçar preview
+// v3: pre-wrap no preview para modos não-letreiro, letreiro converte \n em espaço
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { Eye, Plus, Save, Trash2 } from "lucide-react"
@@ -27,16 +27,14 @@ export const Route = createFileRoute("/_layout/avisos-mapa")({
   head: () => ({ meta: [{ title: "Avisos do Mapa - GasFavero" }] }),
 })
 
-// ---------------------------------------------------------------------------
-// Fetch helpers
-// ---------------------------------------------------------------------------
-
 function getToken(): string | null {
   try { return localStorage.getItem("access_token") } catch { return null }
 }
 function apiBase(): string { return OpenAPI.BASE ?? "" }
 function authHeaders(): HeadersInit {
-  return getToken() ? { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" }
+  return getToken()
+    ? { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" }
+    : { "Content-Type": "application/json" }
 }
 
 async function fetchAvisosTodos(): Promise<{ data: AvisoMapaPublic[]; count: number }> {
@@ -59,10 +57,6 @@ async function reordenarAvisos(ids: string[]): Promise<void> {
   await fetch(`${apiBase()}/api/v1/avisos-mapa/reordenar`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(ids) })
 }
 
-// ---------------------------------------------------------------------------
-// Constantes
-// ---------------------------------------------------------------------------
-
 const ANIMS = [
   { value: "estatico",    label: "Estático" },
   { value: "fade_up",     label: "Fade up" },
@@ -79,30 +73,6 @@ const TRANS = [
   { value: "wipe_down",      label: "Wipe down" },
   { value: "nenhuma",        label: "Nenhuma" },
 ]
-
-// ---------------------------------------------------------------------------
-// Estado local por slide (edição controlada)
-// ---------------------------------------------------------------------------
-
-type SlideLocal = {
-  id: string
-  texto: string
-  animacao_interna: string
-  transicao_saida: string
-  duracao_segundos: number
-  cor_fundo: string
-  ativo: boolean
-  ordem: number
-  dirty: boolean  // tem alterações não salvas
-}
-
-function toLocal(a: AvisoMapaPublic): SlideLocal {
-  return { id: a.id, texto: a.texto, animacao_interna: a.animacao_interna, transicao_saida: a.transicao_saida, duracao_segundos: a.duracao_segundos, cor_fundo: a.cor_fundo, ativo: a.ativo, ordem: a.ordem, dirty: false }
-}
-
-// ---------------------------------------------------------------------------
-// Preview — quadro da TV com estado controlado
-// ---------------------------------------------------------------------------
 
 const ANIM_CSS: Record<string, string> = {
   fade_up:     "fadeUpAM 0.6s ease both",
@@ -125,6 +95,28 @@ function injetarKeyframes() {
   document.head.appendChild(s)
 }
 
+type SlideLocal = {
+  id: string
+  texto: string
+  animacao_interna: string
+  transicao_saida: string
+  duracao_segundos: number
+  cor_fundo: string
+  ativo: boolean
+  ordem: number
+  dirty: boolean
+}
+
+function toLocal(a: AvisoMapaPublic): SlideLocal {
+  return { id: a.id, texto: a.texto, animacao_interna: a.animacao_interna, transicao_saida: a.transicao_saida, duracao_segundos: a.duracao_segundos, cor_fundo: a.cor_fundo, ativo: a.ativo, ordem: a.ordem, dirty: false }
+}
+
+// ---------------------------------------------------------------------------
+// Preview — fiel ao que aparece na TV
+// Letreiro: \n → espaço (ticker horizontal não suporta quebra)
+// Outros modos: pre-wrap (Enter quebra linha)
+// ---------------------------------------------------------------------------
+
 function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel: string }) {
   useEffect(() => { injetarKeyframes() }, [])
 
@@ -136,29 +128,35 @@ function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel
     )
   }
 
-  const pulso   = slide.animacao_interna === "pulso_fundo"
-  const letreiro = slide.animacao_interna === "letreiro"
-  // Letreiro: quebras de linha viram espaço
-  const textoExibido = letreiro ? slide.texto.replace(/\n/g, " ") : slide.texto
-  const msgAnim = letreiro ? ANIM_CSS.letreiro : ANIM_CSS[slide.animacao_interna] || ""
+  const isLetreiro = slide.animacao_interna === "letreiro"
+  const isPulso    = slide.animacao_interna === "pulso_fundo"
+
+  // Letreiro: quebras viram espaço (ticker é horizontal)
+  // Demais modos: mantém quebras de linha (pre-wrap)
+  const textoExibido = isLetreiro
+    ? slide.texto.replace(/\n/g, " ")
+    : slide.texto
+
+  const msgAnim = ANIM_CSS[slide.animacao_interna] || ""
 
   return (
     <div
-      key={slide.id + slide.animacao_interna + slide.cor_fundo}
+      key={`${slide.id}-${slide.animacao_interna}-${slide.cor_fundo}`}
       className="relative flex h-36 items-center justify-center overflow-hidden rounded-xl transition-colors duration-300"
       style={{
         background: slide.cor_fundo,
-        animation: pulso ? "pulsoAM 2s ease-in-out infinite" : undefined,
+        animation: isPulso ? "pulsoAM 2s ease-in-out infinite" : undefined,
       }}
     >
       <p
-        key={slide.texto + slide.animacao_interna}
+        key={`${slide.texto}-${slide.animacao_interna}`}
         className="px-8 text-center text-lg font-semibold leading-snug"
         style={{
           color: "#f1f5f9",
           textShadow: "0 1px 3px rgba(0,0,0,0.4)",
           animation: msgAnim || undefined,
-          whiteSpace: letreiro ? "nowrap" : "pre-wrap",
+          // Letreiro: nowrap para o ticker funcionar. Demais: pre-wrap para Enter quebrar linha.
+          whiteSpace: isLetreiro ? "nowrap" : "pre-wrap",
         }}
       >
         {textoExibido}
@@ -170,80 +168,50 @@ function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel
   )
 }
 
-// ---------------------------------------------------------------------------
-// Card de um slide
-// ---------------------------------------------------------------------------
-
 function SlideCard({
-  slide,
-  idx,
-  total,
-  isAtivo,
-  onChange,
-  onSalvar,
-  onRemover,
-  onMover,
-  onForcarPreview,
-  salvando,
+  slide, idx, total, isAtivo, onChange, onSalvar, onRemover, onMover, onForcarPreview, salvando,
 }: {
-  slide: SlideLocal
-  idx: number
-  total: number
-  isAtivo: boolean
+  slide: SlideLocal; idx: number; total: number; isAtivo: boolean
   onChange: (patch: Partial<SlideLocal>) => void
-  onSalvar: () => void
-  onRemover: () => void
-  onMover: (dir: -1 | 1) => void
-  onForcarPreview: () => void
-  salvando: boolean
+  onSalvar: () => void; onRemover: () => void
+  onMover: (dir: -1 | 1) => void; onForcarPreview: () => void; salvando: boolean
 }) {
   const selectCls = "rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-teal-500 focus:outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 w-full"
 
   return (
-    <div
-      className={cn(
-        "rounded-2xl border bg-card p-5 transition-all",
-        isAtivo ? "border-teal-500 ring-1 ring-teal-500/30" : "border-border hover:border-border-strong",
-      )}
-    >
-      {/* Cabeçalho */}
+    <div className={cn("rounded-2xl border bg-card p-5 transition-all", isAtivo ? "border-teal-500 ring-1 ring-teal-500/30" : "border-border hover:border-border-strong")}>
       <div className="mb-4 flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-          {idx + 1}
-        </span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">{idx + 1}</span>
         <span className="text-sm font-medium text-muted-foreground flex-1">
           {slide.ativo ? "Visível na TV" : "Oculto"}
           {slide.dirty && <span className="ml-2 text-amber-500 text-xs">● não salvo</span>}
         </span>
         <div className="flex items-center gap-1 ml-auto">
-          {/* Forçar preview */}
-          <button type="button" onClick={onForcarPreview} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-teal-600" title="Ver este slide no preview">
-            <Eye className="h-4 w-4" />
-          </button>
+          <button type="button" onClick={onForcarPreview} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-teal-600" title="Ver no preview"><Eye className="h-4 w-4" /></button>
           <button type="button" onClick={() => onMover(-1)} disabled={idx === 0} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30">↑</button>
           <button type="button" onClick={() => onMover(1)} disabled={idx === total - 1} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30">↓</button>
-          <button type="button" onClick={onRemover} disabled={total === 1} className="ml-2 rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30" title="Remover slide">
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <button type="button" onClick={onRemover} disabled={total === 1} className="ml-2 rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30" title="Remover slide"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
 
-      {/* Texto */}
+      {/* Textarea controlado — Enter insere \n normalmente */}
       <textarea
         className="mb-4 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-teal-500 focus:outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
         rows={3}
         value={slide.texto}
-        placeholder="Texto do aviso..."
+        placeholder="Texto do aviso... (Enter quebra linha nos modos não-letreiro)"
         onChange={(e) => onChange({ texto: e.target.value })}
       />
 
-      {/* Controles */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 mb-4">
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">Animação interna</span>
           <select className={selectCls} value={slide.animacao_interna} onChange={(e) => onChange({ animacao_interna: e.target.value })}>
             {ANIMS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
           </select>
+          {slide.animacao_interna === "letreiro" && (
+            <span className="text-[10px] text-amber-500">Enter vira espaço no letreiro</span>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -256,12 +224,8 @@ function SlideCard({
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">Duração</span>
           <div className="flex items-center gap-2">
-            <input
-              type="range" min={3} max={30} step={1}
-              value={slide.duracao_segundos}
-              className="flex-1"
-              onChange={(e) => onChange({ duracao_segundos: parseInt(e.target.value) })}
-            />
+            <input type="range" min={3} max={30} step={1} value={slide.duracao_segundos} className="flex-1"
+              onChange={(e) => onChange({ duracao_segundos: parseInt(e.target.value) })} />
             <span className="min-w-[32px] text-sm font-semibold">{slide.duracao_segundos}s</span>
           </div>
         </div>
@@ -269,16 +233,9 @@ function SlideCard({
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">Cor do fundo</span>
           <div className="flex items-center gap-2">
-            <div
-              className="relative h-8 w-8 cursor-pointer overflow-hidden rounded-lg border border-slate-300 flex-shrink-0"
-              style={{ background: slide.cor_fundo }}
-            >
-              <input
-                type="color"
-                value={slide.cor_fundo}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                onChange={(e) => onChange({ cor_fundo: e.target.value })}
-              />
+            <div className="relative h-8 w-8 cursor-pointer overflow-hidden rounded-lg border border-slate-300 flex-shrink-0" style={{ background: slide.cor_fundo }}>
+              <input type="color" value={slide.cor_fundo} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                onChange={(e) => onChange({ cor_fundo: e.target.value })} />
             </div>
             <span className="font-mono text-xs text-muted-foreground">{slide.cor_fundo.toUpperCase()}</span>
           </div>
@@ -287,25 +244,15 @@ function SlideCard({
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">Visível na TV</span>
           <label className="flex cursor-pointer items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              checked={slide.ativo}
-              className="h-4 w-4 accent-teal-600"
-              onChange={(e) => onChange({ ativo: e.target.checked })}
-            />
+            <input type="checkbox" checked={slide.ativo} className="h-4 w-4 accent-teal-600"
+              onChange={(e) => onChange({ ativo: e.target.checked })} />
             <span className="text-sm">{slide.ativo ? "Ativo" : "Inativo"}</span>
           </label>
         </div>
       </div>
 
-      {/* Botão salvar */}
-      <Button
-        size="sm"
-        variant={slide.dirty ? "default" : "outline"}
-        className="gap-2"
-        onClick={onSalvar}
-        disabled={salvando || !slide.dirty}
-      >
+      <Button size="sm" variant={slide.dirty ? "default" : "outline"} className="gap-2"
+        onClick={onSalvar} disabled={salvando || !slide.dirty}>
         <Save className="h-3.5 w-3.5" />
         {salvando ? "Salvando..." : slide.dirty ? "Salvar alterações" : "Salvo"}
       </Button>
@@ -313,30 +260,23 @@ function SlideCard({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Página principal
-// ---------------------------------------------------------------------------
-
 function AvisosMapaPage() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ["avisosMapaTodos"], queryFn: fetchAvisosTodos })
 
-  // Estado local dos slides (controlado)
   const [slides, setSlides] = useState<SlideLocal[]>([])
   const [idxAtivo, setIdxAtivo] = useState(0)
   const [salvandoId, setSalvandoId] = useState<string | null>(null)
 
-  // Sincroniza slides locais quando dados chegam do servidor (sem sobrescrever dirty)
   useEffect(() => {
     if (!data) return
     const remotos = data.data.slice().sort((a, b) => a.ordem - b.ordem)
-    setSlides((prev) => {
-      return remotos.map((r) => {
+    setSlides((prev) =>
+      remotos.map((r) => {
         const local = prev.find((l) => l.id === r.id)
-        // Se tem edição local não salva, mantém o local
         return local?.dirty ? local : toLocal(r)
       })
-    })
+    )
   }, [data])
 
   const invalidate = () => {
@@ -346,20 +286,12 @@ function AvisosMapaPage() {
 
   const criar = useMutation({
     mutationFn: () => criarAviso({ texto: "Novo aviso", animacao_interna: "fade_up", transicao_saida: "fade", duracao_segundos: 6, cor_fundo: "#1e293b", ordem: slides.length, ativo: true }),
-    onSuccess: (novo) => {
-      setSlides((prev) => [...prev, toLocal(novo)])
-      setIdxAtivo(slides.length)
-      invalidate()
-    },
+    onSuccess: (novo) => { setSlides((prev) => [...prev, toLocal(novo)]); setIdxAtivo(slides.length); invalidate() },
   })
 
   const remover = useMutation({
     mutationFn: (id: string) => removerAviso(id),
-    onSuccess: (_, id) => {
-      setSlides((prev) => prev.filter((s) => s.id !== id))
-      setIdxAtivo(0)
-      invalidate()
-    },
+    onSuccess: (_, id) => { setSlides((prev) => prev.filter((s) => s.id !== id)); setIdxAtivo(0); invalidate() },
   })
 
   const reordenar = useMutation({
@@ -368,12 +300,9 @@ function AvisosMapaPage() {
   })
 
   function onChange(id: string, patch: Partial<SlideLocal>) {
-    setSlides((prev) =>
-      prev.map((s) => s.id === id ? { ...s, ...patch, dirty: true } : s)
-    )
-    // Atualiza preview em tempo real se for o slide ativo
+    setSlides((prev) => prev.map((s) => s.id === id ? { ...s, ...patch, dirty: true } : s))
     const idx = slides.findIndex((s) => s.id === id)
-    if (idx !== idxAtivo) setIdxAtivo(idx)
+    if (idx >= 0 && idx !== idxAtivo) setIdxAtivo(idx)
   }
 
   async function onSalvar(id: string) {
@@ -381,19 +310,10 @@ function AvisosMapaPage() {
     if (!slide) return
     setSalvandoId(id)
     try {
-      await atualizarAviso(id, {
-        texto: slide.texto,
-        animacao_interna: slide.animacao_interna,
-        transicao_saida: slide.transicao_saida,
-        duracao_segundos: slide.duracao_segundos,
-        cor_fundo: slide.cor_fundo,
-        ativo: slide.ativo,
-      })
+      await atualizarAviso(id, { texto: slide.texto, animacao_interna: slide.animacao_interna, transicao_saida: slide.transicao_saida, duracao_segundos: slide.duracao_segundos, cor_fundo: slide.cor_fundo, ativo: slide.ativo })
       setSlides((prev) => prev.map((s) => s.id === id ? { ...s, dirty: false } : s))
       invalidate()
-    } finally {
-      setSalvandoId(null)
-    }
+    } finally { setSalvandoId(null) }
   }
 
   function onMover(idx: number, dir: -1 | 1) {
@@ -408,48 +328,30 @@ function AvisosMapaPage() {
 
   const slideAtivo = slides[Math.min(idxAtivo, Math.max(0, slides.length - 1))] ?? null
 
-  if (isLoading) {
-    return <div className="text-sm text-muted-foreground p-8">Carregando avisos...</div>
-  }
+  if (isLoading) return <div className="text-sm text-muted-foreground p-8">Carregando avisos...</div>
 
   return (
     <div className="flex flex-col gap-6 pb-10">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Avisos do mapa</h1>
-        <p className="text-muted-foreground">
-          Configure os slides exibidos no painel lateral da TV.
-        </p>
+        <p className="text-muted-foreground">Configure os slides exibidos no painel lateral da TV.</p>
       </div>
 
-      {/* Preview */}
       <div className="flex flex-col gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Preview — quadro da TV
-        </p>
-        <PreviewPlayer
-          slide={slideAtivo}
-          idxLabel={slides.length > 0 ? `slide ${Math.min(idxAtivo, slides.length - 1) + 1} de ${slides.length}` : ""}
-        />
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Preview — quadro da TV</p>
+        <PreviewPlayer slide={slideAtivo} idxLabel={slides.length > 0 ? `slide ${Math.min(idxAtivo, slides.length - 1) + 1} de ${slides.length}` : ""} />
         {slides.length > 1 && (
           <div className="flex gap-1.5 justify-center mt-1">
             {slides.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setIdxAtivo(i)}
-                className={cn("h-2 w-2 rounded-full transition-colors", i === Math.min(idxAtivo, slides.length - 1) ? "bg-teal-600" : "bg-slate-300")}
-              />
+              <button key={i} type="button" onClick={() => setIdxAtivo(i)}
+                className={cn("h-2 w-2 rounded-full transition-colors", i === Math.min(idxAtivo, slides.length - 1) ? "bg-teal-600" : "bg-slate-300")} />
             ))}
           </div>
         )}
       </div>
 
-      {/* Lista de slides */}
       <div className="flex flex-col gap-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Slides ({slides.length})
-        </p>
-
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Slides ({slides.length})</p>
         {slides.map((slide, idx) => (
           <div key={slide.id}>
             {idx > 0 && (
@@ -462,10 +364,7 @@ function AvisosMapaPage() {
               </div>
             )}
             <SlideCard
-              slide={slide}
-              idx={idx}
-              total={slides.length}
-              isAtivo={idxAtivo === idx}
+              slide={slide} idx={idx} total={slides.length} isAtivo={idxAtivo === idx}
               onChange={(patch) => onChange(slide.id, patch)}
               onSalvar={() => onSalvar(slide.id)}
               onRemover={() => remover.mutate(slide.id)}
@@ -477,14 +376,8 @@ function AvisosMapaPage() {
         ))}
       </div>
 
-      <Button
-        variant="outline"
-        className="w-full gap-2 border-dashed"
-        onClick={() => criar.mutate()}
-        disabled={criar.isPending}
-      >
-        <Plus className="h-4 w-4" />
-        Adicionar slide
+      <Button variant="outline" className="w-full gap-2 border-dashed" onClick={() => criar.mutate()} disabled={criar.isPending}>
+        <Plus className="h-4 w-4" />Adicionar slide
       </Button>
     </div>
   )
