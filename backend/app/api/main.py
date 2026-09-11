@@ -1,8 +1,9 @@
-# [mcp-local harness] feature: emprestimo_casco | plano: 1c0b80ad | 2026-09-07 15:10:46
-# Registra cascos.router no api_router
+# [mcp-local harness] feature: avisos-mapa | plano: 0a252cd1 | 2026-09-11 19:57:05
+# Adiciona avisos_mapa ao api_router
 from fastapi import APIRouter
 
 from app.api.routes import (
+    avisos_mapa,
     cascos,
     clientes,
     vale_gas,
@@ -41,6 +42,7 @@ api_router.include_router(delegacao.router)
 api_router.include_router(fechamento.router)
 api_router.include_router(vale_gas.router)
 api_router.include_router(gas_povo.router)
+api_router.include_router(avisos_mapa.router)
 
 
 if settings.ENVIRONMENT == "local":

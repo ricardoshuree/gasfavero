@@ -1,3 +1,5 @@
+# [mcp-local harness] feature: avisos-mapa | plano: 8e60d08b | 2026-09-11 19:54:06
+# Adiciona AvisoMapa table + schemas ao fim do models.py
 # [mcp-local harness] feature: fix_valor_pago_ge_zero | plano: d348404e | 2026-09-10 17:41:41
 # VendaCreate.valor_pago: gt=0 → ge=0 para permitir fiado puro com valor_pago=0
 import uuid
@@ -1040,3 +1042,63 @@ class GasPovoRecebimentoPublic(SQLModel):
     pendentes_valor: Decimal
     recebidos_mes_qtd: int
     recebidos_mes_valor: Decimal
+
+
+# ---------------------------------------------------------------------------
+# AvisoMapa — slides de avisos exibidos no painel lateral do mapa (TV)
+# ---------------------------------------------------------------------------
+
+class AvisoMapa(SQLModel, table=True):
+    __tablename__ = "aviso_mapa"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    texto: str = Field(max_length=500)
+    # animacao_interna: como o texto se comporta enquanto o slide está visível
+    # valores aceitos: "estatico" | "letreiro" | "fade_up" | "zoom" | "pulso_fundo"
+    animacao_interna: str = Field(default="fade_up", max_length=30)
+    # transicao_saida: como o slide sai ao dar lugar ao próximo
+    # valores: "fade" | "slide_esquerda" | "slide_direita" | "zoom_out" | "wipe_down" | "nenhuma"
+    transicao_saida: str = Field(default="fade", max_length=30)
+    duracao_segundos: int = Field(default=6, ge=3, le=60)
+    cor_fundo: str = Field(default="#1e293b", max_length=7)  # hex #rrggbb
+    ordem: int = Field(default=0)
+    ativo: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+    updated_at: datetime = Field(default_factory=get_datetime_utc, sa_type=DateTime(timezone=True))
+
+
+class AvisoMapaCreate(SQLModel):
+    texto: str = Field(min_length=1, max_length=500)
+    animacao_interna: str = Field(default="fade_up", max_length=30)
+    transicao_saida: str = Field(default="fade", max_length=30)
+    duracao_segundos: int = Field(default=6, ge=3, le=60)
+    cor_fundo: str = Field(default="#1e293b", max_length=7)
+    ordem: int = Field(default=0)
+    ativo: bool = Field(default=True)
+
+
+class AvisoMapaUpdate(SQLModel):
+    texto: str | None = Field(default=None, min_length=1, max_length=500)
+    animacao_interna: str | None = Field(default=None, max_length=30)
+    transicao_saida: str | None = Field(default=None, max_length=30)
+    duracao_segundos: int | None = Field(default=None, ge=3, le=60)
+    cor_fundo: str | None = Field(default=None, max_length=7)
+    ordem: int | None = None
+    ativo: bool | None = None
+
+
+class AvisoMapaPublic(SQLModel):
+    id: uuid.UUID
+    texto: str
+    animacao_interna: str
+    transicao_saida: str
+    duracao_segundos: int
+    cor_fundo: str
+    ordem: int
+    ativo: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AvisosMapaPublic(SQLModel):
+    data: list[AvisoMapaPublic]
+    count: int
