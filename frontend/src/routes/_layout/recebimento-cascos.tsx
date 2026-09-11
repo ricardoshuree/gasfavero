@@ -1,5 +1,6 @@
-// [mcp-local harness] feature: emprestimo_casco_historico | plano: 89718852 | 2026-09-07 16:54:38
-// Remove currentUserId e podeDesfazerRecebimento não usados
+// [mcp-local harness] feature: fix-build-errors | plano: 1097e958 | 2026-09-11 20:07:01
+// Corrige nomes de métodos CascosService (listarCascosEmAberto, listarAguardandoConfirmacao, listarHistorico) e adiciona requestBody obrigatório
+// fix: nomes de métodos CascosService + requestBody obrigatório
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { Package, RotateCcw, Search } from "lucide-react"
@@ -82,7 +83,8 @@ function CascoSheet({
   }
 
   const mutReceber = useMutation({
-    mutationFn: () => CascosService.receberCasco({ cascoId: casco.id }),
+    // requestBody agora obrigatório — passamos objeto vazio (observacao opcional)
+    mutationFn: () => CascosService.receberCasco({ cascoId: casco.id, requestBody: {} }),
     onSuccess: () => {
       showSuccessToast("Devolução registrada — aguardando confirmação do gerente")
       invalidate()
@@ -92,7 +94,7 @@ function CascoSheet({
   })
 
   const mutConfirmar = useMutation({
-    mutationFn: () => CascosService.confirmarDevolucaoCasco({ cascoId: casco.id }),
+    mutationFn: () => CascosService.confirmarDevolucaoCasco({ cascoId: casco.id, requestBody: {} }),
     onSuccess: () => {
       showSuccessToast("Devolução confirmada — casco baixado")
       invalidate()
@@ -102,7 +104,10 @@ function CascoSheet({
   })
 
   const mutDesfazerRecebimento = useMutation({
-    mutationFn: () => CascosService.desfazerRecebimentoCasco({ cascoId: casco.id, observacao: obsDesfazer || null }),
+    mutationFn: () => CascosService.desfazerRecebimentoCasco({
+      cascoId: casco.id,
+      requestBody: { observacao: obsDesfazer || null },
+    }),
     onSuccess: () => {
       showSuccessToast("Recebimento desfeito — casco retornou para 'Emprestado'")
       invalidate()
@@ -112,7 +117,10 @@ function CascoSheet({
   })
 
   const mutDesfazerConfirmacao = useMutation({
-    mutationFn: () => CascosService.desfazerConfirmacaoCasco({ cascoId: casco.id, observacao: obsDesfazer || null }),
+    mutationFn: () => CascosService.desfazerConfirmacaoCasco({
+      cascoId: casco.id,
+      requestBody: { observacao: obsDesfazer || null },
+    }),
     onSuccess: () => {
       showSuccessToast("Confirmação desfeita — casco retornou para 'Aguardando confirmação'")
       invalidate()
@@ -299,17 +307,20 @@ function RecebimentoCascos() {
 
   const { data: emAbertoData, isLoading: loadingAberto } = useQuery({
     queryKey: ["cascos", "em-aberto"],
-    queryFn: () => CascosService.readCascosEmAberto(),
+    // nome correto: listarCascosEmAberto
+    queryFn: () => CascosService.listarCascosEmAberto(),
   })
 
   const { data: aguardandoData, isLoading: loadingAguardando } = useQuery({
     queryKey: ["cascos", "aguardando"],
-    queryFn: () => CascosService.readCascosAguardandoConfirmacao(),
+    // nome correto: listarAguardandoConfirmacao
+    queryFn: () => CascosService.listarAguardandoConfirmacao(),
   })
 
   const { data: historicoData, isLoading: loadingHistorico } = useQuery({
     queryKey: ["cascos", "historico"],
-    queryFn: () => CascosService.readCascosHistorico(),
+    // nome correto: listarHistorico
+    queryFn: () => CascosService.listarHistorico(),
     enabled: aba === "historico",
   })
 

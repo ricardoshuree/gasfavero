@@ -12,16 +12,7 @@ export const AnosDisponiveisPublicSchema = {
     },
     type: 'object',
     required: ['anos'],
-    title: 'AnosDisponiveisPublic',
-    description: `Resposta de GET /vendas/livro/anos-disponiveis -- até os 5 anos
-mais recentes com ao menos 1 venda (data_venda), em ordem
-decrescente. Usado pra montar os botões da linha 'Ano' do menu
-interativo -- se houver um 6º ano de histórico ele simplesmente
-não aparece aqui (mas continua acessível via escopo 'todos_anos',
-que não depende desta lista).
-
-Reaproveitado tal e qual por GET /vendas/inadimplentes/anos-
-disponiveis (mesma forma: só uma lista de anos).`
+    title: 'AnosDisponiveisPublic'
 } as const;
 
 export const BairroPublicSchema = {
@@ -76,12 +67,83 @@ export const BlocoValeCreateSchema = {
     },
     type: 'object',
     required: ['motorista_id', 'primeira_folha', 'ultima_folha'],
-    title: 'BlocoValeCreate',
-    description: `Corpo de POST /blocos-vale/ -- cria o bloco E já atribui o
-motorista na mesma chamada (motorista é fixo desde a criação,
-decisão confirmada -- não existe endpoint pra reatribuir depois).
-Gera automaticamente uma linha Vale pra cada número entre
-primeira_folha e ultima_folha (inclusive).`
+    title: 'BlocoValeCreate'
+} as const;
+
+export const BlocoValeGasCreateSchema = {
+    properties: {
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        primeira_folha: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Primeira Folha'
+        },
+        ultima_folha: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Ultima Folha'
+        },
+        data: {
+            type: 'string',
+            format: 'date',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['cliente_id', 'primeira_folha', 'ultima_folha', 'data'],
+    title: 'BlocoValeGasCreate'
+} as const;
+
+export const BlocoValeGasPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        cliente_nome: {
+            type: 'string',
+            title: 'Cliente Nome'
+        },
+        cliente_cpf: {
+            type: 'string',
+            title: 'Cliente Cpf'
+        },
+        primeira_folha: {
+            type: 'integer',
+            title: 'Primeira Folha'
+        },
+        ultima_folha: {
+            type: 'integer',
+            title: 'Ultima Folha'
+        },
+        total_folhas: {
+            type: 'integer',
+            title: 'Total Folhas'
+        },
+        data: {
+            type: 'string',
+            format: 'date',
+            title: 'Data'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'cliente_id', 'cliente_nome', 'cliente_cpf', 'primeira_folha', 'ultima_folha', 'total_folhas', 'data', 'created_at'],
+    title: 'BlocoValeGasPublic'
 } as const;
 
 export const BlocoValePublicSchema = {
@@ -121,6 +183,21 @@ export const BlocoValePublicSchema = {
     type: 'object',
     required: ['id', 'motorista_id', 'motorista_nome', 'primeira_folha', 'ultima_folha', 'total_vales', 'created_at'],
     title: 'BlocoValePublic'
+} as const;
+
+export const BlocosValeGasPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/BlocoValeGasPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'BlocosValeGasPublic'
 } as const;
 
 export const BlocosValePublicSchema = {
@@ -195,6 +272,48 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const CascoItemCreateSchema = {
+    properties: {
+        produto_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Produto Id'
+        },
+        quantidade: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Quantidade'
+        }
+    },
+    type: 'object',
+    required: ['produto_id', 'quantidade'],
+    title: 'CascoItemCreate'
+} as const;
+
+export const CascosClientePublicSchema = {
+    properties: {
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        total_cascos_abertos: {
+            type: 'integer',
+            title: 'Total Cascos Abertos'
+        },
+        cascos: {
+            items: {
+                '$ref': '#/components/schemas/EmprestimoCascoPublic'
+            },
+            type: 'array',
+            title: 'Cascos'
+        }
+    },
+    type: 'object',
+    required: ['cliente_id', 'total_cascos_abertos', 'cascos'],
+    title: 'CascosClientePublic'
+} as const;
+
 export const ClienteCreateSchema = {
     properties: {
         nome: {
@@ -234,14 +353,49 @@ export const ClienteCreateSchema = {
     },
     type: 'object',
     required: ['nome', 'cpf'],
-    title: 'ClienteCreate',
-    description: `Corpo de POST /clientes/ -- cria cliente (+ endereço, se
-informado) numa única chamada.
+    title: 'ClienteCreate'
+} as const;
 
-endereco é OPCIONAL no backend de propósito: a tela /clientes
-exige endereço (validação no frontend daquela tela), mas a tela de
-Venda (cadastro rápido de cliente no balcão) não -- o cliente pode
-ser cadastrado só com nome/cpf/telefone e ganhar um endereço depois.`
+export const ClienteFiadoPublicSchema = {
+    properties: {
+        cliente_id: {
+            type: 'string',
+            title: 'Cliente Id'
+        },
+        cliente_nome: {
+            type: 'string',
+            title: 'Cliente Nome'
+        },
+        saldo: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Saldo'
+        },
+        tem_atraso: {
+            type: 'boolean',
+            title: 'Tem Atraso'
+        },
+        vence_breve: {
+            type: 'boolean',
+            title: 'Vence Breve'
+        },
+        data_vencimento_mais_antiga: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Vencimento Mais Antiga'
+        }
+    },
+    type: 'object',
+    required: ['cliente_id', 'cliente_nome', 'saldo', 'tem_atraso', 'vence_breve'],
+    title: 'ClienteFiadoPublic',
+    description: 'Resumo de fiado em aberto por cliente — retornado por GET /vendas/clientes-com-fiado.'
 } as const;
 
 export const ClientePublicSchema = {
@@ -333,11 +487,26 @@ export const ClienteUpdateSchema = {
         }
     },
     type: 'object',
-    title: 'ClienteUpdate',
-    description: `Edição só dos dados do próprio cliente (nome/cpf/telefone).
-Trocar de endereço é um endpoint separado (POST
-/clientes/{id}/endereco), porque isso precisa fechar o histórico,
-não é um UPDATE simples.`
+    title: 'ClienteUpdate'
+} as const;
+
+export const ClientesFiadoPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/ClienteFiadoPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'ClientesFiadoPublic'
 } as const;
 
 export const ClientesPublicSchema = {
@@ -375,12 +544,7 @@ export const DemandaVendaAceitarRequestSchema = {
         }
     },
     type: 'object',
-    title: 'DemandaVendaAceitarRequest',
-    description: `Corpo de PATCH /demandas-venda/{id}/aceitar -- só precisa de
-motorista_id quando o chamado está ABERTO (sem dono ainda); nesse
-caso é obrigatório, é quem está "assumindo" o chamado. Se o
-chamado já tinha um motorista definido na criação, motorista_id
-aqui é ignorado (o dono já é fixo).`
+    title: 'DemandaVendaAceitarRequest'
 } as const;
 
 export const DemandaVendaCreateSchema = {
@@ -430,14 +594,7 @@ export const DemandaVendaCreateSchema = {
     },
     type: 'object',
     required: ['cliente_id', 'endereco_id'],
-    title: 'DemandaVendaCreate',
-    description: `Corpo de POST /demandas-venda/ -- despacha um chamado.
-endereco_id é obrigatório e precisa apontar pra um Endereco já
-cadastrado (do cliente ou outro) -- nunca texto livre.
-motorista_id é opcional: se omitido, o chamado nasce ABERTO (pra
-qualquer motorista aceitar); se informado, nasce já direcionado
-pra aquele motorista específico. itens é opcional (pode ser um
-chamado só com observação, ex: "cliente quer saber se tem gás").`
+    title: 'DemandaVendaCreate'
 } as const;
 
 export const DemandaVendaItemCreateSchema = {
@@ -605,14 +762,7 @@ export const DemandaVendaReatribuirRequestSchema = {
         }
     },
     type: 'object',
-    title: 'DemandaVendaReatribuirRequest',
-    description: `Corpo de PATCH /demandas-venda/{id}/reatribuir -- SÓ o
-atendente pode chamar (ação "Apagar" do módulo delegacao, ver
-comentário de ciclo de vida acima da classe DemandaVenda).
-motorista_id novo dono do chamado; None reabre como chamado
-ABERTO (equivalente a "não era pra fulano, era pra qualquer um").
-Só funciona a partir de status 'pendente' -- ver comentário
-completo acima.`
+    title: 'DemandaVendaReatribuirRequest'
 } as const;
 
 export const DemandasVendaPublicSchema = {
@@ -628,6 +778,261 @@ export const DemandasVendaPublicSchema = {
     type: 'object',
     required: ['data'],
     title: 'DemandasVendaPublic'
+} as const;
+
+export const EmprestimoCascoConfirmarRequestSchema = {
+    properties: {
+        observacao: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Observacao'
+        }
+    },
+    type: 'object',
+    title: 'EmprestimoCascoConfirmarRequest'
+} as const;
+
+export const EmprestimoCascoDesfazerRequestSchema = {
+    properties: {
+        observacao: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Observacao'
+        }
+    },
+    type: 'object',
+    title: 'EmprestimoCascoDesfazerRequest'
+} as const;
+
+export const EmprestimoCascoLogPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        evento: {
+            type: 'string',
+            title: 'Evento'
+        },
+        usuario_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Usuario Nome'
+        },
+        observacao: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Observacao'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'evento', 'created_at'],
+    title: 'EmprestimoCascoLogPublic'
+} as const;
+
+export const EmprestimoCascoPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        venda_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Venda Id'
+        },
+        produto_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Produto Id'
+        },
+        produto_nome: {
+            type: 'string',
+            title: 'Produto Nome'
+        },
+        quantidade: {
+            type: 'integer',
+            title: 'Quantidade'
+        },
+        motorista_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Motorista Id'
+        },
+        motorista_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Motorista Nome'
+        },
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        cliente_nome: {
+            type: 'string',
+            title: 'Cliente Nome'
+        },
+        recebido_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Recebido Em'
+        },
+        recebido_por_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Recebido Por Nome'
+        },
+        confirmado_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Confirmado Em'
+        },
+        confirmado_por_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Confirmado Por Nome'
+        },
+        dias_em_aberto: {
+            type: 'integer',
+            title: 'Dias Em Aberto',
+            default: 0
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        logs: {
+            items: {
+                '$ref': '#/components/schemas/EmprestimoCascoLogPublic'
+            },
+            type: 'array',
+            title: 'Logs',
+            default: []
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'venda_id', 'produto_id', 'produto_nome', 'quantidade', 'cliente_id', 'cliente_nome', 'status', 'created_at'],
+    title: 'EmprestimoCascoPublic'
+} as const;
+
+export const EmprestimoCascoReceberRequestSchema = {
+    properties: {
+        observacao: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Observacao'
+        }
+    },
+    type: 'object',
+    title: 'EmprestimoCascoReceberRequest'
+} as const;
+
+export const EmprestimosCascoPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/EmprestimoCascoPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        },
+        total_cascos_abertos: {
+            type: 'integer',
+            title: 'Total Cascos Abertos'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count', 'total_cascos_abertos'],
+    title: 'EmprestimosCascoPublic'
 } as const;
 
 export const EnderecoCreateSchema = {
@@ -664,13 +1069,7 @@ export const EnderecoCreateSchema = {
     },
     type: 'object',
     required: ['bairro_id', 'rua_nome', 'numero'],
-    title: 'EnderecoCreate',
-    description: `Corpo usado para criar (ou trocar) o endereço de um cliente.
-
-rua_nome é sempre texto livre, nunca um rua_id -- o endpoint
-resolve pra uma Rua existente (case-insensitive, mesmo bairro) ou
-cria uma nova na hora ("cresce por uso"). Isso evita o frontend
-precisar gerenciar o caso "rua não existe ainda no catálogo".`
+    title: 'EnderecoCreate'
 } as const;
 
 export const EnderecoPublicSchema = {
@@ -737,6 +1136,101 @@ export const EnderecoPublicSchema = {
     title: 'EnderecoPublic'
 } as const;
 
+export const GasPovoRecebimentoPublicSchema = {
+    properties: {
+        pendentes: {
+            items: {
+                '$ref': '#/components/schemas/GasPovoVendaPublic'
+            },
+            type: 'array',
+            title: 'Pendentes'
+        },
+        pendentes_qtd: {
+            type: 'integer',
+            title: 'Pendentes Qtd'
+        },
+        pendentes_valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Pendentes Valor'
+        },
+        recebidos_mes_qtd: {
+            type: 'integer',
+            title: 'Recebidos Mes Qtd'
+        },
+        recebidos_mes_valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Recebidos Mes Valor'
+        }
+    },
+    type: 'object',
+    required: ['pendentes', 'pendentes_qtd', 'pendentes_valor', 'recebidos_mes_qtd', 'recebidos_mes_valor'],
+    title: 'GasPovoRecebimentoPublic'
+} as const;
+
+export const GasPovoVendaPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        cliente_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Cliente Id'
+        },
+        cliente_nome: {
+            type: 'string',
+            title: 'Cliente Nome'
+        },
+        motorista_nome: {
+            type: 'string',
+            title: 'Motorista Nome'
+        },
+        valor_total: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor Total'
+        },
+        gas_povo_frete: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Gas Povo Frete'
+        },
+        gas_povo_frete_recebido_em: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Gas Povo Frete Recebido Em'
+        },
+        data_venda: {
+            type: 'string',
+            format: 'date',
+            title: 'Data Venda'
+        },
+        pago_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Pago Em'
+        },
+        dias_em_aberto: {
+            type: 'integer',
+            title: 'Dias Em Aberto'
+        }
+    },
+    type: 'object',
+    required: ['id', 'cliente_id', 'cliente_nome', 'motorista_nome', 'valor_total', 'gas_povo_frete', 'gas_povo_frete_recebido_em', 'data_venda', 'dias_em_aberto'],
+    title: 'GasPovoVendaPublic'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -780,12 +1274,7 @@ export const InadimplentesMotoristasPublicSchema = {
     },
     type: 'object',
     required: ['data'],
-    title: 'InadimplentesMotoristasPublic',
-    description: `Resposta de GET /vendas/inadimplentes/motoristas -- só os
-motoristas que aparecem em ao menos 1 venda 'esteve em atraso'
-(não a lista de usuários inteira), pra montar o dropdown "Nome
-Motorista" -- "Todos Motoristas" (primeira opção) é sintético,
-montado só no frontend, não vem daqui.`
+    title: 'InadimplentesMotoristasPublic'
 } as const;
 
 export const InadimplentesResumoPublicSchema = {
@@ -819,15 +1308,7 @@ export const InadimplentesResumoPublicSchema = {
     },
     type: 'object',
     required: ['qtd', 'valor', 'periodo_inicio', 'periodo_fim', 'grafico'],
-    title: 'InadimplentesResumoPublic',
-    description: `Resposta de GET /vendas/inadimplentes/resumo -- o único card
-da tela ('Atraso maior que 30 dias') + o período textual + os
-pontos do gráfico, filtrados pelo escopo ativo do menu
-(todos_anos/ano/mes, agrupado por data_pagamento_vale).
-
-valor soma valor_total (o que ficou em aberto na época; para
-quem já pagou depois, valor_total continua sendo o total original
-da venda, não é afetado pelo pagamento).`
+    title: 'InadimplentesResumoPublic'
 } as const;
 
 export const ItemCreateSchema = {
@@ -849,6 +1330,11 @@ export const ItemCreateSchema = {
                 }
             ],
             title: 'Description'
+        },
+        vende_casco: {
+            type: 'boolean',
+            title: 'Vende Casco',
+            default: false
         }
     },
     type: 'object',
@@ -897,6 +1383,11 @@ export const ItemPublicSchema = {
                 }
             ],
             title: 'Created At'
+        },
+        vende_casco: {
+            type: 'boolean',
+            title: 'Vende Casco',
+            default: false
         }
     },
     type: 'object',
@@ -930,6 +1421,17 @@ export const ItemUpdateSchema = {
                 }
             ],
             title: 'Description'
+        },
+        vende_casco: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vende Casco'
         }
     },
     type: 'object',
@@ -969,11 +1471,7 @@ export const LivroVendasBucketSchema = {
     },
     type: 'object',
     required: ['label', 'valor'],
-    title: 'LivroVendasBucket',
-    description: `Um ponto (barra) do gráfico -- label já formatado pro eixo X
-(ex: 'Jan', '2025', 'Domingo', '01/08–02/08', dependendo da
-granularidade ativa) e o valor em caixa (soma de valor_pago das
-vendas já pagas) somado dentro daquele bucket de tempo.`
+    title: 'LivroVendasBucket'
 } as const;
 
 export const LivroVendasFormaPagamentoValorSchema = {
@@ -990,12 +1488,7 @@ export const LivroVendasFormaPagamentoValorSchema = {
     },
     type: 'object',
     required: ['forma_pagamento', 'valor'],
-    title: 'LivroVendasFormaPagamentoValor',
-    description: `Uma linha do detalhamento de 'Em caixa' por forma de pagamento
--- forma_pagamento é o slug técnico (cartao/pix/dinheiro/vale, o
-mesmo valor gravado em Venda.forma_pagamento); o label de exibição
-é responsabilidade do frontend. valor é a soma de valor_pago das
-vendas JÁ PAGAS daquela forma, dentro do período ativo.`
+    title: 'LivroVendasFormaPagamentoValor'
 } as const;
 
 export const LivroVendasListPublicSchema = {
@@ -1024,18 +1517,7 @@ export const LivroVendasListPublicSchema = {
     },
     type: 'object',
     required: ['data', 'count', 'soma_preco', 'soma_valor_pago'],
-    title: 'LivroVendasListPublic',
-    description: `Resposta de GET /vendas/livro (a tabela) -- diferente de
-VendasPublic genérico porque inclui soma_preco/soma_valor_pago:
-o total das colunas 'Preço' (valor_total) e 'Valor pago'
-(valor_pago) de TODAS as vendas que batem com o filtro de data
-ativo (data_inicio/data_fim), não só as da página atual -- é o
-valor exibido na linha de totais no rodapé da tabela, que muda
-dinamicamente junto com o filtro 'Consulta vendas data'.
-
-Reaproveitado tal e qual por GET /vendas/inadimplentes (mesma
-forma: data + count + soma_preco + soma_valor_pago) -- não faz
-sentido duplicar o model só porque o nome da tela é outro.`
+    title: 'LivroVendasListPublic'
 } as const;
 
 export const LivroVendasResumoPublicSchema = {
@@ -1085,28 +1567,7 @@ export const LivroVendasResumoPublicSchema = {
     },
     type: 'object',
     required: ['em_caixa_qtd', 'em_caixa_valor', 'em_caixa_por_forma_pagamento', 'em_aberto_qtd', 'em_aberto_valor', 'periodo_inicio', 'periodo_fim', 'grafico'],
-    title: 'LivroVendasResumoPublic',
-    description: `Resposta de GET /vendas/livro/resumo -- os 2 cards ('Em caixa'
-e 'Em aberto') + o período textual + os pontos do gráfico, tudo
-já filtrado pelo escopo ativo do menu interativo (ano/mês/semana).
-
-em_caixa: vendas já pagas (pago_em preenchido) com data_venda
-dentro do período -- qtd e soma de valor_pago (o que de fato
-entrou no caixa).
-
-em_caixa_por_forma_pagamento: o mesmo total de em_caixa_valor,
-detalhado por forma de pagamento (cartao/pix/dinheiro/vale) --
-sempre as 4 formas presentes na lista, mesmo com valor 0, nessa
-ordem fixa (pedido do Ricardo). A soma dos 4 valores sempre bate
-com em_caixa_valor.
-
-em_aberto: vendas ainda não pagas (pago_em nulo -- sempre vale em
-aberto ou em atraso) com data_venda dentro do período -- qtd e
-soma de valor_total (o que falta receber).
-
-periodo_inicio/periodo_fim: limites do período correspondente ao
-escopo ativo, pro frontend montar o label '(dd/mm/aaaa -
-dd/mm/aaaa)'.`
+    title: 'LivroVendasResumoPublic'
 } as const;
 
 export const LogradouroReferenciaPublicSchema = {
@@ -1138,12 +1599,7 @@ export const LogradourosReferenciaPublicSchema = {
     },
     type: 'object',
     required: ['data'],
-    title: 'LogradourosReferenciaPublic',
-    description: `Resposta de GET /bairros/logradouros-referencia -- a lista
-inteira (hoje ~239 nomes), sem paginação nem busca no servidor,
-já que o volume é pequeno. Usado no frontend como fonte extra de
-sugestão no RuaAutocomplete, mesclado com as ruas já cadastradas
-no bairro selecionado (ver comentário em LogradouroReferencia).`
+    title: 'LogradourosReferenciaPublic'
 } as const;
 
 export const MessageSchema = {
@@ -1194,8 +1650,7 @@ export const ModulePermissionSchema = {
     },
     type: 'object',
     required: ['module', 'can_create', 'can_read', 'can_update', 'can_delete'],
-    title: 'ModulePermission',
-    description: 'Permissão efetiva de um usuário em um módulo específico (CRUD).'
+    title: 'ModulePermission'
 } as const;
 
 export const ModulePermissionMatrixSchema = {
@@ -1228,9 +1683,7 @@ export const ModulePermissionMatrixUpdateSchema = {
     },
     type: 'object',
     required: ['entries'],
-    title: 'ModulePermissionMatrixUpdate',
-    description: `Corpo de PUT /modules/{module_id}/permissions -- grava a
-matriz inteira do módulo de uma vez (upsert por role).`
+    title: 'ModulePermissionMatrixUpdate'
 } as const;
 
 export const ModulePublicSchema = {
@@ -1300,10 +1753,7 @@ export const ModuleUpdateSchema = {
         }
     },
     type: 'object',
-    title: 'ModuleUpdate',
-    description: `Corpo de PATCH /modules/{module_id} -- edita SÓ label e/ou
-description (campos cosméticos). \`name\` (o slug técnico) nunca é
-editável por aqui de propósito -- ver comentário na classe Module.`
+    title: 'ModuleUpdate'
 } as const;
 
 export const ModulesPublicSchema = {
@@ -1351,10 +1801,21 @@ export const MotoristaDisponibilidadeUpdateSchema = {
     },
     type: 'object',
     required: ['disponivel'],
-    title: 'MotoristaDisponibilidadeUpdate',
-    description: `Corpo de PUT /motoristas/{motorista_id}/disponibilidade --
-chamado tanto pelo próprio motorista (toggle no app) quanto por
-um gerente/atendente numa tela gerencial futura.`
+    title: 'MotoristaDisponibilidadeUpdate'
+} as const;
+
+export const MotoristaFcmTokenUpdateSchema = {
+    properties: {
+        fcm_token: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Fcm Token'
+        }
+    },
+    type: 'object',
+    required: ['fcm_token'],
+    title: 'MotoristaFcmTokenUpdate'
 } as const;
 
 export const MotoristaLocalizacaoPublicSchema = {
@@ -1422,9 +1883,7 @@ export const MotoristaLocalizacaoUpdateSchema = {
     },
     type: 'object',
     required: ['latitude', 'longitude'],
-    title: 'MotoristaLocalizacaoUpdate',
-    description: `Corpo de PUT /motoristas/{motorista_id}/localizacao -- upsert
-de ping de localização (sobrescreve sempre, sem histórico).`
+    title: 'MotoristaLocalizacaoUpdate'
 } as const;
 
 export const MotoristasDisponibilidadePublicSchema = {
@@ -1439,11 +1898,7 @@ export const MotoristasDisponibilidadePublicSchema = {
     },
     type: 'object',
     required: ['data'],
-    title: 'MotoristasDisponibilidadePublic',
-    description: `Resposta de GET /motoristas/disponibilidade -- todos os
-usuários com role Motorista + seu status atual. Usado pra filtrar
-o combo de despacho em /chamado (só disponíveis) e por uma futura
-tela gerencial de disponibilidade.`
+    title: 'MotoristasDisponibilidadePublic'
 } as const;
 
 export const MotoristasLocalizacaoPublicSchema = {
@@ -1493,13 +1948,27 @@ export const PrecoCreateSchema = {
                 }
             ],
             title: 'Valor'
+        },
+        preco_casco: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Preco Casco'
         }
     },
     type: 'object',
     required: ['valor'],
-    title: 'PrecoCreate',
-    description: `Corpo de POST /produtos/{produto_id}/preco -- cadastra um novo
-preço vigente pro produto (fecha o anterior automaticamente).`
+    title: 'PrecoCreate'
 } as const;
 
 export const PrecoPublicSchema = {
@@ -1513,6 +1982,18 @@ export const PrecoPublicSchema = {
             type: 'string',
             pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
             title: 'Valor'
+        },
+        preco_casco: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Preco Casco'
         },
         valid_from: {
             type: 'string',
@@ -1572,6 +2053,11 @@ export const ProdutoComPrecoPublicSchema = {
             ],
             title: 'Description'
         },
+        vende_casco: {
+            type: 'boolean',
+            title: 'Vende Casco',
+            default: false
+        },
         preco_atual: {
             anyOf: [
                 {
@@ -1583,6 +2069,18 @@ export const ProdutoComPrecoPublicSchema = {
                 }
             ],
             title: 'Preco Atual'
+        },
+        preco_casco_atual: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Preco Casco Atual'
         },
         preco_valid_from: {
             anyOf: [
@@ -1599,9 +2097,7 @@ export const ProdutoComPrecoPublicSchema = {
     },
     type: 'object',
     required: ['id', 'title'],
-    title: 'ProdutoComPrecoPublic',
-    description: `Produto + preço vigente -- usado pela tela 'Cadastro de
-Preços', que é 'parecida com Produto' só que atribuindo preço.`
+    title: 'ProdutoComPrecoPublic'
 } as const;
 
 export const ProdutosComPrecoPublicSchema = {
@@ -1634,13 +2130,7 @@ export const ProximoValeNumeroPublicSchema = {
         }
     },
     type: 'object',
-    title: 'ProximoValeNumeroPublic',
-    description: `Resposta de GET /vendas/proximo-numero-vale/{motorista_id} --
-sugestão do próximo número de vale livre dentro do(s) bloco(s)
-atribuído(s) a esse motorista (null se não houver nenhum livre ou
-nenhum bloco atribuído). É só uma sugestão pro campo "número do
-vale" na tela de venda -- continua editável, não é obrigatório
-usar exatamente esse número.`
+    title: 'ProximoValeNumeroPublic'
 } as const;
 
 export const RankingMotoristaPublicSchema = {
@@ -1686,13 +2176,7 @@ export const RankingSemanaPublicSchema = {
     },
     type: 'object',
     required: ['periodo_inicio', 'periodo_fim', 'motoristas'],
-    title: 'RankingSemanaPublic',
-    description: `Resposta de GET /vendas/ranking-semana -- top 3 motoristas por
-QUANTIDADE de vendas na semana corrente (domingo-sábado, mesmo
-corte de semana usado no Livro de Vendas -- ver _semana_atual em
-vendas.py). Conta TODAS as vendas independente de forma de
-pagamento ou status de pagamento -- é volume de atendimento, não
-faturamento.`
+    title: 'RankingSemanaPublic'
 } as const;
 
 export const ResumoRecebimentoValePublicSchema = {
@@ -1736,24 +2220,7 @@ export const ResumoRecebimentoValePublicSchema = {
     },
     type: 'object',
     required: ['em_aberto_qtd', 'em_aberto_valor', 'atraso_qtd', 'atraso_valor', 'aguardando_baixa_qtd', 'aguardando_baixa_valor', 'pagos_mes_qtd', 'pagos_mes_valor'],
-    title: 'ResumoRecebimentoValePublic',
-    description: `Resposta de GET /vendas/vales-recebimento/resumo -- os 4 cards
-da tela de Recebimento de Vale.
-
-em_aberto_valor / atraso_valor: soma do valor_total das vendas
-naquele grupo (não desconta nada -- são vendas que ainda não
-tiveram nenhum recebimento registrado).
-
-aguardando_baixa_valor: soma do valor_pago (o que foi de fato
-registrado como recebido, ainda não conferido/baixado na
-distribuidora) -- não o valor_total, porque o que importa aqui pro
-operador é quanto ele deve esperar receber/conferir em mãos.
-
-pagos_mes_qtd / pagos_mes_valor: vendas em vale já BAIXADAS
-(pago_em não nulo) cujo pago_em cai dentro do mês vigente (do dia
-1 ao último dia do mês corrente) -- não é sobre quando a venda foi
-feita, é sobre quando foi dada a baixa. pagos_mes_valor soma
-valor_pago (o que de fato entrou no caixa naqueles vales).`
+    title: 'ResumoRecebimentoValePublic'
 } as const;
 
 export const RoleCreateSchema = {
@@ -1779,9 +2246,7 @@ export const RoleCreateSchema = {
     },
     type: 'object',
     required: ['name'],
-    title: 'RoleCreate',
-    description: `Corpo de POST /roles/ -- cria uma nova role RBAC (ex: 'gerente',
-'motorista'). Nome deve ser único (validado no endpoint).`
+    title: 'RoleCreate'
 } as const;
 
 export const RolePermissionEntrySchema = {
@@ -1814,9 +2279,7 @@ export const RolePermissionEntrySchema = {
     },
     type: 'object',
     required: ['role_id', 'role_name', 'can_create', 'can_read', 'can_update', 'can_delete'],
-    title: 'RolePermissionEntry',
-    description: `Uma linha da matriz: o que uma role específica pode fazer no
-módulo (zerado se ainda não houver RolePermission cadastrado).`
+    title: 'RolePermissionEntry'
 } as const;
 
 export const RolePermissionUpdateSchema = {
@@ -1882,14 +2345,7 @@ export const RolePublicSchema = {
     },
     type: 'object',
     required: ['id', 'name'],
-    title: 'RolePublic',
-    description: `Role RBAC exposta pra UI (não confundir com is_superuser).
-
-user_count vem sempre calculado pelo endpoint (não é uma coluna do
-banco) -- usado pela tela "Gerenciar Roles" pra avisar o superuser
-quantos usuários seriam desvinculados antes de confirmar um DELETE
-(a FK UserRole.role_id tem ondelete=CASCADE, então apagar a role
-desvincula silenciosamente se a UI não avisar antes).`
+    title: 'RolePublic'
 } as const;
 
 export const RoleUpdateSchema = {
@@ -1921,10 +2377,7 @@ export const RoleUpdateSchema = {
         }
     },
     type: 'object',
-    title: 'RoleUpdate',
-    description: `Corpo de PATCH /roles/{role_id} -- edição parcial (nome e/ou
-descrição). Renomear uma role não quebra nada além do óbvio: as
-permissões e vínculos de usuário são por role_id, não por nome.`
+    title: 'RoleUpdate'
 } as const;
 
 export const RolesPublicSchema = {
@@ -2076,8 +2529,7 @@ export const UserPermissionsSchema = {
     },
     type: 'object',
     required: ['is_superuser', 'roles', 'permissions'],
-    title: 'UserPermissions',
-    description: 'Resposta completa de permissões do usuário logado.'
+    title: 'UserPermissions'
 } as const;
 
 export const UserPublicSchema = {
@@ -2191,10 +2643,7 @@ export const UserPublicWithRolesSchema = {
     },
     type: 'object',
     required: ['email', 'id'],
-    title: 'UserPublicWithRoles',
-    description: `UserPublic + nomes das roles RBAC atribuídas -- usado pela
-tabela de Usuários na tela de admin, que mostra e permite editar
-as roles de cada um.`
+    title: 'UserPublicWithRoles'
 } as const;
 
 export const UserRegisterSchema = {
@@ -2242,10 +2691,7 @@ export const UserRolesUpdateSchema = {
     },
     type: 'object',
     required: ['role_ids'],
-    title: 'UserRolesUpdate',
-    description: `Corpo de PUT /users/{user_id}/roles -- substitui o conjunto
-inteiro de roles do usuário pelos ids informados (lista vazia
-remove todas as roles).`
+    title: 'UserRolesUpdate'
 } as const;
 
 export const UserUpdateSchema = {
@@ -2423,14 +2869,7 @@ export const VendaBaixarValeRequestSchema = {
         }
     },
     type: 'object',
-    title: 'VendaBaixarValeRequest',
-    description: `Corpo de PATCH /vendas/{id}/baixar-vale -- confirma
-oficialmente o recebimento na distribuidora (sempre feito ali,
-nunca em campo) e FECHA a venda de vez (pago_em), não importa o
-valor. valor_pago é opcional: se omitido, usa o valor já
-registrado por marcar-pago. Se for menor que valor_total, a
-diferença é um desconto -- não deixa a venda em aberto de novo
-(ver comentário em Venda, models.py).`
+    title: 'VendaBaixarValeRequest'
 } as const;
 
 export const VendaCreateSchema = {
@@ -2459,8 +2898,15 @@ export const VendaCreateSchema = {
         },
         forma_pagamento: {
             type: 'string',
-            enum: ['cartao', 'pix', 'dinheiro', 'vale'],
+            enum: ['cartao_debito', 'cartao_credito', 'pix', 'dinheiro', 'vale', 'vale_gas', 'gas_povo'],
             title: 'Forma Pagamento'
+        },
+        pagamentos: {
+            items: {
+                '$ref': '#/components/schemas/VendaPagamentoCreate'
+            },
+            type: 'array',
+            title: 'Pagamentos'
         },
         vale_numero: {
             anyOf: [
@@ -2485,11 +2931,50 @@ export const VendaCreateSchema = {
             ],
             title: 'Data Pagamento Vale'
         },
-        valor_pago: {
+        vale_gas_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Numero'
+        },
+        vale_gas_bloco_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Bloco Id'
+        },
+        gas_povo_frete: {
             anyOf: [
                 {
                     type: 'number',
                     exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gas Povo Frete'
+        },
+        valor_pago: {
+            anyOf: [
+                {
+                    type: 'number',
+                    minimum: 0
                 },
                 {
                     type: 'string',
@@ -2517,20 +3002,97 @@ export const VendaCreateSchema = {
             type: 'array',
             minItems: 1,
             title: 'Itens'
+        },
+        cascos: {
+            items: {
+                '$ref': '#/components/schemas/CascoItemCreate'
+            },
+            type: 'array',
+            title: 'Cascos'
         }
     },
     type: 'object',
     required: ['cliente_id', 'motorista_id', 'forma_pagamento', 'valor_pago', 'itens'],
-    title: 'VendaCreate',
-    description: `Corpo de POST /vendas/ -- cria a venda inteira (cabeçalho +
-itens da sacola) numa única transação.
+    title: 'VendaCreate'
+} as const;
 
-vale_numero é o número físico da folha do vale (não o vale_id) --
-o endpoint resolve pra um Vale existente e valida que ainda não foi
-usado em outra venda. data_pagamento_vale, se não informado e a
-forma for 'vale', é calculado automaticamente como o 5º dia útil
-do mês seguinte (decisão do Ricardo: dá previsibilidade ao cliente
-alinhada com o pagamento do salário).`
+export const VendaEditarRequestSchema = {
+    properties: {
+        forma_pagamento: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Forma Pagamento'
+        },
+        valor_pago: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Valor Pago'
+        },
+        data_venda: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Venda'
+        },
+        motorista_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Motorista Id'
+        }
+    },
+    type: 'object',
+    title: 'VendaEditarRequest'
+} as const;
+
+export const VendaEstornarRequestSchema = {
+    properties: {
+        valor_estorno: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                }
+            ],
+            title: 'Valor Estorno'
+        }
+    },
+    type: 'object',
+    required: ['valor_estorno'],
+    title: 'VendaEstornarRequest'
 } as const;
 
 export const VendaItemCreateSchema = {
@@ -2544,6 +3106,11 @@ export const VendaItemCreateSchema = {
             type: 'integer',
             exclusiveMinimum: 0,
             title: 'Quantidade'
+        },
+        com_casco: {
+            type: 'boolean',
+            title: 'Com Casco',
+            default: false
         }
     },
     type: 'object',
@@ -2580,11 +3147,69 @@ export const VendaItemPublicSchema = {
             type: 'string',
             pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
             title: 'Subtotal'
+        },
+        com_casco: {
+            type: 'boolean',
+            title: 'Com Casco',
+            default: false
+        },
+        preco_casco_snapshot: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Preco Casco Snapshot'
         }
     },
     type: 'object',
     required: ['id', 'produto_id', 'produto_title', 'quantidade', 'preco_unitario', 'subtotal'],
     title: 'VendaItemPublic'
+} as const;
+
+export const VendaLogPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        campo: {
+            type: 'string',
+            title: 'Campo'
+        },
+        valor_anterior: {
+            type: 'string',
+            title: 'Valor Anterior'
+        },
+        valor_novo: {
+            type: 'string',
+            title: 'Valor Novo'
+        },
+        editado_por_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Editado Por Nome'
+        },
+        editado_em: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Editado Em'
+        }
+    },
+    type: 'object',
+    required: ['id', 'campo', 'valor_anterior', 'valor_novo', 'editado_em'],
+    title: 'VendaLogPublic'
 } as const;
 
 export const VendaMarcarPagoRequestSchema = {
@@ -2605,12 +3230,245 @@ export const VendaMarcarPagoRequestSchema = {
     },
     type: 'object',
     required: ['valor_pago'],
-    title: 'VendaMarcarPagoRequest',
-    description: `Corpo de PATCH /vendas/{id}/marcar-pago -- registra que o
-valor foi recebido (hoje: por um operador na tela de Recebimento
-de Vale; no futuro: por um motorista numa interface própria em
-campo). NÃO fecha a venda -- só a baixa (endpoint separado, só
-na distribuidora) faz isso.`
+    title: 'VendaMarcarPagoRequest'
+} as const;
+
+export const VendaPagamentoBaixarRequestSchema = {
+    properties: {
+        valor_pago: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                }
+            ],
+            title: 'Valor Pago'
+        }
+    },
+    type: 'object',
+    required: ['valor_pago'],
+    title: 'VendaPagamentoBaixarRequest'
+} as const;
+
+export const VendaPagamentoCreateSchema = {
+    properties: {
+        forma_pagamento: {
+            type: 'string',
+            enum: ['cartao_debito', 'cartao_credito', 'pix', 'dinheiro', 'vale', 'vale_gas', 'gas_povo'],
+            title: 'Forma Pagamento'
+        },
+        valor: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                }
+            ],
+            title: 'Valor'
+        },
+        vale_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Numero'
+        },
+        data_pagamento_vale: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Pagamento Vale'
+        },
+        vale_gas_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Numero'
+        },
+        vale_gas_bloco_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Bloco Id'
+        },
+        gas_povo_frete: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gas Povo Frete'
+        }
+    },
+    type: 'object',
+    required: ['forma_pagamento', 'valor'],
+    title: 'VendaPagamentoCreate'
+} as const;
+
+export const VendaPagamentoEstornarRequestSchema = {
+    properties: {
+        valor_estorno: {
+            anyOf: [
+                {
+                    type: 'number',
+                    exclusiveMinimum: 0
+                },
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$'
+                }
+            ],
+            title: 'Valor Estorno'
+        }
+    },
+    type: 'object',
+    required: ['valor_estorno'],
+    title: 'VendaPagamentoEstornarRequest'
+} as const;
+
+export const VendaPagamentoPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        forma_pagamento: {
+            type: 'string',
+            title: 'Forma Pagamento'
+        },
+        valor: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor'
+        },
+        valor_pago: {
+            type: 'string',
+            pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$',
+            title: 'Valor Pago',
+            default: '0'
+        },
+        pago_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Pago Em'
+        },
+        vale_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Numero'
+        },
+        data_pagamento_vale: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Data Pagamento Vale'
+        },
+        vale_gas_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Numero'
+        },
+        vale_gas_estabelecimento: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Estabelecimento'
+        },
+        gas_povo_frete: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gas Povo Frete'
+        },
+        gas_povo_frete_recebido_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gas Povo Frete Recebido Em'
+        }
+    },
+    type: 'object',
+    required: ['id', 'forma_pagamento', 'valor'],
+    title: 'VendaPagamentoPublic'
 } as const;
 
 export const VendaPublicSchema = {
@@ -2652,6 +3510,14 @@ export const VendaPublicSchema = {
             type: 'string',
             title: 'Forma Pagamento'
         },
+        pagamentos: {
+            items: {
+                '$ref': '#/components/schemas/VendaPagamentoPublic'
+            },
+            type: 'array',
+            title: 'Pagamentos',
+            default: []
+        },
         vale_numero: {
             anyOf: [
                 {
@@ -2674,6 +3540,52 @@ export const VendaPublicSchema = {
                 }
             ],
             title: 'Data Pagamento Vale'
+        },
+        vale_gas_numero: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Numero'
+        },
+        vale_gas_estabelecimento: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Vale Gas Estabelecimento'
+        },
+        gas_povo_frete: {
+            anyOf: [
+                {
+                    type: 'string',
+                    pattern: '^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gas Povo Frete'
+        },
+        gas_povo_frete_recebido_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gas Povo Frete Recebido Em'
         },
         valor_total: {
             type: 'string',
@@ -2725,6 +3637,47 @@ export const VendaPublicSchema = {
             ],
             title: 'Recebido Por Nome'
         },
+        status: {
+            type: 'string',
+            title: 'Status',
+            default: 'ativa'
+        },
+        cancelada_em: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Cancelada Em'
+        },
+        cancelada_por_nome: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Cancelada Por Nome'
+        },
+        logs_edicao: {
+            items: {
+                '$ref': '#/components/schemas/VendaLogPublic'
+            },
+            type: 'array',
+            title: 'Logs Edicao',
+            default: []
+        },
+        qtd_edicoes: {
+            type: 'integer',
+            title: 'Qtd Edicoes',
+            default: 0
+        },
         criado_por_id: {
             type: 'string',
             format: 'uuid',
@@ -2741,6 +3694,14 @@ export const VendaPublicSchema = {
             },
             type: 'array',
             title: 'Itens',
+            default: []
+        },
+        cascos_emprestados: {
+            items: {
+                '$ref': '#/components/schemas/EmprestimoCascoPublic'
+            },
+            type: 'array',
+            title: 'Cascos Emprestados',
             default: []
         }
     },

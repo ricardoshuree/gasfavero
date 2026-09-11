@@ -1,5 +1,6 @@
-// [mcp-local harness] feature: aviso_fiado_sem_bloqueio | plano: 12184779 | 2026-09-09 14:56:24
-// AvisoFiadoCliente busca limit:50 e filtra localmente; spinner Loader2 no histórico enquanto carrega
+// [mcp-local harness] feature: fix-build-errors | plano: 1097e958 | 2026-09-11 20:05:41
+// readCascosCliente → cascosPorCliente (nome correto no client gerado)
+// fix: readCascosCliente → cascosPorCliente (nome correto no client gerado)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, Loader2, MapPin, Package, Plus, Search, User, X } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -91,12 +92,7 @@ function formatTelefone(raw: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
 }
 
-// ---------------------------------------------------------------------------
-// Aviso de fiado em aberto — busca todas as vendas do cliente e filtra
-// ---------------------------------------------------------------------------
-
 function AvisoFiadoCliente({ clienteId }: { clienteId: string }) {
-  // Busca ampla para garantir que fiados antigos apareçam (não apenas as 3 últimas)
   const { data, isLoading } = useQuery({
     queryKey: ["vendas-cliente-fiado", clienteId],
     queryFn: () => VendasService.readHistoricoVendasCliente({ clienteId, limit: 50 }),
@@ -132,10 +128,6 @@ function AvisoFiadoCliente({ clienteId }: { clienteId: string }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Histórico de vendas com spinner de carregamento
-// ---------------------------------------------------------------------------
-
 function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
   const { data: historicoData, isLoading: historicoLoading } = useQuery({
     queryKey: ["historicoVendasCliente", clienteId],
@@ -145,7 +137,8 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
 
   const { data: cascosData } = useQuery({
     queryKey: ["cascos", "cliente", clienteId],
-    queryFn: () => CascosService.readCascosCliente({ clienteId }),
+    // nome correto no client gerado: cascosPorCliente
+    queryFn: () => CascosService.cascosPorCliente({ clienteId }),
     retry: false,
   })
 
@@ -158,7 +151,6 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
     }
   }
 
-  // Spinner enquanto carrega
   if (historicoLoading) {
     return (
       <div className="flex items-center gap-2 rounded-md border p-3 text-sm text-muted-foreground">
@@ -217,14 +209,10 @@ function HistoricoVendasCliente({ clienteId }: { clienteId: string }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Aviso de cascos em aberto do cliente
-// ---------------------------------------------------------------------------
-
 function AvisoCascosCliente({ clienteId }: { clienteId: string }) {
   const { data } = useQuery({
     queryKey: ["cascos", "cliente", clienteId],
-    queryFn: () => CascosService.readCascosCliente({ clienteId }),
+    queryFn: () => CascosService.cascosPorCliente({ clienteId }),
     retry: false,
   })
 
@@ -303,7 +291,6 @@ export function ClienteSection({
           </Button>
         </div>
 
-        {/* Avisos — fiado em aberto e casco emprestado */}
         <AvisoFiadoCliente clienteId={cliente.id} />
         <AvisoCascosCliente clienteId={cliente.id} />
 

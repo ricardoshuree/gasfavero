@@ -1,7 +1,7 @@
+// [mcp-local harness] feature: fix-build-errors | plano: 1097e958 | 2026-09-11 20:04:16
+// Troca readCascosEmAberto → listarCascosEmAberto (nome correto no client gerado)
 // [mcp-local harness] feature: livro_vendas_default_7dias | plano: dd100eb4 | 2026-09-10 20:00:11
-// Padrão tabela: últimos 7 dias em vez do mês inteiro — reduz carga na API
-// fix: venda mix somente leitura no VendaEditPanel — sem campos editáveis
-// perf: tabela padrão últimos 7 dias em vez do mês inteiro
+// fix: nomes de métodos do CascosService atualizados (listarCascosEmAberto)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ChevronLeft, ChevronRight, Package, Search, XCircle } from "lucide-react"
 import { useState } from "react"
@@ -123,7 +123,6 @@ function StatusBadge({ venda, temCascoAberto }: { venda: VendaPublic; temCascoAb
   )
 }
 
-// Padrão: últimos 7 dias — universo pequeno, cobre semana operacional
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -133,10 +132,6 @@ function setesDiasAtrasISO(): string {
   d.setDate(d.getDate() - 7)
   return d.toISOString().slice(0, 10)
 }
-
-// ---------------------------------------------------------------------------
-// Bloco de detalhe do mix de pagamentos
-// ---------------------------------------------------------------------------
 
 function MixPagamentosDetalhe({ venda }: { venda: VendaPublic }) {
   const pagamentos = venda.pagamentos ?? []
@@ -185,10 +180,6 @@ function MixPagamentosDetalhe({ venda }: { venda: VendaPublic }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Panel lateral de edição
-// ---------------------------------------------------------------------------
-
 function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClose: () => void; canEdit: boolean }) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -236,8 +227,6 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
 
   return (
     <div className="flex flex-col gap-5 p-1">
-
-      {/* Resumo */}
       <div className="rounded-lg border bg-muted/30 p-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Cliente</span>
@@ -393,10 +382,6 @@ function VendaEditPanel({ venda, onClose, canEdit }: { venda: VendaPublic; onClo
   )
 }
 
-// ---------------------------------------------------------------------------
-// Tabela principal
-// ---------------------------------------------------------------------------
-
 export function LivroVendasTable() {
   const [inicioInput, setInicioInput] = useState(setesDiasAtrasISO())
   const [fimInput, setFimInput] = useState(hojeISO())
@@ -435,7 +420,8 @@ export function LivroVendasTable() {
 
   const { data: cascosEmAberto } = useQuery({
     queryKey: ["cascos", "em-aberto"],
-    queryFn: () => CascosService.readCascosEmAberto(),
+    // nome correto no client gerado: listarCascosEmAberto
+    queryFn: () => CascosService.listarCascosEmAberto(),
     retry: false,
   })
 
