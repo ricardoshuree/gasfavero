@@ -1,8 +1,7 @@
-// [mcp-local harness] feature: painel-lateral-ux | plano: 1a17d113 | 2026-09-11 20:45:20
-// PlayerAvisos: h-28 → h-36 (+25px), letreiro converte \n em espaço
-// Painel lateral da tela Mapa — pensado para rodar numa TV no escritório.
-// fix: AvisosMapaService via fetch direto enquanto client é regenerado
-// ajuste: PlayerAvisos h-36 (+25px), texto base maior
+// [mcp-local harness] feature: letreiro-multiline | plano: 73842985 | 2026-09-11 20:58:38
+// Letreiro: white-space pre (mantém \n, bloco desliza junto). Demais: pre-wrap.
+// [mcp-local harness] feature: letreiro-multiline | plano: 73842985
+// Letreiro aceita múltiplas linhas — bloco desliza junto como ticker (white-space: pre)
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -34,10 +33,6 @@ function formatEnderecoCurto(demanda: DemandaVendaPublic): string {
   return `${demanda.endereco.rua_nome}, ${demanda.endereco.numero}`
 }
 
-// ---------------------------------------------------------------------------
-// AvisosMapaService local — fetch direto até o client ser regenerado
-// ---------------------------------------------------------------------------
-
 export type AvisoMapaPublic = {
   id: string
   texto: string
@@ -59,10 +54,6 @@ async function fetchAvisosAtivos(): Promise<{ data: AvisoMapaPublic[]; count: nu
   if (!res.ok) return { data: [], count: 0 }
   return res.json()
 }
-
-// ---------------------------------------------------------------------------
-// Animações
-// ---------------------------------------------------------------------------
 
 const TRANS_CSS: Record<string, string> = {
   fade: "fadeInPlayer 0.5s ease both",
@@ -97,10 +88,6 @@ function injetarKeyframes() {
   `
   document.head.appendChild(style)
 }
-
-// ---------------------------------------------------------------------------
-// Bloco 1 — PlayerAvisos (h-36 = ~144px, +25px vs h-28=112px)
-// ---------------------------------------------------------------------------
 
 function PlayerAvisos() {
   const { data } = useQuery({
@@ -198,11 +185,6 @@ function PlayerAvisos() {
       ? ANIM_CSS.letreiro
       : TRANS_CSS[display.transEntrada] || ANIM_CSS[display.animInterna] || ""
 
-  // Letreiro: quebras de linha viram espaço
-  const textoExibido = display.letreiro
-    ? display.texto.replace(/\n/g, " ")
-    : display.texto
-
   return (
     <div
       className="relative flex h-36 shrink-0 items-center justify-center overflow-hidden rounded-lg"
@@ -217,12 +199,13 @@ function PlayerAvisos() {
           color: "#f1f5f9",
           textShadow: "0 1px 3px rgba(0,0,0,0.4)",
           animation: msgAnim || undefined,
-          whiteSpace: display.letreiro ? "nowrap" : "pre-wrap",
+          // Letreiro: "pre" — mantém quebras de linha, bloco inteiro desliza como ticker
+          // Demais modos: "pre-wrap" — mantém quebras com wrap
+          whiteSpace: display.letreiro ? "pre" : "pre-wrap",
         }}
       >
-        {textoExibido}
+        {display.texto}
       </p>
-      {/* Barra de progresso */}
       <div
         className="absolute bottom-0 left-0 h-[3px]"
         style={{
@@ -234,10 +217,6 @@ function PlayerAvisos() {
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Bloco 2 — Ranking da Semana
-// ---------------------------------------------------------------------------
 
 function RankingSemana() {
   const { data } = useQuery({
@@ -259,43 +238,24 @@ function RankingSemana() {
       </div>
       <div className="grid grid-cols-3 gap-2 p-3">
         {data?.motoristas.map((m) => (
-          <div
-            key={m.motorista_id}
-            className="flex flex-col items-center gap-1 text-center"
-          >
-            <img
-              src="/images/motorista-pendente.png"
-              alt=""
-              className="h-10 w-10 object-contain"
-            />
-            <p className="w-full truncate text-xs text-slate-500">
-              {m.motorista_nome}
-            </p>
-            <p className="text-lg font-bold leading-none text-slate-900">
-              {m.quantidade}
-            </p>
+          <div key={m.motorista_id} className="flex flex-col items-center gap-1 text-center">
+            <img src="/images/motorista-pendente.png" alt="" className="h-10 w-10 object-contain" />
+            <p className="w-full truncate text-xs text-slate-500">{m.motorista_nome}</p>
+            <p className="text-lg font-bold leading-none text-slate-900">{m.quantidade}</p>
           </div>
         ))}
         {data && data.motoristas.length === 0 && (
-          <p className="col-span-3 text-center text-xs text-slate-400">
-            Nenhuma venda essa semana ainda
-          </p>
+          <p className="col-span-3 text-center text-xs text-slate-400">Nenhuma venda essa semana ainda</p>
         )}
       </div>
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Bloco 3 — Chamadas hoje
-// ---------------------------------------------------------------------------
-
 function ChamadaAtivaRow({ demanda }: { demanda: DemandaVendaPublic }) {
   const aguardandoAceite = demanda.status === "pendente"
   const statusText = aguardandoAceite
-    ? demanda.motorista_nome
-      ? `Aguardando ${demanda.motorista_nome} aceitar...`
-      : "Aberto -- aguardando aceite"
+    ? demanda.motorista_nome ? `Aguardando ${demanda.motorista_nome} aceitar...` : "Aberto -- aguardando aceite"
     : null
 
   return (
@@ -308,9 +268,7 @@ function ChamadaAtivaRow({ demanda }: { demanda: DemandaVendaPublic }) {
         ) : (
           <>
             <img src="/images/motorista-pendente.png" alt="" className="h-8 w-8 object-contain" />
-            <p className="w-full truncate text-center text-[10px] leading-tight text-slate-600">
-              {demanda.motorista_nome}
-            </p>
+            <p className="w-full truncate text-center text-[10px] leading-tight text-slate-600">{demanda.motorista_nome}</p>
           </>
         )}
       </div>
@@ -319,9 +277,7 @@ function ChamadaAtivaRow({ demanda }: { demanda: DemandaVendaPublic }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-slate-900">{demanda.cliente_nome}</p>
         <p className="truncate text-xs text-slate-500">{formatEnderecoCurto(demanda)}</p>
-        {statusText && (
-          <p className={`truncate text-xs font-medium ${AGUARDANDO_COLOR_CLASS}`}>{statusText}</p>
-        )}
+        {statusText && <p className={`truncate text-xs font-medium ${AGUARDANDO_COLOR_CLASS}`}>{statusText}</p>}
       </div>
     </div>
   )
@@ -334,9 +290,7 @@ function ChamadaConcluidaRow({ demanda }: { demanda: DemandaVendaPublic }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-slate-900">{demanda.cliente_nome}</p>
         <p className="truncate text-xs text-slate-500">{formatEnderecoCurto(demanda)}</p>
-        {demanda.finalizada_em && (
-          <p className="text-xs text-red-600">Atendida às {formatHoraBR(demanda.finalizada_em)} h</p>
-        )}
+        {demanda.finalizada_em && <p className="text-xs text-red-600">Atendida às {formatHoraBR(demanda.finalizada_em)} h</p>}
       </div>
     </div>
   )
@@ -380,10 +334,6 @@ function ChamadasHoje() {
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
 
 export function PainelLateral() {
   return (

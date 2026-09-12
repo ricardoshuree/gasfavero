@@ -1,7 +1,7 @@
-// [mcp-local harness] feature: avisos-mapa-ux | plano: 625710e0 | 2026-09-11 20:50:46
-// v3: pre-wrap correto por modo, letreiro mostra aviso amarelo, textarea Enter funciona
+// [mcp-local harness] feature: letreiro-multiline | plano: 73842985 | 2026-09-11 20:59:55
+// v4: letreiro white-space pre (multi-linha), remove aviso amarelo, Enter funciona em todos os modos
 // Página /avisos-mapa — configuração dos slides de avisos exibidos na TV
-// v3: pre-wrap no preview para modos não-letreiro, letreiro converte \n em espaço
+// v4: letreiro multi-linha (white-space: pre), Enter quebra linha em todos os modos
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { Eye, Plus, Save, Trash2 } from "lucide-react"
@@ -113,10 +113,9 @@ function toLocal(a: AvisoMapaPublic): SlideLocal {
 
 // ---------------------------------------------------------------------------
 // Preview — fiel ao que aparece na TV
-// Letreiro: \n → espaço (ticker horizontal não suporta quebra)
-// Outros modos: pre-wrap (Enter quebra linha)
+// Letreiro: white-space "pre" — quebras mantidas, bloco desliza junto
+// Demais:   white-space "pre-wrap" — quebras com wrap
 // ---------------------------------------------------------------------------
-
 function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel: string }) {
   useEffect(() => { injetarKeyframes() }, [])
 
@@ -130,14 +129,7 @@ function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel
 
   const isLetreiro = slide.animacao_interna === "letreiro"
   const isPulso    = slide.animacao_interna === "pulso_fundo"
-
-  // Letreiro: quebras viram espaço (ticker é horizontal)
-  // Demais modos: mantém quebras de linha (pre-wrap)
-  const textoExibido = isLetreiro
-    ? slide.texto.replace(/\n/g, " ")
-    : slide.texto
-
-  const msgAnim = ANIM_CSS[slide.animacao_interna] || ""
+  const msgAnim    = ANIM_CSS[slide.animacao_interna] || ""
 
   return (
     <div
@@ -155,11 +147,10 @@ function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel
           color: "#f1f5f9",
           textShadow: "0 1px 3px rgba(0,0,0,0.4)",
           animation: msgAnim || undefined,
-          // Letreiro: nowrap para o ticker funcionar. Demais: pre-wrap para Enter quebrar linha.
-          whiteSpace: isLetreiro ? "nowrap" : "pre-wrap",
+          whiteSpace: isLetreiro ? "pre" : "pre-wrap",
         }}
       >
-        {textoExibido}
+        {slide.texto}
       </p>
       <div className="absolute bottom-2 right-3 text-[11px] text-white/50">
         {idxLabel} · {slide.duracao_segundos}s
@@ -194,12 +185,11 @@ function SlideCard({
         </div>
       </div>
 
-      {/* Textarea controlado — Enter insere \n normalmente */}
       <textarea
         className="mb-4 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-teal-500 focus:outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
         rows={3}
         value={slide.texto}
-        placeholder="Texto do aviso... (Enter quebra linha nos modos não-letreiro)"
+        placeholder="Texto do aviso... (Enter quebra linha)"
         onChange={(e) => onChange({ texto: e.target.value })}
       />
 
@@ -209,9 +199,6 @@ function SlideCard({
           <select className={selectCls} value={slide.animacao_interna} onChange={(e) => onChange({ animacao_interna: e.target.value })}>
             {ANIMS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
           </select>
-          {slide.animacao_interna === "letreiro" && (
-            <span className="text-[10px] text-amber-500">Enter vira espaço no letreiro</span>
-          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
