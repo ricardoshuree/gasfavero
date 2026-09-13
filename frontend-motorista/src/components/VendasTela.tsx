@@ -1,20 +1,22 @@
-// [mcp-local harness] feature: fix-endereco-id-venda | plano: 92007281 | 2026-09-08 11:19:45
-// VendasTela: passa enderecoId explicitamente para ResumoConfirmacao
-// VendasTela: orquestrador do fluxo 4 etapas com indicador de progresso estilo iFood
-// enderecoId passado explicitamente para ResumoConfirmacao (fix bug endereco null)
+// [mcp-local harness] feature: casco-venda-mobile | plano: cef0cb24 | 2026-09-13 09:20:51
+// VendasTela: adiciona state cascos[], passa para EtapaProdutos e ResumoConfirmacao. totalSacola inclui casco comprado.
+// VendasTela: orquestrador do fluxo 4 etapas
+// Ordem: cliente → produtos → pagamento → resumo
+// chamadoInicial: quando vem de um chamado concluído, pré-preenche EtapaCliente
 import { useState, type CSSProperties } from "react"
 import type { UserMe } from "../lib/auth"
-import type { Cliente, DadosPagamento, ItemSacola } from "../lib/vendas"
+import type { DemandaVendaPublic } from "../lib/demandas"
+import type { CascoEmprestimo, Cliente, DadosPagamento, ItemSacola } from "../lib/vendas"
 import EtapaCliente from "./vendas/EtapaCliente"
 import EtapaPagamento from "./vendas/EtapaPagamento"
 import EtapaProdutos from "./vendas/EtapaProdutos"
 import ResumoConfirmacao from "./vendas/ResumoConfirmacao"
 
-type Etapa = "produtos" | "cliente" | "pagamento" | "resumo" | "sucesso"
+type Etapa = "cliente" | "produtos" | "pagamento" | "resumo" | "sucesso"
 
-const ETAPAS: Etapa[] = ["produtos", "cliente", "pagamento", "resumo"]
+const ETAPAS: Etapa[] = ["cliente", "produtos", "pagamento", "resumo"]
 const ETAPA_LABEL: Record<Etapa, string> = {
-  produtos: "Produtos", cliente: "Cliente",
+  cliente: "Cliente", produtos: "Produtos",
   pagamento: "Pagamento", resumo: "Resumo", sucesso: "",
 }
 
@@ -23,6 +25,8 @@ const VERMELHO = "#EA1D2C"
 interface Props {
   token: string
   usuario: UserMe
+  chamadoInicial?: DemandaVendaPublic | null
+  aoFinalizarVenda?: () => void
 }
 
 function StepsBar({ etapaAtual }: { etapaAtual: Etapa }) {
@@ -56,17 +60,28 @@ function StepsBar({ etapaAtual }: { etapaAtual: Etapa }) {
   )
 }
 
-export default function VendasTela({ token, usuario }: Props) {
-  const [etapa, setEtapa] = useState<Etapa>("produtos")
+export default function VendasTela({ token, usuario, chamadoInicial, aoFinalizarVenda }: Props) {
+  const [etapa, setEtapa] = useState<Etapa>("cliente")
   const [sacola, setSacola] = useState<ItemSacola[]>([])
+  const [cascos, setCascos] = useState<CascoEmprestimo[]>([])
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [enderecoId, setEnderecoId] = useState<string | null>(null)
   const [pagamento, setPagamento] = useState<DadosPagamento | null>(null)
 
-  const totalSacola = sacola.reduce((acc, i) => acc + Number(i.precoUnitario) * i.quantidade, 0)
+  const totalSacola = sacola.reduce((acc, i) => {
+    const gas = Number(i.precoUnitario) * i.quantidade
+    const casco = i.comCasco && i.precoCascoAtual ? Number(i.precoCascoAtual) * i.quantidade : 0
+    return acc + gas + casco
+  }, 0)
 
   function resetar() {
-    setSacola([]); setCliente(null); setEnderecoId(null); setPagamento(null); setEtapa("produtos")
+    setSacola([])
+    setCascos([])
+    setCliente(null)
+    setEnderecoId(null)
+    setPagamento(null)
+    setEtapa("cliente")
+    aoFinalizarVenda?.()
   }
 
   if (etapa === "sucesso") {
@@ -84,31 +99,50 @@ export default function VendasTela({ token, usuario }: Props) {
     <div style={s.pagina}>
       <StepsBar etapaAtual={etapa} />
 
-      {etapa === "produtos" && (
-        <EtapaProdutos token={token} sacola={sacola} onSacolaChange={setSacola} onProximo={() => setEtapa("cliente")} />
-      )}
       {etapa === "cliente" && (
         <EtapaCliente
-          token={token} clienteSelecionado={cliente} enderecoId={enderecoId}
+          token={token}
+          clienteSelecionado={cliente}
+          enderecoId={enderecoId}
+          clienteIdInicial={chamadoInicial?.cliente_id ?? null}
+          enderecoIdInicial={chamadoInicial?.endereco?.id ?? null}
           onClienteChange={c => { setCliente(c); if (c?.endereco?.id) setEnderecoId(c.endereco.id) }}
           onEnderecoChange={setEnderecoId}
-          onProximo={() => setEtapa("pagamento")} onVoltar={() => setEtapa("produtos")}
+          onProximo={() => setEtapa("produtos")}
+          onVoltar={null}
+        />
+      )}
+      {etapa === "produtos" && (
+        <EtapaProdutos
+          token={token}
+          sacola={sacola}
+          cascos={cascos}
+          onSacolaChange={setSacola}
+          onCascosChange={setCascos}
+          onProximo={() => setEtapa("pagamento")}
+          onVoltar={() => setEtapa("cliente")}
         />
       )}
       {etapa === "pagamento" && (
         <EtapaPagamento
-          pagamento={pagamento} totalSacola={totalSacola}
+          pagamento={pagamento}
+          totalSacola={totalSacola}
           onPagamentoChange={setPagamento}
-          onVoltar={() => setEtapa("cliente")} onProximo={() => setEtapa("resumo")}
+          onVoltar={() => setEtapa("produtos")}
+          onProximo={() => setEtapa("resumo")}
         />
       )}
       {etapa === "resumo" && cliente && pagamento && (
         <ResumoConfirmacao
-          token={token} motoristaId={usuario.id}
+          token={token}
+          motoristaId={usuario.id}
           cliente={cliente}
-          enderecoId={enderecoId}   // ← passa o enderecoId correto (pode ser trocado)
-          sacola={sacola} pagamento={pagamento}
-          onVoltar={() => setEtapa("pagamento")} onSucesso={() => setEtapa("sucesso")}
+          enderecoId={enderecoId}
+          sacola={sacola}
+          cascos={cascos}
+          pagamento={pagamento}
+          onVoltar={() => setEtapa("pagamento")}
+          onSucesso={() => setEtapa("sucesso")}
         />
       )}
     </div>

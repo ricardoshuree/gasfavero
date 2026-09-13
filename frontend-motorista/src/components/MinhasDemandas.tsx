@@ -1,18 +1,13 @@
-// [mcp-local harness] feature: alarme-background-fix | plano: a4e5a53c | 2026-09-08 16:21:54
-// Substitui idsVistosRef por timestamp persistido no Preferences para detectar chamados novos após background
+// [mcp-local harness] feature: venda-cliente-primeiro | plano: 3ae63d5b | 2026-09-13 08:37:35
+// aoConcluirChamado recebe DemandaVendaPublic para passar cliente_id e endereco_id para VendasTela
 // MinhasDemandas — tela de chamados do motorista.
 // ALARME: usa timestamp persistido no Preferences (SharedPreferences nativo via
 // @capacitor/preferences) em vez de Set em memória. Isso garante que ao reabrir
 // o app após ficar em background (WebView congelada), chamados pendentes criados
 // enquanto o app estava fechado ainda disparam o alarme corretamente.
 //
-// Lógica de detecção de chamado novo:
-//   - Ao carregar, lê "ultimo_chamado_visto_em" do Preferences
-//   - Qualquer chamado pendente (aberto ou convite direto) criado APÓS esse
-//     timestamp é considerado novo → dispara alarme
-//   - Ao registrar os chamados como "vistos", salva o created_at mais recente
-//     deles no Preferences
-//   - Isso funciona mesmo com o app fechado/background entre polls
+// Ao confirmar "Cheguei", passa o DemandaVendaPublic para aoConcluirChamado
+// para que App.tsx pré-preencha a EtapaCliente com os dados do chamado.
 import { Preferences } from "@capacitor/preferences"
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
 import { iniciarAlarme, pararAlarme, tocarSomCancelamento } from "../lib/alarme"
@@ -63,7 +58,6 @@ function abrirNoGoogleMaps(endereco: EnderecoPublic) {
   window.open(url, "_system")
 }
 
-/** Chamados que precisam de ação: abertos ou convite direto pendente */
 function chamadosPrecisandoAcao(agora: DemandaVendaPublic[], meuId: string): DemandaVendaPublic[] {
   return agora.filter(
     (d) => d.motorista_id === null || (d.motorista_id === meuId && d.status === "pendente")
@@ -87,7 +81,8 @@ function MinhasDemandas({
 }: {
   token: string
   meuId: string
-  aoConcluirChamado?: () => void
+  // Recebe o chamado concluído para pré-preencher a tela de vendas
+  aoConcluirChamado?: (chamado: DemandaVendaPublic) => void
 }) {
   const [subAba, setSubAba] = useState<SubAba>("agora")
   const [agora, setAgora] = useState<DemandaVendaPublic[]>([])
@@ -100,15 +95,13 @@ function MinhasDemandas({
   const [alertaChamado, setAlertaChamado] = useState<DemandaVendaPublic | null>(null)
   const [canceladosRecentes, setCanceladosRecentes] = useState<Map<string, DemandaVendaPublic>>(new Map())
 
-  // Timestamp da última vez que registramos chamados como "vistos"
-  // Persistido no Preferences — sobrevive ao app ir para background
   const ultimoVistoRef = useRef<number | null>(null)
   const meusAtivosAnterioresRef = useRef<Map<string, DemandaVendaPublic> | null>(null)
   const canceladosRecentesIdsRef = useRef<Set<string>>(new Set())
   const alarmeTocandoRef = useRef(false)
-  // Controla se é a primeira carga (para não tocar alarme de chamados
-  // já existentes antes do app abrir pela primeira vez nesta sessão)
   const primeiraVezRef = useRef(true)
+  // Guarda o chamado que será passado para vendas após a pausa de confirmação
+  const chamadoConcluindoRef = useRef<DemandaVendaPublic | null>(null)
 
   const pararAlarmeSonoro = useCallback(() => {
     if (alarmeTocandoRef.current) {
@@ -142,7 +135,6 @@ function MinhasDemandas({
     [removerCanceladoRecente],
   )
 
-  /** Salva o timestamp mais recente dos chamados pendentes como "visto" */
   async function marcarComoVistos(chamados: DemandaVendaPublic[]) {
     if (chamados.length === 0) return
     const maisRecente = Math.max(...chamados.map(d => new Date(d.created_at).getTime()))
@@ -151,7 +143,6 @@ function MinhasDemandas({
   }
 
   const carregar = useCallback(async () => {
-    // Na primeira carga, lê o timestamp salvo do Preferences
     if (primeiraVezRef.current && ultimoVistoRef.current === null) {
       const { value } = await Preferences.get({ key: CHAVE_ULTIMO_VISTO })
       ultimoVistoRef.current = value ? Number(value) : 0
@@ -164,7 +155,6 @@ function MinhasDemandas({
       setAtendidas(separadas.atendidas)
       setErro(null)
 
-      // Detecção de CANCELAMENTO
       if (meusAtivosAnterioresRef.current !== null) {
         for (const [id] of meusAtivosAnterioresRef.current) {
           const atual = todas.find((d) => d.id === id)
@@ -175,8 +165,6 @@ function MinhasDemandas({
       }
       meusAtivosAnterioresRef.current = mapaMeusAtivos(todas, meuId)
 
-      // Detecção de chamado NOVO via timestamp persistido
-      // Um chamado é "novo" se foi criado APÓS o último timestamp salvo
       const ultimoVisto = ultimoVistoRef.current ?? 0
       const precisandoAcao = chamadosPrecisandoAcao(separadas.agora, meuId)
 
@@ -185,16 +173,12 @@ function MinhasDemandas({
       )
 
       if (novos.length > 0 && !alarmeTocandoRef.current) {
-        // Ordena por mais recente para mostrar o chamado mais novo no alerta
         novos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         setAlertaChamado(novos[0])
         iniciarAlarme()
         alarmeTocandoRef.current = true
       }
 
-      // Marca os chamados pendentes atuais como vistos (atualiza timestamp)
-      // Só faz isso se não estiver com alarme tocando — enquanto o alerta
-      // está na tela, não avança o timestamp (o motorista ainda não "viu")
       if (!alarmeTocandoRef.current && precisandoAcao.length > 0) {
         await marcarComoVistos(precisandoAcao)
       }
@@ -234,6 +218,10 @@ function MinhasDemandas({
   }
 
   async function handleConcluir(id: string) {
+    // Guarda o chamado antes de concluir para passar para vendas
+    const chamadoParaVendas = agora.find((d) => d.id === id) ?? null
+    chamadoConcluindoRef.current = chamadoParaVendas
+
     setProcessando(id)
     try {
       await concluirDemanda(token, id)
@@ -242,11 +230,19 @@ function MinhasDemandas({
       carregar()
       window.setTimeout(() => {
         setConfirmadoId(null)
-        aoConcluirChamado?.()
+        // Passa o chamado concluído para App.tsx pré-preencher a tela de vendas
+        if (chamadoConcluindoRef.current) {
+          aoConcluirChamado?.(chamadoConcluindoRef.current)
+        } else {
+          // Fallback: sem dados do chamado, abre vendas normalmente
+          aoConcluirChamado?.({ id: "", cliente_id: "", cliente_nome: "", endereco: { id: "", numero: "", complemento: null, rua_nome: "", bairro_nome: "", cidade_nome: "", latitude: null, longitude: null }, motorista_id: meuId, motorista_nome: null, observacao: null, status: "concluida", criado_por_id: "", created_at: "", respondida_em: null, finalizada_em: null, itens: [] } as DemandaVendaPublic)
+        }
+        chamadoConcluindoRef.current = null
       }, PAUSA_CONFIRMACAO_MS)
     } catch {
       setErro("Não foi possível concluir o chamado. Tente de novo.")
       setProcessando(null)
+      chamadoConcluindoRef.current = null
     }
   }
 
@@ -255,7 +251,6 @@ function MinhasDemandas({
     const id = alertaChamado.id
     pararAlarmeSonoro()
     setAlertaChamado(null)
-    // Marca como visto ao aceitar
     await Preferences.set({ key: CHAVE_ULTIMO_VISTO, value: String(Date.now()) })
     ultimoVistoRef.current = Date.now()
     await handleAceitar(id)
@@ -264,7 +259,6 @@ function MinhasDemandas({
   async function handleDispensarAlerta() {
     pararAlarmeSonoro()
     setAlertaChamado(null)
-    // Marca como visto ao dispensar também
     await Preferences.set({ key: CHAVE_ULTIMO_VISTO, value: String(Date.now()) })
     ultimoVistoRef.current = Date.now()
   }

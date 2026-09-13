@@ -1,9 +1,9 @@
-// [mcp-local harness] feature: fix-cores-vermelhas-cliente | plano: c604a622 | 2026-09-08 09:40:27
-// resultado busca borda vermelha; btnTrocarEnd e btnTrocar vermelhos iFood
-// [mcp-local harness] feature: fix-cores-vermelhas-cliente | plano: c604a622
-// resultado busca borda vermelha; btnTrocarEnd e btnTrocar vermelhos
-// [mcp-local harness] feature: fix-visual-contraste-motorista | plano: 434ba222
-// Etapa 2 — botão Cadastrar novo cliente em vermelho iFood, Voltar texto escuro
+// [mcp-local harness] feature: venda-cliente-primeiro | plano: 3ae63d5b | 2026-09-13 08:40:57
+// EtapaCliente: recebe clienteIdInicial e enderecoIdInicial, faz GET /clientes/{id} para pré-carregar cliente do chamado. onVoltar aceita null (primeira etapa sem voltar).
+// EtapaCliente — busca/cadastro de cliente + pré-carregamento via chamado
+// clienteIdInicial: quando vem de chamado concluído, carrega o cliente automaticamente via GET /clientes/{id}
+// enderecoIdInicial: sugere o endereço do chamado como endereço inicial (pode ser trocado)
+// onVoltar: null quando é a primeira etapa (sem botão voltar)
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
 import {
@@ -16,10 +16,13 @@ interface Props {
   token: string
   clienteSelecionado: Cliente | null
   enderecoId: string | null
+  // Para pré-preenchimento via chamado (null = venda avulsa)
+  clienteIdInicial?: string | null
+  enderecoIdInicial?: string | null
   onClienteChange: (c: Cliente | null) => void
   onEnderecoChange: (id: string | null) => void
   onProximo: () => void
-  onVoltar: () => void
+  onVoltar: (() => void) | null  // null = primeira etapa, sem botão voltar
 }
 
 type ModoCliente = "busca" | "novo"
@@ -43,6 +46,7 @@ type VendaHistorico = {
 }
 
 type CascoCliente = { count: number; total_cascos_abertos: number }
+type FiadoCliente = { tem_fiado_aberto: boolean; total_em_aberto: number }
 
 const DIAS_ATRASO = 30
 const VERMELHO = "#EA1D2C"
@@ -81,6 +85,29 @@ function AvisoCasco({ clienteId, token }: { clienteId: string; token: string }) 
   )
 }
 
+function AvisoFiado({ clienteId, token }: { clienteId: string; token: string }) {
+  const [info, setInfo] = useState<FiadoCliente | null>(null)
+  useEffect(() => {
+    // Busca resumo de fiado via endpoint de clientes com fiado
+    request<{ data: Array<{ id: string; saldo_devedor: number }> }>(
+      `/api/v1/vendas/clientes-com-fiado`, { token }
+    ).then(r => {
+      const encontrado = r.data.find(c => c.id === clienteId)
+      if (encontrado && encontrado.saldo_devedor > 0) {
+        setInfo({ tem_fiado_aberto: true, total_em_aberto: encontrado.saldo_devedor })
+      } else {
+        setInfo({ tem_fiado_aberto: false, total_em_aberto: 0 })
+      }
+    }).catch(() => {})
+  }, [clienteId, token])
+  if (!info?.tem_fiado_aberto) return null
+  return (
+    <div style={sh.avisoFiado}>
+      🧾 ⚠️ Venda em aberto: <strong>{formatMoney(info.total_em_aberto)}</strong> de fiado pendente
+    </div>
+  )
+}
+
 function HistoricoVendas({ clienteId, token }: { clienteId: string; token: string }) {
   const [vendas, setVendas] = useState<VendaHistorico[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -92,7 +119,7 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
   }, [clienteId, token])
   return (
     <div style={sh.box}>
-      <p style={sh.titulo}>Histórico de vendas (últimas 3)</p>
+      <p style={sh.titulo}>Histórico (últimas 3 compras)</p>
       {carregando && <div style={sh.spinnerBox}><div style={sh.spinner} /></div>}
       {!carregando && vendas.length === 0 && <p style={sh.vazio}>Nenhuma venda anterior.</p>}
       {!carregando && vendas.map(v => {
@@ -121,19 +148,20 @@ function HistoricoVendas({ clienteId, token }: { clienteId: string; token: strin
 const spinnerStyle = `@keyframes _giro { to { transform: rotate(360deg); } }`
 
 const sh: Record<string, CSSProperties> = {
-  box:       { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
-  titulo:    { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
-  spinnerBox:{ display: "flex", justifyContent: "center", padding: "10px 0" },
-  spinner:   { width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${C.borda}`, borderTopColor: "#606C38", animation: "_giro 0.7s linear infinite" },
-  vazio:     { fontSize: "12px", color: C.textoSecundario, textAlign: "center" as const, margin: "6px 0" },
-  card:      { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 5px" },
-  linha1:    { display: "flex", alignItems: "center", gap: "5px", marginBottom: "3px" },
-  data:      { fontSize: "11px", color: C.textoSecundario, flexShrink: 0, minWidth: "34px" },
-  valor:     { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
-  badge:     { fontSize: "10px", fontWeight: 600, padding: "1px 5px", borderRadius: "5px", marginLeft: "auto", whiteSpace: "nowrap" as const },
-  linha2:    { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
-  linha3:    { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px", marginTop: "1px" },
-  avisoCasco:{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#92400e", marginTop: "8px", lineHeight: "1.4" },
+  box:        { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", marginTop: "10px" },
+  titulo:     { fontSize: "11px", fontWeight: 700, color: C.textoSecundario, textTransform: "uppercase" as const, letterSpacing: "0.5px", margin: "0 0 6px" },
+  spinnerBox: { display: "flex", justifyContent: "center", padding: "10px 0" },
+  spinner:    { width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${C.borda}`, borderTopColor: "#606C38", animation: "_giro 0.7s linear infinite" },
+  vazio:      { fontSize: "12px", color: C.textoSecundario, textAlign: "center" as const, margin: "6px 0" },
+  card:       { borderTop: `0.5px solid ${C.borda}`, padding: "7px 0 5px" },
+  linha1:     { display: "flex", alignItems: "center", gap: "5px", marginBottom: "3px" },
+  data:       { fontSize: "11px", color: C.textoSecundario, flexShrink: 0, minWidth: "34px" },
+  valor:      { fontSize: "13px", fontWeight: 700, color: C.texto, flexShrink: 0 },
+  badge:      { fontSize: "10px", fontWeight: 600, padding: "1px 5px", borderRadius: "5px", marginLeft: "auto", whiteSpace: "nowrap" as const },
+  linha2:     { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px" },
+  linha3:     { fontSize: "11px", color: C.textoSecundario, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, paddingLeft: "2px", marginTop: "1px" },
+  avisoCasco: { background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#92400e", marginTop: "8px", lineHeight: "1.4" },
+  avisoFiado: { background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", color: "#991b1b", marginTop: "6px", lineHeight: "1.4" },
 }
 
 function TrocarEndereco({
@@ -204,12 +232,15 @@ const se: Record<string, CSSProperties> = {
 }
 
 export default function EtapaCliente({
-  token, clienteSelecionado, onClienteChange, onEnderecoChange, onProximo, onVoltar,
+  token, clienteSelecionado, enderecoId,
+  clienteIdInicial, enderecoIdInicial,
+  onClienteChange, onEnderecoChange, onProximo, onVoltar,
 }: Props) {
   const [modo, setModo] = useState<ModoCliente>("busca")
   const [busca, setBusca] = useState("")
   const [resultados, setResultados] = useState<Cliente[]>([])
   const [buscando, setBuscando] = useState(false)
+  const [carregandoInicial, setCarregandoInicial] = useState(false)
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [enderecoStr, setEnderecoStr] = useState("")
   const [mostrarTrocarEnd, setMostrarTrocarEnd] = useState(false)
@@ -223,11 +254,51 @@ export default function EtapaCliente({
   const [salvando, setSalvando] = useState(false)
   const [erroCadastro, setErroCadastro] = useState("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Garante que o pré-carregamento só roda uma vez por clienteIdInicial
+  const clienteInicialCarregadoRef = useRef<string | null>(null)
 
   useEffect(() => { buscarBairros(token).then(setBairros).catch(() => {}) }, [token])
 
+  // Pré-carrega o cliente do chamado automaticamente (só na primeira vez)
+  useEffect(() => {
+    if (!clienteIdInicial) return
+    if (clienteInicialCarregadoRef.current === clienteIdInicial) return
+    if (clienteSelecionado?.id === clienteIdInicial) return
+
+    clienteInicialCarregadoRef.current = clienteIdInicial
+    setCarregandoInicial(true)
+
+    request<Cliente>(`/api/v1/clientes/${clienteIdInicial}`, { token })
+      .then(c => {
+        onClienteChange(c)
+        // Se temos um enderecoIdInicial do chamado, usa ele primeiro
+        if (enderecoIdInicial) {
+          onEnderecoChange(enderecoIdInicial)
+          // Tenta montar a string de exibição do endereço do cliente
+          if (c.endereco) {
+            setEnderecoStr(`${c.endereco.rua_nome}, ${c.endereco.numero} — ${c.endereco.bairro_nome}`)
+          }
+        } else if (c.endereco) {
+          onEnderecoChange(c.endereco.id)
+          setEnderecoStr(`${c.endereco.rua_nome}, ${c.endereco.numero} — ${c.endereco.bairro_nome}`)
+        }
+      })
+      .catch(() => {
+        // Falha silenciosa — motorista busca manualmente
+      })
+      .finally(() => setCarregandoInicial(false))
+  }, [clienteIdInicial])
+
+  // Quando cliente muda (por busca), carrega o último endereço usado
   useEffect(() => {
     if (!clienteSelecionado) { setEnderecoStr(""); return }
+    // Se já temos um enderecoId definido (ex: do chamado), apenas monta a string de exibição
+    if (enderecoId) {
+      if (clienteSelecionado.endereco) {
+        setEnderecoStr(`${clienteSelecionado.endereco.rua_nome}, ${clienteSelecionado.endereco.numero} — ${clienteSelecionado.endereco.bairro_nome}`)
+      }
+      return
+    }
     request<{ rua_nome: string; numero: string; bairro_nome: string; id: string } | null>(
       `/api/v1/vendas/cliente/${clienteSelecionado.id}/ultimo-endereco`, { token }
     ).then(end => {
@@ -274,10 +345,28 @@ export default function EtapaCliente({
     finally { setSalvando(false) }
   }
 
-  function selecionarCliente(c: Cliente) { onClienteChange(c); setBusca(""); setResultados([]) }
+  function selecionarCliente(c: Cliente) {
+    onClienteChange(c)
+    // Limpa o enderecoIdInicial ao trocar o cliente manualmente
+    onEnderecoChange(null)
+    setBusca(""); setResultados([])
+  }
+
   function formatarEndereco(c: Cliente) {
     if (!c.endereco) return "Sem endereço"
     return `${c.endereco.rua_nome}, ${c.endereco.numero} — ${c.endereco.bairro_nome}`
+  }
+
+  if (carregandoInicial) {
+    return (
+      <div style={{ ...s.pagina, display: "flex", alignItems: "center", justifyContent: "center", minHeight: "200px" }}>
+        <style>{spinnerStyle}</style>
+        <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: "12px" }}>
+          <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: "3px solid #E5E7EB", borderTopColor: "#606C38", animation: "_giro 0.7s linear infinite" }} />
+          <p style={{ fontSize: "14px", color: C.textoSecundario }}>Carregando dados do cliente...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -290,6 +379,7 @@ export default function EtapaCliente({
               <div style={s.clienteNome}>{clienteSelecionado.nome}</div>
               <div style={s.clienteSub}>CPF {clienteSelecionado.cpf}</div>
               <AvisoCasco clienteId={clienteSelecionado.id} token={token} />
+              <AvisoFiado clienteId={clienteSelecionado.id} token={token} />
               <div style={s.enderecoRow}>
                 <span style={s.enderecoTxt}>📍 {enderecoStr || "Sem endereço"}</span>
                 <button style={s.btnTrocarEnd} onClick={() => setMostrarTrocarEnd(p => !p)}>
@@ -304,7 +394,12 @@ export default function EtapaCliente({
                 />
               )}
               <HistoricoVendas clienteId={clienteSelecionado.id} token={token} />
-              <button style={s.btnTrocar} onClick={() => { onClienteChange(null); onEnderecoChange(null); setEnderecoStr("") }}>
+              <button style={s.btnTrocar} onClick={() => {
+                onClienteChange(null)
+                onEnderecoChange(null)
+                setEnderecoStr("")
+                clienteInicialCarregadoRef.current = null  // permite pré-carregar de novo se mudar de chamado
+              }}>
                 Trocar cliente
               </button>
             </div>
@@ -334,7 +429,10 @@ export default function EtapaCliente({
           <div style={s.separator} />
           <button style={s.btnNovo} onClick={() => setModo("novo")}>+ Cadastrar novo cliente</button>
           <div style={s.rodape}>
-            <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
+            {onVoltar
+              ? <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
+              : <div style={{ flex: 1 }} />
+            }
             <button
               style={{ ...s.btnProximo, opacity: clienteSelecionado ? 1 : 0.4 }}
               disabled={!clienteSelecionado} onClick={onProximo}
@@ -389,19 +487,15 @@ const s: Record<string, CSSProperties> = {
   searchIcon:  { fontSize: "16px" },
   searchInput: { border: "none", background: "transparent", fontSize: "15px", color: C.texto, flex: 1, outline: "none" },
   clearBtn:    { background: "none", border: "none", fontSize: "14px", color: C.textoSecundario, cursor: "pointer", padding: 0 },
-  // Resultado da busca — borda vermelha iFood
   resultado:   { background: C.fundoCard, border: `1.5px solid ${VERMELHO}`, borderRadius: "10px", padding: "12px", marginBottom: "6px", cursor: "pointer" },
   resNome:     { fontSize: "14px", fontWeight: 600, color: C.texto },
   resSub:      { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
-  // Card cliente selecionado — mantém verde (confirmação de seleção)
   clienteCard: { background: "#f0f4eb", border: "2px solid #606C38", borderRadius: "12px", padding: "12px 14px", marginBottom: "12px" },
   clienteNome: { fontSize: "15px", fontWeight: 700, color: C.texto },
   clienteSub:  { fontSize: "12px", color: C.textoSecundario, marginTop: "2px" },
   enderecoRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px" },
   enderecoTxt: { fontSize: "12px", color: C.textoSecundario, flex: 1 },
-  // Botão Trocar (endereço) — vermelho
   btnTrocarEnd:{ background: "transparent", border: `1px solid ${VERMELHO}`, color: VERMELHO, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", cursor: "pointer", flexShrink: 0 },
-  // Botão Trocar cliente — vermelho
   btnTrocar:   { marginTop: "10px", background: "transparent", border: `1.5px solid ${VERMELHO}`, color: VERMELHO, borderRadius: "8px", padding: "6px 12px", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "block", width: "100%", textAlign: "center" as const },
   separator:   { borderTop: `1px solid ${C.borda}`, margin: "12px 0" },
   btnNovo:     { width: "100%", background: "transparent", border: `2px solid ${VERMELHO}`, borderRadius: "12px", padding: "12px", fontSize: "15px", fontWeight: 600, color: VERMELHO, cursor: "pointer", textAlign: "center" as const },

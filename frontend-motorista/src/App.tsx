@@ -1,8 +1,9 @@
-// [mcp-local harness] feature: fix-cosmetico-livro-vendas | plano: d1f3d354 | 2026-09-08 12:19:22
-// App.tsx: botão voltar estilo iFood, espaço reduzido no cabeçalho, financeiro volta ao hub ao clicar na aba ativa
+// [mcp-local harness] feature: venda-cliente-primeiro | plano: 3ae63d5b | 2026-09-13 08:38:19
+// App.tsx: aoConcluirChamado recebe DemandaVendaPublic, guarda clienteIdDoChamado + enderecoIdDoChamado, passa para VendasTela
 // App.tsx — navegação principal
 // Botão voltar estilo iFood (bolinha cinza com < dentro)
 // Clicar em Financeiro quando já está numa sub-tela volta ao hub
+// aoConcluirChamado: recebe o DemandaVendaPublic para pré-preencher a tela de vendas com o cliente do chamado
 import { Preferences } from "@capacitor/preferences"
 import { useEffect, useState } from "react"
 import BottomNav, { ALTURA_BOTTOMNAV_PX, type AbaId } from "./components/BottomNav"
@@ -19,6 +20,7 @@ import TopBar, { ALTURA_TOPBAR_PX } from "./components/TopBar"
 import VendasTela from "./components/VendasTela"
 import { desbloquearAudio } from "./lib/alarme"
 import { fetchCurrentUser, getToken, logout, type UserMe } from "./lib/auth"
+import type { DemandaVendaPublic } from "./lib/demandas"
 import { CORES_APP, CORES_LOGIN } from "./theme"
 
 type Estado =
@@ -45,6 +47,9 @@ function App() {
   const [estado, setEstado] = useState<Estado>({ fase: "verificando" })
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("demandas")
   const [subTelaFinanceiro, setSubTelaFinanceiro] = useState<SubTelaFinanceiro | null>(null)
+  // Dados do chamado concluído para pré-preencher a tela de vendas
+  // null = venda iniciada pelo menu (sem pré-preenchimento)
+  const [chamadoParaVendas, setChamadoParaVendas] = useState<DemandaVendaPublic | null>(null)
 
   async function carregarSessao() {
     const token = await getToken()
@@ -73,9 +78,11 @@ function App() {
 
   function handleMudarAba(aba: AbaId) {
     if (aba === "financeiro") {
-      // Se já está no financeiro: volta ao hub (reseta sub-tela)
-      // Se estava em outra aba: abre financeiro no hub
       setSubTelaFinanceiro(null)
+    }
+    // Ao mudar para vendas manualmente (menu), limpa o chamado pré-preenchido
+    if (aba === "vendas") {
+      setChamadoParaVendas(null)
     }
     setAbaAtiva(aba)
   }
@@ -84,6 +91,7 @@ function App() {
     await logout()
     setAbaAtiva("demandas")
     setSubTelaFinanceiro(null)
+    setChamadoParaVendas(null)
     setEstado({ fase: "deslogado" })
   }
 
@@ -100,7 +108,6 @@ function App() {
 
     const cabecalho = (
       <div style={estilos.subCabecalho}>
-        {/* Botão voltar estilo iFood — bolinha cinza com < */}
         <button style={estilos.btnVoltar} onClick={() => setSubTelaFinanceiro(null)}>
           ‹
         </button>
@@ -122,9 +129,24 @@ function App() {
       <TopBar token={token} motoristaId={usuario.id} nomeMotorista={usuario.full_name ?? usuario.email} />
       <main style={estilos.conteudo}>
         {abaAtiva === "demandas" && (
-          <MinhasDemandas token={token} meuId={usuario.id} aoConcluirChamado={() => handleMudarAba("vendas")} />
+          <MinhasDemandas
+            token={token}
+            meuId={usuario.id}
+            aoConcluirChamado={(chamado) => {
+              // Guarda o chamado e navega para vendas com pré-preenchimento
+              setChamadoParaVendas(chamado)
+              setAbaAtiva("vendas")
+            }}
+          />
         )}
-        {abaAtiva === "vendas" && <VendasTela token={token} usuario={usuario} />}
+        {abaAtiva === "vendas" && (
+          <VendasTela
+            token={token}
+            usuario={usuario}
+            chamadoInicial={chamadoParaVendas}
+            aoFinalizarVenda={() => setChamadoParaVendas(null)}
+          />
+        )}
         {abaAtiva === "financeiro" && renderFinanceiro()}
         {abaAtiva === "perfil" && (
           <PerfilTela usuario={usuario} token={token} onLogout={handleLogout} />
@@ -153,17 +175,16 @@ const estilos = {
   },
   subCabecalho: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "6px 12px 6px",  // reduzido — menos espaço vazio no topo
+    padding: "6px 12px 6px",
     background: "#fff", borderBottom: "1px solid #F3F4F6",
   } as const,
-  // Botão voltar estilo iFood: bolinha cinza clara com ‹ grande
   btnVoltar: {
     width: "36px", height: "36px", borderRadius: "50%",
     background: "#F3F4F6", border: "none",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: "22px", fontWeight: 700, color: "#111111",
     cursor: "pointer", lineHeight: 1, flexShrink: 0,
-    paddingBottom: "2px",  // ajuste ótico do ‹
+    paddingBottom: "2px",
   } as const,
   subTitulo: {
     fontSize: "15px", fontWeight: 700, color: CORES_APP.texto,
