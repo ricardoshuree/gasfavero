@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: pagamento-mix | plano: 4bbb8629 | 2026-09-13 15:16:06
-// VendasTela: passa token e motoristaId para EtapaPagamento
+// [mcp-local harness] feature: pagamento-fix2 | plano: 116fcebc | 2026-09-13 20:42:28
+// Passa sacola={sacola} para EtapaPagamento
 // VendasTela: orquestrador do fluxo 4 etapas
 // Ordem: cliente → produtos → pagamento → resumo
 // chamadoInicial: quando vem de um chamado concluído, pré-preenche EtapaCliente
@@ -129,6 +129,7 @@ export default function VendasTela({ token, usuario, chamadoInicial, aoFinalizar
           motoristaId={usuario.id}
           pagamento={pagamento}
           totalSacola={totalSacola}
+          sacola={sacola}
           onPagamentoChange={setPagamento}
           onVoltar={() => setEtapa("produtos")}
           onProximo={() => setEtapa("resumo")}
@@ -159,4 +160,3 @@ const s: Record<string, CSSProperties> = {
   sucessoSub:    { fontSize: "14px", color: "#6B7280", margin: 0 },
   btnNova: { marginTop: "1rem", background: VERMELHO, color: "#fff", border: "none", borderRadius: "12px", padding: "14px 32px", fontSize: "16px", fontWeight: 600, cursor: "pointer" },
 }
-

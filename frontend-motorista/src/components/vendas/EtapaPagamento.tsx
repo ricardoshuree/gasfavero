@@ -174,7 +174,7 @@ export default function EtapaPagamento({
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
   const isGasPovo = formasAtivas.includes("gas_povo")
   const totalPago = isGasPovo ? gasPovoTotal : somaFormas
-  const cobre = isGasPovo ? gasPovoTotal > 0 : somaFormas >= totalSacola - 0.01
+  const cobre = isGasPovo ? gasPovoTotal > 0 : somaFormas > 0
   const fiadoOk = !temFiado || valeNumero.trim().length > 0
   const gasPovoOk = !isGasPovo || (parseFloat(gasPovoValorGov) > 0 && parseFloat(gasPovoFrete) > 0)
   const podeProximo = formasAtivas.length > 0 && cobre && fiadoOk && gasPovoOk
@@ -398,5 +398,6 @@ const s: Record<string, CSSProperties> = {
     borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 600, cursor: "pointer",
   },
 }
+
 
 
