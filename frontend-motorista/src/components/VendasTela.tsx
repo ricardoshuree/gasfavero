@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: casco-venda-mobile | plano: cef0cb24 | 2026-09-13 09:20:51
-// VendasTela: adiciona state cascos[], passa para EtapaProdutos e ResumoConfirmacao. totalSacola inclui casco comprado.
+// [mcp-local harness] feature: pagamento-mix | plano: 4bbb8629 | 2026-09-13 15:16:06
+// VendasTela: passa token e motoristaId para EtapaPagamento
 // VendasTela: orquestrador do fluxo 4 etapas
 // Ordem: cliente → produtos → pagamento → resumo
 // chamadoInicial: quando vem de um chamado concluído, pré-preenche EtapaCliente
@@ -125,6 +125,8 @@ export default function VendasTela({ token, usuario, chamadoInicial, aoFinalizar
       )}
       {etapa === "pagamento" && (
         <EtapaPagamento
+          token={token}
+          motoristaId={usuario.id}
           pagamento={pagamento}
           totalSacola={totalSacola}
           onPagamentoChange={setPagamento}

@@ -1,54 +1,60 @@
-// [mcp-local harness] feature: pagamento-mix | plano: 72b46394 | 2026-09-13 14:37:57
-// EtapaPagamento reescrita com modo único e mix. Gás do Povo exclusivo. Fiado no mix pede folha+vencimento. Resumo do mix com validação de cobertura.
-// EtapaPagamento — suporte a mix de formas de pagamento
+// [mcp-local harness] feature: pagamento-mix | plano: 72b46394 | 2026-09-13 14:49:10
+// EtapaPagamento reescrita do zero: toggle por clique igual ao ERP, mix sem separação de modo, Gás do Povo exclusivo, fiado busca próximo vale, resumo com sacola/pago/total igual ao ERP.
+// EtapaPagamento — modelo fiel ao ERP
 //
-// REGRAS:
-// - Gás do Povo: exclusivo, nunca entra em mix
+// COMPORTAMENTO:
+// - Clicar numa forma = ativa; clicar de novo = desativa (toggle)
+// - Gás do Povo é exclusivo: ao selecionar, deseleciona todas as outras
+// - Se qualquer outra forma for selecionada enquanto Gás do Povo está ativo, remove Gás do Povo
+// - Formas ativas abrem seus campos abaixo (inline, igual ao ERP)
+// - Fiado: busca próximo número da folha do bloco do motorista; campo de vencimento
+// - Mix (≥2 formas): cada forma tem seu valor parcial; soma deve cobrir o total
+// - Forma única: valor = total da sacola (pré-preenchido, editável)
+// - Valor pago exibido: soma das formas (ou valor gov + frete no Gás do Povo)
 // - Vale Gás: não disponível no app mobile
-// - Fiado: pode ser único ou entrar no mix com outras formas
-// - Mix: qualquer combinação de pix/dinheiro/débito/crédito/fiado
-//   - cada forma tem seu valor parcial
-//   - soma deve cobrir o total da sacola
-//   - fiado no mix pede número da folha + data de vencimento
-// - Forma única (não mix): valor total da sacola, campos específicos por forma
-import { useState, type CSSProperties } from "react"
+import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { CORES_APP as C } from "../../theme"
+import { request } from "../../lib/api"
 import { type DadosPagamento, type FormaPagamento } from "../../lib/vendas"
 
 const VERDE = "#606C38"
 const VERMELHO = "#EA1D2C"
+const AMBER = "#F59E0B"
 
-// Formas disponíveis no app mobile (sem Vale Gás)
-// Gás do Povo é exclusivo (sem mix)
 type FormaId = "pix" | "dinheiro" | "cartao_debito" | "cartao_credito" | "vale" | "gas_povo"
 
-const FORMAS_MIX: { id: FormaId; label: string; icone: string }[] = [
-  { id: "pix",            label: "Pix",     icone: "📲" },
-  { id: "dinheiro",       label: "Dinheiro", icone: "💵" },
-  { id: "cartao_debito",  label: "Débito",  icone: "💳" },
-  { id: "cartao_credito", label: "Crédito", icone: "💳" },
-  { id: "vale",           label: "Fiado",   icone: "🧾" },
+const FORMAS: { id: FormaId; label: string; icone: string }[] = [
+  { id: "pix",            label: "Pix",         icone: "📲" },
+  { id: "dinheiro",       label: "Dinheiro",    icone: "💵" },
+  { id: "cartao_debito",  label: "Débito",      icone: "💳" },
+  { id: "cartao_credito", label: "Crédito",     icone: "💳" },
+  { id: "vale",           label: "Fiado",       icone: "🧾" },
+  { id: "gas_povo",       label: "Gás do Povo", icone: "🚛" },
 ]
 
-// Data padrão: 5º dia útil do mês seguinte (mesma lógica do ERP)
-function proximoVencimentoPadrao(): string {
+function quintoUtilMesSeguinte(): string {
   const hoje = new Date()
-  const mes = hoje.getMonth() + 1 // mês seguinte
-  const ano = mes === 12 ? hoje.getFullYear() + 1 : hoje.getFullYear()
-  const mesAdj = mes === 12 ? 1 : mes + 1
-  // 5º dia útil aproximado — usa dia 8 como proxy conservador (igual ao ERP)
-  const d = new Date(ano, mesAdj - 1, 8)
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)
+  let uteis = 0
+  const d = new Date(primeiroDia)
+  while (uteis < 5) {
+    d.setDate(d.getDate() + 1)
+    if (d.getDay() !== 0 && d.getDay() !== 6) uteis++
+  }
   return d.toISOString().slice(0, 10)
 }
 
-type EntradaMix = {
-  forma: FormaId
-  valor: string
-  valeNumero?: string
-  dataPagamentoVale?: string
+function trinta(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 30)
+  return d.toISOString().slice(0, 10)
 }
 
+type VctoTipo = "quinto" | "trinta" | "manual"
+
 interface Props {
+  token: string
+  motoristaId: string
   pagamento: DadosPagamento | null
   totalSacola: number
   onPagamentoChange: (p: DadosPagamento) => void
@@ -57,180 +63,222 @@ interface Props {
 }
 
 export default function EtapaPagamento({
-  pagamento, totalSacola, onPagamentoChange, onVoltar, onProximo,
+  token, motoristaId, pagamento, totalSacola, onPagamentoChange, onVoltar, onProximo,
 }: Props) {
-  // Modo: "unica" (1 forma) ou "mix" (>1)
-  const [modo, setModo] = useState<"unica" | "mix">("unica")
+  // Formas ativas (Set de FormaId)
+  const [formasAtivas, setFormasAtivas] = useState<FormaId[]>(() => {
+    if (!pagamento) return []
+    if (pagamento.pagamentos && pagamento.pagamentos.length > 0)
+      return pagamento.pagamentos.map(p => p.forma_pagamento as FormaId)
+    return pagamento.forma ? [pagamento.forma as FormaId] : []
+  })
 
-  // Forma única
-  const [formaUnica, setFormaUnica] = useState<FormaId | null>(
-    (pagamento?.forma as FormaId) ?? null
+  // Valor por forma
+  const [valoresPorForma, setValoresPorForma] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    if (pagamento?.pagamentos) {
+      pagamento.pagamentos.forEach(p => { init[p.forma_pagamento] = String(p.valor) })
+    } else if (pagamento?.valorPago && pagamento.forma) {
+      init[pagamento.forma] = pagamento.valorPago
+    }
+    return init
+  })
+
+  // Fiado
+  const [valeNumero, setValeNumero] = useState(pagamento?.valeNumero ?? "")
+  const [vctoTipo, setVctoTipo] = useState<VctoTipo>("quinto")
+  const [dataPagamentoVale, setDataPagamentoVale] = useState(
+    pagamento?.dataPagamentoVale ?? quintoUtilMesSeguinte()
   )
-  const [valorUnico, setValorUnico] = useState(
-    pagamento?.valorPago ?? String(totalSacola.toFixed(2))
-  )
-  const [valeNumUnico, setValeNumUnico] = useState(pagamento?.valeNumero ?? "")
-  const [vencUnico, setVencUnico] = useState(
-    pagamento?.dataPagamentoVale ?? proximoVencimentoPadrao()
-  )
+
+  // Gás do Povo
   const [gasPovoValorGov, setGasPovoValorGov] = useState(pagamento?.gasPovoValorGov ?? "")
   const [gasPovoFrete, setGasPovoFrete] = useState(pagamento?.gasPovoFrete ?? "")
 
-  // Mix
-  const [entradas, setEntradas] = useState<EntradaMix[]>([])
+  // Ref para evitar re-preenchimento ao mudar totalSacola com forma já editada
+  const prevTotal = useRef<number | null>(null)
 
-  // ── Validações ─────────────────────────────────────────────────────────────
+  // Busca próximo vale ao ativar fiado
+  useEffect(() => {
+    if (!formasAtivas.includes("vale") || !motoristaId) return
+    if (valeNumero) return // já tem número, não sobrescreve
+    request<{ numero: number | null }>(
+      `/api/v1/vendas/proximo-numero-vale?motorista_id=${motoristaId}`, { token }
+    ).then(r => {
+      if (r.numero != null) setValeNumero(String(r.numero))
+    }).catch(() => {})
+  }, [formasAtivas.includes("vale"), motoristaId])
 
-  const totalMix = entradas.reduce((acc, e) => acc + (parseFloat(e.valor) || 0), 0)
-  const faltaMix = Math.max(0, totalSacola - totalMix)
-  const mixCobre = totalMix >= totalSacola - 0.01
-  const mixTemFiadoSemFolha = entradas.some(e => e.forma === "vale" && !e.valeNumero?.trim())
-  const mixValido = entradas.length >= 2 && mixCobre && !mixTemFiadoSemFolha
-
-  function podeProximoUnica(): boolean {
-    if (!formaUnica) return false
-    if (formaUnica === "vale") return valeNumUnico.trim().length > 0
-    if (formaUnica === "gas_povo") return parseFloat(gasPovoValorGov) > 0 && parseFloat(gasPovoFrete) > 0
-    return true
-  }
-
-  // ── Handlers forma única ───────────────────────────────────────────────────
-
-  function selecionarFormaUnica(f: FormaId) {
-    setFormaUnica(f)
-    setValorUnico(String(totalSacola.toFixed(2)))
-    setValeNumUnico("")
-    setVencUnico(proximoVencimentoPadrao())
-    setGasPovoValorGov(""); setGasPovoFrete("")
-    // Ao selecionar Gas do Povo, sai do modo mix
-    if (f === "gas_povo") setModo("unica")
-  }
-
-  function confirmarUnica() {
-    if (!formaUnica) return
-    const dados: DadosPagamento = {
-      forma: formaUnica as FormaPagamento,
-      valorPago: formaUnica === "gas_povo" ? gasPovoValorGov : valorUnico,
-      valeNumero: formaUnica === "vale" ? valeNumUnico : undefined,
-      dataPagamentoVale: formaUnica === "vale" ? vencUnico : undefined,
-      gasPovoValorGov: formaUnica === "gas_povo" ? gasPovoValorGov : undefined,
-      gasPovoFrete: formaUnica === "gas_povo" ? gasPovoFrete : undefined,
+  // Quando totalSacola muda e há forma única, atualiza o valor pré-preenchido
+  useEffect(() => {
+    if (prevTotal.current === totalSacola) return
+    prevTotal.current = totalSacola
+    if (formasAtivas.length === 1 && formasAtivas[0] !== "gas_povo") {
+      setValoresPorForma(prev => ({ ...prev, [formasAtivas[0]]: totalSacola.toFixed(2) }))
     }
-    onPagamentoChange(dados)
-    onProximo()
+  }, [totalSacola])
+
+  // ── Toggle forma ──────────────────────────────────────────────────────────
+
+  function toggleForma(f: FormaId) {
+    setFormasAtivas(prev => {
+      if (prev.includes(f)) {
+        // Desativar
+        const novas = prev.filter(x => x !== f)
+        setValoresPorForma(vp => { const n = { ...vp }; delete n[f]; return n })
+        if (f === "vale") setValeNumero("")
+        if (f === "gas_povo") { setGasPovoValorGov(""); setGasPovoFrete("") }
+        return novas
+      } else {
+        // Ativar
+        let novas: FormaId[]
+        if (f === "gas_povo") {
+          // Gás do Povo exclusivo: limpa todas as outras
+          setValoresPorForma({})
+          setValeNumero("")
+          novas = ["gas_povo"]
+        } else {
+          // Se Gás do Povo estava ativo, remove
+          novas = prev.filter(x => x !== "gas_povo")
+          if (prev.includes("gas_povo")) { setGasPovoValorGov(""); setGasPovoFrete("") }
+          novas = [...novas, f]
+        }
+        // Pré-preenche valor: forma única = total; mix = saldo restante
+        setValoresPorForma(vp => {
+          const n = { ...vp }
+          if (f !== "gas_povo") {
+            const somaAtual = novas.filter(x => x !== f).reduce((acc, x) => acc + (parseFloat(n[x] ?? "0") || 0), 0)
+            const saldo = Math.max(0, totalSacola - somaAtual)
+            n[f] = novas.length === 1 ? totalSacola.toFixed(2) : saldo > 0 ? saldo.toFixed(2) : ""
+          }
+          return n
+        })
+        return novas
+      }
+    })
   }
 
-  // ── Handlers mix ───────────────────────────────────────────────────────────
-
-  function toggleFormaMix(f: FormaId) {
-    const existe = entradas.find(e => e.forma === f)
-    if (existe) {
-      setEntradas(entradas.filter(e => e.forma !== f))
-    } else {
-      // Distribuir o valor restante para a nova forma
-      const resto = Math.max(0, totalSacola - totalMix)
-      setEntradas([...entradas, {
-        forma: f,
-        valor: resto > 0 ? String(resto.toFixed(2)) : "",
-        valeNumero: "",
-        dataPagamentoVale: proximoVencimentoPadrao(),
-      }])
-    }
+  function handleValorForma(f: FormaId, v: string) {
+    setValoresPorForma(prev => {
+      const novo = { ...prev, [f]: v }
+      // Com exatamente 2 formas, preenche a outra com o saldo
+      if (formasAtivas.length === 2) {
+        const outra = formasAtivas.find(x => x !== f)
+        if (outra && !prev[outra]) {
+          const saldo = Math.max(0, totalSacola - (parseFloat(v) || 0))
+          novo[outra] = saldo > 0 ? saldo.toFixed(2) : ""
+        }
+      }
+      return novo
+    })
   }
 
-  function atualizarEntrada(f: FormaId, patch: Partial<EntradaMix>) {
-    setEntradas(entradas.map(e => e.forma === f ? { ...e, ...patch } : e))
+  function handleVctoTipo(tipo: VctoTipo) {
+    setVctoTipo(tipo)
+    if (tipo === "quinto") setDataPagamentoVale(quintoUtilMesSeguinte())
+    else if (tipo === "trinta") setDataPagamentoVale(trinta())
   }
 
-  function confirmarMix() {
-    if (!mixValido) return
-    const pagamentos = entradas.map(e => ({
-      forma_pagamento: e.forma,
-      valor: parseFloat(e.valor),
-      vale_numero: e.forma === "vale" && e.valeNumero ? Number(e.valeNumero) : undefined,
-      data_pagamento_vale: e.forma === "vale" ? e.dataPagamentoVale : undefined,
-    }))
-    const dados: DadosPagamento = {
-      forma: entradas[0].forma as FormaPagamento, // forma principal = primeira
-      pagamentos,
-      valorPago: String(totalMix.toFixed(2)),
-    }
-    onPagamentoChange(dados)
-    onProximo()
-  }
+  // ── Totais e validação ────────────────────────────────────────────────────
+
+  const somaFormas = formasAtivas
+    .filter(f => f !== "gas_povo")
+    .reduce((acc, f) => acc + (parseFloat(valoresPorForma[f] ?? "0") || 0), 0)
 
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
 
+  const isGasPovo = formasAtivas.includes("gas_povo")
+  const totalPago = isGasPovo ? gasPovoTotal : somaFormas
+  const cobre = isGasPovo
+    ? gasPovoTotal > 0
+    : somaFormas >= totalSacola - 0.01
+
+  const temFiado = formasAtivas.includes("vale")
+  const fiadoOk = !temFiado || valeNumero.trim().length > 0
+  const gasPovoOk = !isGasPovo || (parseFloat(gasPovoValorGov) > 0 && parseFloat(gasPovoFrete) > 0)
+
+  const podeProximo = formasAtivas.length > 0 && cobre && fiadoOk && gasPovoOk
+
+  const falta = Math.max(0, totalSacola - somaFormas)
+
+  // ── Confirmar ─────────────────────────────────────────────────────────────
+
+  function confirmar() {
+    if (!podeProximo) return
+    const isMix = formasAtivas.filter(f => f !== "gas_povo").length > 1
+
+    if (isGasPovo) {
+      onPagamentoChange({
+        forma: "gas_povo" as FormaPagamento,
+        valorPago: gasPovoValorGov,
+        gasPovoValorGov,
+        gasPovoFrete,
+      })
+    } else if (isMix) {
+      const pagamentos = formasAtivas.map(f => ({
+        forma_pagamento: f,
+        valor: parseFloat(valoresPorForma[f] ?? "0") || 0,
+        vale_numero: f === "vale" && valeNumero ? Number(valeNumero) : undefined,
+        data_pagamento_vale: f === "vale" ? dataPagamentoVale : undefined,
+      }))
+      onPagamentoChange({
+        forma: formasAtivas[0] as FormaPagamento,
+        pagamentos,
+        valorPago: String(somaFormas.toFixed(2)),
+        valeNumero: temFiado ? valeNumero : undefined,
+        dataPagamentoVale: temFiado ? dataPagamentoVale : undefined,
+      })
+    } else {
+      // Forma única
+      const f = formasAtivas[0]
+      onPagamentoChange({
+        forma: f as FormaPagamento,
+        valorPago: valoresPorForma[f] ?? String(totalSacola.toFixed(2)),
+        valeNumero: f === "vale" ? valeNumero : undefined,
+        dataPagamentoVale: f === "vale" ? dataPagamentoVale : undefined,
+      })
+    }
+    onProximo()
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const corPago = cobre && formasAtivas.length > 0 ? VERDE : AMBER
 
   return (
     <div style={s.pagina}>
+      <p style={s.instrucao}>Selecione a forma de pagamento</p>
 
-      {/* Toggle modo */}
-      <div style={s.modoRow}>
-        <button
-          style={{ ...s.modoBtn, ...(modo === "unica" ? s.modoBtnAtivo : {}) }}
-          onClick={() => setModo("unica")}
-        >
-          1 forma
-        </button>
-        <button
-          style={{ ...s.modoBtn, ...(modo === "mix" ? s.modoBtnAtivo : {}) }}
-          onClick={() => { setModo("mix"); setFormaUnica(null) }}
-        >
-          Mix de formas
-        </button>
+      {/* Grade de formas */}
+      <div style={s.grade}>
+        {FORMAS.map(f => {
+          const ativa = formasAtivas.includes(f.id)
+          return (
+            <div
+              key={f.id}
+              style={{
+                ...s.fpCard,
+                ...(ativa ? s.fpSel : {}),
+                ...(f.id === "gas_povo" ? { gridColumn: "1 / -1" } : {}),
+              }}
+              onClick={() => toggleForma(f.id)}
+            >
+              <span style={s.fpIcone}>{f.icone}</span>
+              <span style={s.fpLabel}>{f.label}</span>
+              {ativa && <span style={s.check}>✓</span>}
+            </div>
+          )
+        })}
       </div>
 
-      {/* ── MODO ÚNICO ── */}
-      {modo === "unica" && (
-        <>
-          <p style={s.instrucao}>Selecione a forma de pagamento</p>
-          <div style={s.grade}>
-            {/* Formas mix */}
-            {FORMAS_MIX.map(f => (
-              <div
-                key={f.id}
-                style={{ ...s.fpCard, ...(formaUnica === f.id ? s.fpSel : {}) }}
-                onClick={() => selecionarFormaUnica(f.id)}
-              >
-                <span style={s.fpIcone}>{f.icone}</span>
-                <span style={s.fpLabel}>{f.label}</span>
-              </div>
-            ))}
-            {/* Gás do Povo — exclusivo */}
-            <div
-              style={{ ...s.fpCard, ...(formaUnica === "gas_povo" ? s.fpSel : {}), gridColumn: "1 / -1" }}
-              onClick={() => selecionarFormaUnica("gas_povo")}
-            >
-              <span style={s.fpIcone}>🚛</span>
-              <span style={s.fpLabel}>Gás do Povo</span>
-            </div>
-          </div>
-
-          {/* Fiado único */}
-          {formaUnica === "vale" && (
-            <div style={s.extra}>
-              <label style={s.label}>Número da folha (bloco)</label>
-              <input
-                style={s.input} type="number" inputMode="numeric"
-                value={valeNumUnico} onChange={e => setValeNumUnico(e.target.value)}
-                placeholder="Ex: 1104"
-              />
-              <label style={s.label}>Vencimento</label>
-              <input
-                style={s.input} type="date"
-                value={vencUnico} onChange={e => setVencUnico(e.target.value)}
-              />
-              <div style={s.totalBox}>
-                Total em fiado: <strong>R$ {totalSacola.toFixed(2).replace(".", ",")}</strong>
-              </div>
-            </div>
-          )}
+      {/* Campos por forma ativa */}
+      {formasAtivas.length > 0 && (
+        <div style={s.painelFormas}>
 
           {/* Gás do Povo */}
-          {formaUnica === "gas_povo" && (
-            <div style={s.extra}>
+          {isGasPovo && (
+            <div style={s.formaBloco}>
+              <p style={s.formaBlocoTitulo}>🚛 Gás do Povo</p>
               <div style={s.aviso}>
                 Programa governamental — o governo paga depois. O frete é cobrado do cliente no ato.
               </div>
@@ -252,135 +300,107 @@ export default function EtapaPagamento({
                   />
                 </div>
               </div>
-              {gasPovoTotal > 0 && (
-                <div style={s.totalBox}>
-                  Total a receber: <strong>R$ {gasPovoTotal.toFixed(2).replace(".", ",")}</strong>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Demais formas únicas */}
-          {formaUnica && !["vale", "gas_povo"].includes(formaUnica) && (
-            <div style={s.extra}>
-              <label style={s.label}>Valor pago (R$)</label>
-              <input
-                style={s.input} type="number" inputMode="decimal" step="0.01"
-                value={valorUnico} onChange={e => setValorUnico(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div style={s.rodape}>
-            <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
-            <button
-              style={{ ...s.btnProximo, opacity: podeProximoUnica() ? 1 : 0.4 }}
-              disabled={!podeProximoUnica()}
-              onClick={confirmarUnica}
-            >Revisar →</button>
-          </div>
-        </>
-      )}
-
-      {/* ── MODO MIX ── */}
-      {modo === "mix" && (
-        <>
-          <p style={s.instrucao}>Selecione as formas e informe o valor de cada uma</p>
-
-          {/* Chips de seleção */}
-          <div style={s.grade}>
-            {FORMAS_MIX.map(f => {
-              const ativa = entradas.some(e => e.forma === f.id)
-              return (
-                <div
-                  key={f.id}
-                  style={{ ...s.fpCard, ...(ativa ? s.fpSel : {}) }}
-                  onClick={() => toggleFormaMix(f.id)}
-                >
-                  <span style={s.fpIcone}>{f.icone}</span>
-                  <span style={s.fpLabel}>{f.label}</span>
-                  {ativa && <span style={s.check}>✓</span>}
+          {/* Formas mix/únicas (exceto Gás do Povo) */}
+          {formasAtivas.filter(f => f !== "gas_povo").map(f => {
+            const meta = FORMAS.find(x => x.id === f)!
+            return (
+              <div key={f} style={s.formaBloco}>
+                <div style={s.formaLinha}>
+                  <span style={s.formaBlocoTitulo}>{meta.icone} {meta.label}</span>
+                  <input
+                    style={{ ...s.inputValor }}
+                    type="number" inputMode="decimal" step="0.01"
+                    value={valoresPorForma[f] ?? ""}
+                    onChange={e => handleValorForma(f, e.target.value)}
+                    placeholder="R$ 0,00"
+                  />
                 </div>
-              )
-            })}
-          </div>
-
-          {/* Entradas de valor por forma */}
-          {entradas.length > 0 && (
-            <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              {entradas.map(e => {
-                const meta = FORMAS_MIX.find(f => f.id === e.forma)!
-                return (
-                  <div key={e.forma} style={s.mixCard}>
-                    <div style={s.mixCardTopo}>
-                      <span style={s.mixCardLabel}>{meta.icone} {meta.label}</span>
-                      <button style={s.btnRemoverForma} onClick={() => toggleFormaMix(e.forma)}>✕</button>
-                    </div>
-                    <label style={s.label}>Valor (R$)</label>
+                {f === "vale" && (
+                  <div style={s.fiadoExtra}>
+                    <label style={s.label}>Número da folha (bloco)</label>
                     <input
-                      style={s.input} type="number" inputMode="decimal" step="0.01"
-                      value={e.valor}
-                      onChange={ev => atualizarEntrada(e.forma, { valor: ev.target.value })}
-                      placeholder="0,00"
+                      style={s.input} type="number" inputMode="numeric"
+                      value={valeNumero}
+                      onChange={e => setValeNumero(e.target.value)}
+                      placeholder="Ex: 1104"
                     />
-                    {e.forma === "vale" && (
-                      <>
-                        <label style={{ ...s.label, marginTop: "6px" }}>Número da folha (bloco)</label>
-                        <input
-                          style={s.input} type="number" inputMode="numeric"
-                          value={e.valeNumero ?? ""}
-                          onChange={ev => atualizarEntrada(e.forma, { valeNumero: ev.target.value })}
-                          placeholder="Ex: 1104"
-                        />
-                        <label style={{ ...s.label, marginTop: "6px" }}>Vencimento</label>
-                        <input
-                          style={s.input} type="date"
-                          value={e.dataPagamentoVale ?? proximoVencimentoPadrao()}
-                          onChange={ev => atualizarEntrada(e.forma, { dataPagamentoVale: ev.target.value })}
-                        />
-                      </>
-                    )}
+                    <label style={{ ...s.label, marginTop: "8px" }}>Vencimento</label>
+                    <div style={s.vctoOpcoes}>
+                      {([
+                        { id: "quinto", label: "5º dia útil do mês seguinte" },
+                        { id: "trinta", label: "30 dias a partir de hoje" },
+                        { id: "manual", label: "Data manual" },
+                      ] as const).map(op => (
+                        <label key={op.id} style={s.vctoLabel}>
+                          <input
+                            type="radio" name="vcto"
+                            checked={vctoTipo === op.id}
+                            onChange={() => handleVctoTipo(op.id)}
+                            style={{ accentColor: VERDE }}
+                          />
+                          <span style={{ fontSize: "12px", color: "#374151" }}>{op.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <input
+                      style={{ ...s.input, marginTop: "4px" }} type="date"
+                      value={dataPagamentoVale}
+                      onChange={e => { setDataPagamentoVale(e.target.value); setVctoTipo("manual") }}
+                    />
                   </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Resumo do mix */}
-          {entradas.length >= 2 && (
-            <div style={{ ...s.totalBox, marginTop: "12px", flexDirection: "column" as const, display: "flex", gap: "4px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Total da sacola</span>
-                <strong>R$ {totalSacola.toFixed(2).replace(".", ",")}</strong>
+                )}
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Informado</span>
-                <strong>R$ {totalMix.toFixed(2).replace(".", ",")}</strong>
-              </div>
-              {faltaMix > 0.01 && (
-                <div style={{ display: "flex", justifyContent: "space-between", color: VERMELHO }}>
-                  <span>Falta cobrir</span>
-                  <strong>R$ {faltaMix.toFixed(2).replace(".", ",")}</strong>
-                </div>
-              )}
-              {mixTemFiadoSemFolha && (
-                <p style={{ fontSize: "12px", color: VERMELHO, margin: "4px 0 0" }}>
-                  ⚠️ Informe o número da folha do fiado.
-                </p>
-              )}
-            </div>
-          )}
+            )
+          })}
 
-          <div style={s.rodape}>
-            <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
-            <button
-              style={{ ...s.btnProximo, opacity: mixValido ? 1 : 0.4 }}
-              disabled={!mixValido}
-              onClick={confirmarMix}
-            >Revisar →</button>
+          {/* Resumo do pagamento */}
+          <div style={s.resumoBox}>
+            <div style={s.resumoLinha}>
+              <span style={{ color: VERDE, fontSize: "13px" }}>Sacola</span>
+              <span style={{ color: VERDE, fontWeight: 700, fontSize: "13px" }}>
+                R$ {totalSacola.toFixed(2).replace(".", ",")}
+              </span>
+            </div>
+            <div style={s.resumoLinha}>
+              <span style={{ color: corPago, fontSize: "13px" }}>Pago</span>
+              <span style={{ color: corPago, fontWeight: 700, fontSize: "13px" }}>
+                R$ {totalPago.toFixed(2).replace(".", ",")}
+              </span>
+            </div>
+            {!isGasPovo && falta > 0.01 && (
+              <div style={s.resumoLinha}>
+                <span style={{ color: VERMELHO, fontSize: "12px" }}>Falta cobrir</span>
+                <span style={{ color: VERMELHO, fontWeight: 700, fontSize: "12px" }}>
+                  R$ {falta.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+            )}
+            {temFiado && !valeNumero.trim() && (
+              <p style={{ fontSize: "12px", color: VERMELHO, margin: "4px 0 0" }}>
+                ⚠️ Informe o número da folha do fiado.
+              </p>
+            )}
+            <div style={{ ...s.resumoLinha, borderTop: `1px solid ${C.borda}`, marginTop: "6px", paddingTop: "6px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 700 }}>Total</span>
+              <span style={{ fontSize: "18px", fontWeight: 700, color: corPago }}>
+                R$ {totalPago.toFixed(2).replace(".", ",")}
+              </span>
+            </div>
           </div>
-        </>
+        </div>
       )}
+
+      <div style={s.rodape}>
+        <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
+        <button
+          style={{ ...s.btnProximo, opacity: podeProximo ? 1 : 0.4 }}
+          disabled={!podeProximo}
+          onClick={confirmar}
+        >Revisar →</button>
+      </div>
     </div>
   )
 }
@@ -389,16 +409,6 @@ const s: Record<string, CSSProperties> = {
   pagina:    { padding: "0.75rem 1rem 1.5rem" },
   instrucao: { fontSize: "0.85rem", color: "#111111", fontWeight: 500, margin: "0 0 0.75rem" },
 
-  modoRow: {
-    display: "flex", gap: "0", marginBottom: "14px",
-    border: "1.5px solid #D1D5DB", borderRadius: "10px", overflow: "hidden",
-  },
-  modoBtn: {
-    flex: 1, padding: "9px 0", border: "none", background: "#F9FAFB",
-    fontSize: "13px", fontWeight: 600, color: "#6B7280", cursor: "pointer",
-  },
-  modoBtnAtivo: { background: VERDE, color: "#fff" },
-
   grade: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
   fpCard: {
     background: C.fundoCard, border: "1.5px solid #9CA3AF",
@@ -406,7 +416,7 @@ const s: Record<string, CSSProperties> = {
     display: "flex", flexDirection: "column" as const, alignItems: "center",
     gap: "6px", cursor: "pointer", userSelect: "none", position: "relative",
   },
-  fpSel:   { border: `2px solid ${VERDE}`, background: "#f0f4eb" },
+  fpSel:   { border: `2.5px solid ${VERDE}`, background: "#f0f4eb" },
   fpIcone: { fontSize: "22px" },
   fpLabel: { fontSize: "13px", fontWeight: 600, color: "#111111", textAlign: "center" as const },
   check: {
@@ -414,35 +424,43 @@ const s: Record<string, CSSProperties> = {
     fontSize: "11px", fontWeight: 700, color: VERDE,
   },
 
-  extra:  { marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" },
-  label:  { fontSize: "13px", fontWeight: 600, color: "#111111" },
+  painelFormas: {
+    marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px",
+    border: `1.5px solid ${AMBER}`, borderRadius: "12px", padding: "12px",
+  },
+  formaBloco: {
+    background: "#F9FAFB", border: "1px solid #E5E7EB",
+    borderRadius: "10px", padding: "10px 12px",
+    display: "flex", flexDirection: "column", gap: "6px",
+  },
+  formaBlocoTitulo: { fontSize: "13px", fontWeight: 700, color: "#111111", margin: 0 },
+  formaLinha: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" },
+  inputValor: {
+    width: "120px", flexShrink: 0,
+    padding: "8px 10px", border: "1.5px solid #374151", borderRadius: "8px",
+    fontSize: "15px", fontWeight: 600, color: "#111111",
+    background: "#fff", outline: "none", textAlign: "right" as const,
+  },
+  fiadoExtra: { display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" },
+  vctoOpcoes: { display: "flex", flexDirection: "column", gap: "4px", margin: "4px 0 0" },
+  vctoLabel:  { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" },
+  aviso:      { fontSize: "12px", color: "#3a5c1a", background: "#f0f4eb", borderRadius: "8px", padding: "8px 10px" },
+  rowDois:    { display: "flex", gap: "8px" },
+  label:      { fontSize: "12px", fontWeight: 600, color: "#374151" },
   input: {
-    width: "100%", boxSizing: "border-box" as const, padding: "12px 14px",
-    border: "1.5px solid #374151", borderRadius: "10px",
-    fontSize: "16px", fontWeight: 500, color: "#111111",
+    width: "100%", boxSizing: "border-box" as const, padding: "10px 12px",
+    border: "1.5px solid #374151", borderRadius: "8px",
+    fontSize: "15px", fontWeight: 500, color: "#111111",
     background: "#fff", outline: "none",
   },
-  rowDois:  { display: "flex", gap: "8px" },
-  aviso:    { fontSize: "12px", color: "#3a5c1a", background: "#f0f4eb", borderRadius: "8px", padding: "8px 10px" },
-  totalBox: {
+  resumoBox: {
     background: C.fundoCard, border: `1px solid ${C.borda}`,
     borderRadius: "10px", padding: "10px 12px",
-    fontSize: "14px", color: C.texto, marginTop: "8px",
-  },
-
-  mixCard: {
-    background: "#F9FAFB", border: "1.5px solid #D1D5DB",
-    borderRadius: "12px", padding: "12px 14px",
     display: "flex", flexDirection: "column", gap: "4px",
   },
-  mixCardTopo: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" },
-  mixCardLabel: { fontSize: "14px", fontWeight: 700, color: "#111111" },
-  btnRemoverForma: {
-    background: "none", border: "none", fontSize: "14px",
-    color: "#9CA3AF", cursor: "pointer", padding: "0 4px",
-  },
+  resumoLinha: { display: "flex", justifyContent: "space-between", alignItems: "center" },
 
-  rodape:    { display: "flex", gap: "10px", marginTop: "20px" },
+  rodape:    { display: "flex", gap: "10px", marginTop: "16px" },
   btnVoltar: {
     flex: 1, background: "transparent", border: "1.5px solid #374151",
     borderRadius: "12px", padding: "13px", fontSize: "15px",
