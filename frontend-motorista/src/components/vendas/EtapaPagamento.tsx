@@ -1,5 +1,5 @@
-// [mcp-local harness] feature: pagamento-mix | plano: 72b46394 | 2026-09-13 14:49:10
-// EtapaPagamento reescrita do zero: toggle por clique igual ao ERP, mix sem separação de modo, Gás do Povo exclusivo, fiado busca próximo vale, resumo com sacola/pago/total igual ao ERP.
+// [mcp-local harness] feature: pagamento-fix-vale | plano: 513c379a | 2026-09-13 20:07:34
+// Fix: temFiado declarado antes do useEffect como variável estável; remove referência inválida a temFiadoAtivo
 // EtapaPagamento — modelo fiel ao ERP
 //
 // COMPORTAMENTO:
@@ -65,7 +65,6 @@ interface Props {
 export default function EtapaPagamento({
   token, motoristaId, pagamento, totalSacola, onPagamentoChange, onVoltar, onProximo,
 }: Props) {
-  // Formas ativas (Set de FormaId)
   const [formasAtivas, setFormasAtivas] = useState<FormaId[]>(() => {
     if (!pagamento) return []
     if (pagamento.pagamentos && pagamento.pagamentos.length > 0)
@@ -73,7 +72,6 @@ export default function EtapaPagamento({
     return pagamento.forma ? [pagamento.forma as FormaId] : []
   })
 
-  // Valor por forma
   const [valoresPorForma, setValoresPorForma] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     if (pagamento?.pagamentos) {
@@ -84,66 +82,56 @@ export default function EtapaPagamento({
     return init
   })
 
-  // Fiado
   const [valeNumero, setValeNumero] = useState(pagamento?.valeNumero ?? "")
   const [vctoTipo, setVctoTipo] = useState<VctoTipo>("quinto")
   const [dataPagamentoVale, setDataPagamentoVale] = useState(
     pagamento?.dataPagamentoVale ?? quintoUtilMesSeguinte()
   )
-
-  // Gás do Povo
   const [gasPovoValorGov, setGasPovoValorGov] = useState(pagamento?.gasPovoValorGov ?? "")
   const [gasPovoFrete, setGasPovoFrete] = useState(pagamento?.gasPovoFrete ?? "")
-
-  // Ref para evitar re-preenchimento ao mudar totalSacola com forma já editada
   const prevTotal = useRef<number | null>(null)
+
+  // FIX: dependência estável para o useEffect do fiado
+  const temFiado = formasAtivas.includes("vale")
 
   // Busca próximo vale ao ativar fiado
   useEffect(() => {
-    if (!formasAtivas.includes("vale") || !motoristaId) return
-    if (valeNumero) return // já tem número, não sobrescreve
+    if (!temFiado || !motoristaId) return
+    if (valeNumero) return
     request<{ numero: number | null }>(
       `/api/v1/vendas/proximo-numero-vale?motorista_id=${motoristaId}`, { token }
     ).then(r => {
       if (r.numero != null) setValeNumero(String(r.numero))
     }).catch(() => {})
-  }, [formasAtivas.includes("vale"), motoristaId])
+  }, [temFiado, motoristaId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Quando totalSacola muda e há forma única, atualiza o valor pré-preenchido
   useEffect(() => {
     if (prevTotal.current === totalSacola) return
     prevTotal.current = totalSacola
     if (formasAtivas.length === 1 && formasAtivas[0] !== "gas_povo") {
       setValoresPorForma(prev => ({ ...prev, [formasAtivas[0]]: totalSacola.toFixed(2) }))
     }
-  }, [totalSacola])
-
-  // ── Toggle forma ──────────────────────────────────────────────────────────
+  }, [totalSacola]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleForma(f: FormaId) {
     setFormasAtivas(prev => {
       if (prev.includes(f)) {
-        // Desativar
         const novas = prev.filter(x => x !== f)
         setValoresPorForma(vp => { const n = { ...vp }; delete n[f]; return n })
         if (f === "vale") setValeNumero("")
         if (f === "gas_povo") { setGasPovoValorGov(""); setGasPovoFrete("") }
         return novas
       } else {
-        // Ativar
         let novas: FormaId[]
         if (f === "gas_povo") {
-          // Gás do Povo exclusivo: limpa todas as outras
           setValoresPorForma({})
           setValeNumero("")
           novas = ["gas_povo"]
         } else {
-          // Se Gás do Povo estava ativo, remove
           novas = prev.filter(x => x !== "gas_povo")
           if (prev.includes("gas_povo")) { setGasPovoValorGov(""); setGasPovoFrete("") }
           novas = [...novas, f]
         }
-        // Pré-preenche valor: forma única = total; mix = saldo restante
         setValoresPorForma(vp => {
           const n = { ...vp }
           if (f !== "gas_povo") {
@@ -161,7 +149,6 @@ export default function EtapaPagamento({
   function handleValorForma(f: FormaId, v: string) {
     setValoresPorForma(prev => {
       const novo = { ...prev, [f]: v }
-      // Com exatamente 2 formas, preenche a outra com o saldo
       if (formasAtivas.length === 2) {
         const outra = formasAtivas.find(x => x !== f)
         if (outra && !prev[outra]) {
@@ -179,41 +166,24 @@ export default function EtapaPagamento({
     else if (tipo === "trinta") setDataPagamentoVale(trinta())
   }
 
-  // ── Totais e validação ────────────────────────────────────────────────────
-
   const somaFormas = formasAtivas
     .filter(f => f !== "gas_povo")
     .reduce((acc, f) => acc + (parseFloat(valoresPorForma[f] ?? "0") || 0), 0)
 
   const gasPovoTotal = (parseFloat(gasPovoValorGov) || 0) + (parseFloat(gasPovoFrete) || 0)
-
   const isGasPovo = formasAtivas.includes("gas_povo")
   const totalPago = isGasPovo ? gasPovoTotal : somaFormas
-  const cobre = isGasPovo
-    ? gasPovoTotal > 0
-    : somaFormas >= totalSacola - 0.01
-
-  const temFiado = formasAtivas.includes("vale")
+  const cobre = isGasPovo ? gasPovoTotal > 0 : somaFormas >= totalSacola - 0.01
   const fiadoOk = !temFiado || valeNumero.trim().length > 0
   const gasPovoOk = !isGasPovo || (parseFloat(gasPovoValorGov) > 0 && parseFloat(gasPovoFrete) > 0)
-
   const podeProximo = formasAtivas.length > 0 && cobre && fiadoOk && gasPovoOk
-
   const falta = Math.max(0, totalSacola - somaFormas)
-
-  // ── Confirmar ─────────────────────────────────────────────────────────────
 
   function confirmar() {
     if (!podeProximo) return
     const isMix = formasAtivas.filter(f => f !== "gas_povo").length > 1
-
     if (isGasPovo) {
-      onPagamentoChange({
-        forma: "gas_povo" as FormaPagamento,
-        valorPago: gasPovoValorGov,
-        gasPovoValorGov,
-        gasPovoFrete,
-      })
+      onPagamentoChange({ forma: "gas_povo" as FormaPagamento, valorPago: gasPovoValorGov, gasPovoValorGov, gasPovoFrete })
     } else if (isMix) {
       const pagamentos = formasAtivas.map(f => ({
         forma_pagamento: f,
@@ -229,7 +199,6 @@ export default function EtapaPagamento({
         dataPagamentoVale: temFiado ? dataPagamentoVale : undefined,
       })
     } else {
-      // Forma única
       const f = formasAtivas[0]
       onPagamentoChange({
         forma: f as FormaPagamento,
@@ -241,26 +210,19 @@ export default function EtapaPagamento({
     onProximo()
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   const corPago = cobre && formasAtivas.length > 0 ? VERDE : AMBER
 
   return (
     <div style={s.pagina}>
       <p style={s.instrucao}>Selecione a forma de pagamento</p>
 
-      {/* Grade de formas */}
       <div style={s.grade}>
         {FORMAS.map(f => {
           const ativa = formasAtivas.includes(f.id)
           return (
             <div
               key={f.id}
-              style={{
-                ...s.fpCard,
-                ...(ativa ? s.fpSel : {}),
-                ...(f.id === "gas_povo" ? { gridColumn: "1 / -1" } : {}),
-              }}
+              style={{ ...s.fpCard, ...(ativa ? s.fpSel : {}), ...(f.id === "gas_povo" ? { gridColumn: "1 / -1" } : {}) }}
               onClick={() => toggleForma(f.id)}
             >
               <span style={s.fpIcone}>{f.icone}</span>
@@ -271,39 +233,25 @@ export default function EtapaPagamento({
         })}
       </div>
 
-      {/* Campos por forma ativa */}
       {formasAtivas.length > 0 && (
         <div style={s.painelFormas}>
-
-          {/* Gás do Povo */}
           {isGasPovo && (
             <div style={s.formaBloco}>
               <p style={s.formaBlocoTitulo}>🚛 Gás do Povo</p>
-              <div style={s.aviso}>
-                Programa governamental — o governo paga depois. O frete é cobrado do cliente no ato.
-              </div>
+              <div style={s.aviso}>Programa governamental — o governo paga depois. O frete é cobrado do cliente no ato.</div>
               <div style={s.rowDois}>
                 <div style={{ flex: 1 }}>
                   <label style={s.label}>Valor do governo (R$)</label>
-                  <input
-                    style={s.input} type="number" inputMode="decimal" step="0.01"
-                    value={gasPovoValorGov} onChange={e => setGasPovoValorGov(e.target.value)}
-                    placeholder="0,00"
-                  />
+                  <input style={s.input} type="number" inputMode="decimal" step="0.01" value={gasPovoValorGov} onChange={e => setGasPovoValorGov(e.target.value)} placeholder="0,00" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={s.label}>Frete do cliente (R$)</label>
-                  <input
-                    style={s.input} type="number" inputMode="decimal" step="0.01"
-                    value={gasPovoFrete} onChange={e => setGasPovoFrete(e.target.value)}
-                    placeholder="0,00"
-                  />
+                  <input style={s.input} type="number" inputMode="decimal" step="0.01" value={gasPovoFrete} onChange={e => setGasPovoFrete(e.target.value)} placeholder="0,00" />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Formas mix/únicas (exceto Gás do Povo) */}
           {formasAtivas.filter(f => f !== "gas_povo").map(f => {
             const meta = FORMAS.find(x => x.id === f)!
             return (
@@ -311,8 +259,7 @@ export default function EtapaPagamento({
                 <div style={s.formaLinha}>
                   <span style={s.formaBlocoTitulo}>{meta.icone} {meta.label}</span>
                   <input
-                    style={{ ...s.inputValor }}
-                    type="number" inputMode="decimal" step="0.01"
+                    style={s.inputValor} type="number" inputMode="decimal" step="0.01"
                     value={valoresPorForma[f] ?? ""}
                     onChange={e => handleValorForma(f, e.target.value)}
                     placeholder="R$ 0,00"
@@ -321,12 +268,7 @@ export default function EtapaPagamento({
                 {f === "vale" && (
                   <div style={s.fiadoExtra}>
                     <label style={s.label}>Número da folha (bloco)</label>
-                    <input
-                      style={s.input} type="number" inputMode="numeric"
-                      value={valeNumero}
-                      onChange={e => setValeNumero(e.target.value)}
-                      placeholder="Ex: 1104"
-                    />
+                    <input style={s.input} type="number" inputMode="numeric" value={valeNumero} onChange={e => setValeNumero(e.target.value)} placeholder="Ex: 1104" />
                     <label style={{ ...s.label, marginTop: "8px" }}>Vencimento</label>
                     <div style={s.vctoOpcoes}>
                       {([
@@ -335,59 +277,39 @@ export default function EtapaPagamento({
                         { id: "manual", label: "Data manual" },
                       ] as const).map(op => (
                         <label key={op.id} style={s.vctoLabel}>
-                          <input
-                            type="radio" name="vcto"
-                            checked={vctoTipo === op.id}
-                            onChange={() => handleVctoTipo(op.id)}
-                            style={{ accentColor: VERDE }}
-                          />
+                          <input type="radio" name="vcto" checked={vctoTipo === op.id} onChange={() => handleVctoTipo(op.id)} style={{ accentColor: VERDE }} />
                           <span style={{ fontSize: "12px", color: "#374151" }}>{op.label}</span>
                         </label>
                       ))}
                     </div>
-                    <input
-                      style={{ ...s.input, marginTop: "4px" }} type="date"
-                      value={dataPagamentoVale}
-                      onChange={e => { setDataPagamentoVale(e.target.value); setVctoTipo("manual") }}
-                    />
+                    <input style={{ ...s.input, marginTop: "4px" }} type="date" value={dataPagamentoVale} onChange={e => { setDataPagamentoVale(e.target.value); setVctoTipo("manual") }} />
                   </div>
                 )}
               </div>
             )
           })}
 
-          {/* Resumo do pagamento */}
           <div style={s.resumoBox}>
             <div style={s.resumoLinha}>
               <span style={{ color: VERDE, fontSize: "13px" }}>Sacola</span>
-              <span style={{ color: VERDE, fontWeight: 700, fontSize: "13px" }}>
-                R$ {totalSacola.toFixed(2).replace(".", ",")}
-              </span>
+              <span style={{ color: VERDE, fontWeight: 700, fontSize: "13px" }}>R$ {totalSacola.toFixed(2).replace(".", ",")}</span>
             </div>
             <div style={s.resumoLinha}>
               <span style={{ color: corPago, fontSize: "13px" }}>Pago</span>
-              <span style={{ color: corPago, fontWeight: 700, fontSize: "13px" }}>
-                R$ {totalPago.toFixed(2).replace(".", ",")}
-              </span>
+              <span style={{ color: corPago, fontWeight: 700, fontSize: "13px" }}>R$ {totalPago.toFixed(2).replace(".", ",")}</span>
             </div>
             {!isGasPovo && falta > 0.01 && (
               <div style={s.resumoLinha}>
                 <span style={{ color: VERMELHO, fontSize: "12px" }}>Falta cobrir</span>
-                <span style={{ color: VERMELHO, fontWeight: 700, fontSize: "12px" }}>
-                  R$ {falta.toFixed(2).replace(".", ",")}
-                </span>
+                <span style={{ color: VERMELHO, fontWeight: 700, fontSize: "12px" }}>R$ {falta.toFixed(2).replace(".", ",")}</span>
               </div>
             )}
             {temFiado && !valeNumero.trim() && (
-              <p style={{ fontSize: "12px", color: VERMELHO, margin: "4px 0 0" }}>
-                ⚠️ Informe o número da folha do fiado.
-              </p>
+              <p style={{ fontSize: "12px", color: VERMELHO, margin: "4px 0 0" }}>⚠️ Informe o número da folha do fiado.</p>
             )}
             <div style={{ ...s.resumoLinha, borderTop: `1px solid ${C.borda}`, marginTop: "6px", paddingTop: "6px" }}>
               <span style={{ fontSize: "15px", fontWeight: 700 }}>Total</span>
-              <span style={{ fontSize: "18px", fontWeight: 700, color: corPago }}>
-                R$ {totalPago.toFixed(2).replace(".", ",")}
-              </span>
+              <span style={{ fontSize: "18px", fontWeight: 700, color: corPago }}>R$ {totalPago.toFixed(2).replace(".", ",")}</span>
             </div>
           </div>
         </div>
@@ -395,11 +317,7 @@ export default function EtapaPagamento({
 
       <div style={s.rodape}>
         <button style={s.btnVoltar} onClick={onVoltar}>← Voltar</button>
-        <button
-          style={{ ...s.btnProximo, opacity: podeProximo ? 1 : 0.4 }}
-          disabled={!podeProximo}
-          onClick={confirmar}
-        >Revisar →</button>
+        <button style={{ ...s.btnProximo, opacity: podeProximo ? 1 : 0.4 }} disabled={!podeProximo} onClick={confirmar}>Revisar →</button>
       </div>
     </div>
   )
@@ -408,37 +326,29 @@ export default function EtapaPagamento({
 const s: Record<string, CSSProperties> = {
   pagina:    { padding: "0.75rem 1rem 1.5rem" },
   instrucao: { fontSize: "0.85rem", color: "#111111", fontWeight: 500, margin: "0 0 0.75rem" },
-
-  grade: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
+  grade:     { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
   fpCard: {
-    background: C.fundoCard, border: "1.5px solid #9CA3AF",
-    borderRadius: "12px", padding: "14px 8px",
+    background: C.fundoCard, border: "1.5px solid #9CA3AF", borderRadius: "12px", padding: "14px 8px",
     display: "flex", flexDirection: "column" as const, alignItems: "center",
     gap: "6px", cursor: "pointer", userSelect: "none", position: "relative",
   },
-  fpSel:   { border: `2.5px solid ${VERDE}`, background: "#f0f4eb" },
-  fpIcone: { fontSize: "22px" },
-  fpLabel: { fontSize: "13px", fontWeight: 600, color: "#111111", textAlign: "center" as const },
-  check: {
-    position: "absolute", top: "6px", right: "8px",
-    fontSize: "11px", fontWeight: 700, color: VERDE,
-  },
-
+  fpSel:    { border: `2.5px solid ${VERDE}`, background: "#f0f4eb" },
+  fpIcone:  { fontSize: "22px" },
+  fpLabel:  { fontSize: "13px", fontWeight: 600, color: "#111111", textAlign: "center" as const },
+  check:    { position: "absolute", top: "6px", right: "8px", fontSize: "11px", fontWeight: 700, color: VERDE },
   painelFormas: {
     marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px",
     border: `1.5px solid ${AMBER}`, borderRadius: "12px", padding: "12px",
   },
   formaBloco: {
-    background: "#F9FAFB", border: "1px solid #E5E7EB",
-    borderRadius: "10px", padding: "10px 12px",
-    display: "flex", flexDirection: "column", gap: "6px",
+    background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "10px",
+    padding: "10px 12px", display: "flex", flexDirection: "column", gap: "6px",
   },
   formaBlocoTitulo: { fontSize: "13px", fontWeight: 700, color: "#111111", margin: 0 },
-  formaLinha: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" },
+  formaLinha:       { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" },
   inputValor: {
-    width: "120px", flexShrink: 0,
-    padding: "8px 10px", border: "1.5px solid #374151", borderRadius: "8px",
-    fontSize: "15px", fontWeight: 600, color: "#111111",
+    width: "120px", flexShrink: 0, padding: "8px 10px", border: "1.5px solid #374151",
+    borderRadius: "8px", fontSize: "15px", fontWeight: 600, color: "#111111",
     background: "#fff", outline: "none", textAlign: "right" as const,
   },
   fiadoExtra: { display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" },
@@ -450,21 +360,14 @@ const s: Record<string, CSSProperties> = {
   input: {
     width: "100%", boxSizing: "border-box" as const, padding: "10px 12px",
     border: "1.5px solid #374151", borderRadius: "8px",
-    fontSize: "15px", fontWeight: 500, color: "#111111",
-    background: "#fff", outline: "none",
+    fontSize: "15px", fontWeight: 500, color: "#111111", background: "#fff", outline: "none",
   },
-  resumoBox: {
-    background: C.fundoCard, border: `1px solid ${C.borda}`,
-    borderRadius: "10px", padding: "10px 12px",
-    display: "flex", flexDirection: "column", gap: "4px",
-  },
+  resumoBox:   { background: C.fundoCard, border: `1px solid ${C.borda}`, borderRadius: "10px", padding: "10px 12px", display: "flex", flexDirection: "column", gap: "4px" },
   resumoLinha: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-
-  rodape:    { display: "flex", gap: "10px", marginTop: "16px" },
+  rodape:      { display: "flex", gap: "10px", marginTop: "16px" },
   btnVoltar: {
     flex: 1, background: "transparent", border: "1.5px solid #374151",
-    borderRadius: "12px", padding: "13px", fontSize: "15px",
-    color: "#111111", fontWeight: 600, cursor: "pointer",
+    borderRadius: "12px", padding: "13px", fontSize: "15px", color: "#111111", fontWeight: 600, cursor: "pointer",
   },
   btnProximo: {
     flex: 2, background: VERDE, color: "#F8FAFC", border: "none",
