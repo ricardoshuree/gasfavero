@@ -159,3 +159,4 @@ const s: Record<string, CSSProperties> = {
   sucessoSub:    { fontSize: "14px", color: "#6B7280", margin: 0 },
   btnNova: { marginTop: "1rem", background: VERMELHO, color: "#fff", border: "none", borderRadius: "12px", padding: "14px 32px", fontSize: "16px", fontWeight: 600, cursor: "pointer" },
 }
+

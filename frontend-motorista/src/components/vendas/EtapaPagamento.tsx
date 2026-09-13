@@ -57,13 +57,14 @@ interface Props {
   motoristaId: string
   pagamento: DadosPagamento | null
   totalSacola: number
+  sacola?: Array<{ titulo: string; quantidade: number; precoUnitario: string; comCasco: boolean; precoCascoAtual: string | null }>
   onPagamentoChange: (p: DadosPagamento) => void
   onVoltar: () => void
   onProximo: () => void
 }
 
 export default function EtapaPagamento({
-  token, motoristaId, pagamento, totalSacola, onPagamentoChange, onVoltar, onProximo,
+  token, motoristaId, pagamento, totalSacola, sacola = [], onPagamentoChange, onVoltar, onProximo,
 }: Props) {
   const [formasAtivas, setFormasAtivas] = useState<FormaId[]>(() => {
     if (!pagamento) return []
@@ -99,7 +100,7 @@ export default function EtapaPagamento({
     if (!temFiado || !motoristaId) return
     if (valeNumero) return
     request<{ numero: number | null }>(
-      `/api/v1/vendas/proximo-numero-vale?motorista_id=${motoristaId}`, { token }
+      `/api/v1/vendas/proximo-numero-vale/${motoristaId}`, { token }
     ).then(r => {
       if (r.numero != null) setValeNumero(String(r.numero))
     }).catch(() => {})
@@ -289,6 +290,29 @@ export default function EtapaPagamento({
             )
           })}
 
+          {sacola.length > 0 && (
+            <div style={s.itensSacola}>
+              <p style={s.itensTitulo}>Itens da sacola</p>
+              {sacola.map((i, idx) => {
+                const subtotalGas = Number(i.precoUnitario) * i.quantidade
+                const subtotalCasco = i.comCasco && i.precoCascoAtual ? Number(i.precoCascoAtual) * i.quantidade : 0
+                return (
+                  <div key={idx}>
+                    <div style={s.itemLinhaResumoPag}>
+                      <span>{i.quantidade}× {i.titulo}</span>
+                      <span>R$ {subtotalGas.toFixed(2).replace(".", ",")}</span>
+                    </div>
+                    {i.comCasco && subtotalCasco > 0 && (
+                      <div style={{ ...s.itemLinhaResumoPag, fontSize: "11px", color: "#92400e", paddingLeft: "10px" }}>
+                        <span>📦 Casco</span>
+                        <span>+R$ {subtotalCasco.toFixed(2).replace(".", ",")}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
           <div style={s.resumoBox}>
             <div style={s.resumoLinha}>
               <span style={{ color: VERDE, fontSize: "13px" }}>Sacola</span>
@@ -374,3 +398,5 @@ const s: Record<string, CSSProperties> = {
     borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 600, cursor: "pointer",
   },
 }
+
+
