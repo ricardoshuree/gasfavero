@@ -3,7 +3,121 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { CascosListarCascosEmAbertoData, CascosListarCascosEmAbertoResponse, CascosListarAguardandoConfirmacaoResponse, CascosListarHistoricoResponse, CascosCascosPorClienteData, CascosCascosPorClienteResponse, CascosCascosPorVendaData, CascosCascosPorVendaResponse, CascosReceberCascoData, CascosReceberCascoResponse, CascosConfirmarDevolucaoCascoData, CascosConfirmarDevolucaoCascoResponse, CascosDesfazerRecebimentoCascoData, CascosDesfazerRecebimentoCascoResponse, CascosDesfazerConfirmacaoCascoData, CascosDesfazerConfirmacaoCascoResponse, ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoReadDemandasHojeResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoCancelarDemandaVendaData, DelegacaoCancelarDemandaVendaResponse, DelegacaoReatribuirDemandaVendaData, DelegacaoReatribuirDemandaVendaResponse, DelegacaoConcluirDemandaVendaData, DelegacaoConcluirDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, DelegacaoAtualizarDisponibilidadeMotoristaData, DelegacaoAtualizarDisponibilidadeMotoristaResponse, DelegacaoReadDisponibilidadeMotoristasResponse, DelegacaoAtualizarFcmTokenMotoristaData, DelegacaoAtualizarFcmTokenMotoristaResponse, FechamentoReadStatusAberturaData, FechamentoReadStatusAberturaResponse, FechamentoReadAberturaProdutosData, FechamentoReadAberturaProdutosResponse, FechamentoCriarAberturaData, FechamentoCriarAberturaResponse, FechamentoEditarAberturaData, FechamentoEditarAberturaResponse, FechamentoVerificarSenhaGerenteData, FechamentoVerificarSenhaGerenteResponse, FechamentoReadResumoFechamentoData, FechamentoReadResumoFechamentoResponse, FechamentoFecharDiaData, FechamentoFecharDiaResponse, FechamentoReadDashboardData, FechamentoReadDashboardResponse, GasPovoReadRecebimentoGasPovoResponse, GasPovoMarcarGasPovoRecebidoData, GasPovoMarcarGasPovoRecebidoResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValeGasReadBlocosValeGasResponse, ValeGasCreateBlocoValeGasData, ValeGasCreateBlocoValeGasResponse, ValeGasBuscarClienteValeGasData, ValeGasBuscarClienteValeGasResponse, ValeGasValidarNumeroValeGasData, ValeGasValidarNumeroValeGasResponse, ValeGasReadRecebimentoResumoResponse, ValeGasReadFolhasBlocoData, ValeGasReadFolhasBlocoResponse, ValeGasMarcarFolhaRecebidaData, ValeGasMarcarFolhaRecebidaResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadClientesComFiadoResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasBaixarPagamentoMixData, VendasBaixarPagamentoMixResponse, VendasEstornarPagamentoMixData, VendasEstornarPagamentoMixResponse, VendasEstornarRecebimentoLegadoData, VendasEstornarRecebimentoLegadoResponse, VendasEditarVendaData, VendasEditarVendaResponse, VendasCancelarVendaData, VendasCancelarVendaResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadRankingSemanaResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+import type { AvisosMapaListAvisosResponse, AvisosMapaCreateAvisoData, AvisosMapaCreateAvisoResponse, AvisosMapaListAvisosAtivosResponse, AvisosMapaUpdateAvisoData, AvisosMapaUpdateAvisoResponse, AvisosMapaDeleteAvisoData, AvisosMapaDeleteAvisoResponse, AvisosMapaReordenarAvisosData, AvisosMapaReordenarAvisosResponse, CascosListarCascosEmAbertoData, CascosListarCascosEmAbertoResponse, CascosListarAguardandoConfirmacaoResponse, CascosListarHistoricoResponse, CascosCascosPorClienteData, CascosCascosPorClienteResponse, CascosCascosPorVendaData, CascosCascosPorVendaResponse, CascosReceberCascoData, CascosReceberCascoResponse, CascosConfirmarDevolucaoCascoData, CascosConfirmarDevolucaoCascoResponse, CascosDesfazerRecebimentoCascoData, CascosDesfazerRecebimentoCascoResponse, CascosDesfazerConfirmacaoCascoData, CascosDesfazerConfirmacaoCascoResponse, ClientesReadClientesData, ClientesReadClientesResponse, ClientesCreateClienteData, ClientesCreateClienteResponse, ClientesReadClienteData, ClientesReadClienteResponse, ClientesUpdateClienteData, ClientesUpdateClienteResponse, ClientesTrocarEnderecoData, ClientesTrocarEnderecoResponse, DelegacaoReadDemandasVendaData, DelegacaoReadDemandasVendaResponse, DelegacaoCreateDemandaVendaData, DelegacaoCreateDemandaVendaResponse, DelegacaoReadDemandasHojeResponse, DelegacaoAceitarDemandaVendaData, DelegacaoAceitarDemandaVendaResponse, DelegacaoRecusarDemandaVendaData, DelegacaoRecusarDemandaVendaResponse, DelegacaoCancelarDemandaVendaData, DelegacaoCancelarDemandaVendaResponse, DelegacaoReatribuirDemandaVendaData, DelegacaoReatribuirDemandaVendaResponse, DelegacaoConcluirDemandaVendaData, DelegacaoConcluirDemandaVendaResponse, DelegacaoUpsertLocalizacaoMotoristaData, DelegacaoUpsertLocalizacaoMotoristaResponse, DelegacaoReadLocalizacoesMotoristasResponse, DelegacaoAtualizarDisponibilidadeMotoristaData, DelegacaoAtualizarDisponibilidadeMotoristaResponse, DelegacaoReadDisponibilidadeMotoristasResponse, DelegacaoAtualizarFcmTokenMotoristaData, DelegacaoAtualizarFcmTokenMotoristaResponse, FechamentoReadStatusAberturaData, FechamentoReadStatusAberturaResponse, FechamentoReadAberturaProdutosData, FechamentoReadAberturaProdutosResponse, FechamentoCriarAberturaData, FechamentoCriarAberturaResponse, FechamentoEditarAberturaData, FechamentoEditarAberturaResponse, FechamentoVerificarSenhaGerenteData, FechamentoVerificarSenhaGerenteResponse, FechamentoReadResumoFechamentoData, FechamentoReadResumoFechamentoResponse, FechamentoFecharDiaData, FechamentoFecharDiaResponse, FechamentoReadDashboardData, FechamentoReadDashboardResponse, GasPovoReadRecebimentoGasPovoResponse, GasPovoMarcarGasPovoRecebidoData, GasPovoMarcarGasPovoRecebidoResponse, GeografiaReadBairrosResponse, GeografiaReadLogradourosReferenciaResponse, GeografiaReadRuasData, GeografiaReadRuasResponse, GeografiaGeocodificarEnderecoData, GeografiaGeocodificarEnderecoResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, ModulesReadModulesResponse, ModulesUpdateModuleData, ModulesUpdateModuleResponse, ModulesReadModulePermissionsData, ModulesReadModulePermissionsResponse, ModulesUpdateModulePermissionsData, ModulesUpdateModulePermissionsResponse, PrecosReadPrecosResponse, PrecosSetPrecoData, PrecosSetPrecoResponse, PrivateCreateUserData, PrivateCreateUserResponse, RolesReadRolesResponse, RolesCreateRoleData, RolesCreateRoleResponse, RolesUpdateRoleData, RolesUpdateRoleResponse, RolesDeleteRoleData, RolesDeleteRoleResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersReadUserPermissionsResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersUpdateUserRolesData, UsersUpdateUserRolesResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsRbacCheckData, UtilsRbacCheckResponse, ValeGasReadBlocosValeGasResponse, ValeGasCreateBlocoValeGasData, ValeGasCreateBlocoValeGasResponse, ValeGasBuscarClienteValeGasData, ValeGasBuscarClienteValeGasResponse, ValeGasValidarNumeroValeGasData, ValeGasValidarNumeroValeGasResponse, ValeGasReadRecebimentoResumoResponse, ValeGasReadFolhasBlocoData, ValeGasReadFolhasBlocoResponse, ValeGasMarcarFolhaRecebidaData, ValeGasMarcarFolhaRecebidaResponse, ValesReadBlocosValeResponse, ValesCreateBlocoValeData, ValesCreateBlocoValeResponse, VendasReadVendasData, VendasReadVendasResponse, VendasCreateVendaData, VendasCreateVendaResponse, VendasReadUltimoEnderecoClienteData, VendasReadUltimoEnderecoClienteResponse, VendasReadHistoricoVendasClienteData, VendasReadHistoricoVendasClienteResponse, VendasReadProximoNumeroValeData, VendasReadProximoNumeroValeResponse, VendasReadClientesComFiadoResponse, VendasReadResumoRecebimentoValeResponse, VendasReadValesRecebimentoData, VendasReadValesRecebimentoResponse, VendasMarcarVendaPagoData, VendasMarcarVendaPagoResponse, VendasBaixarValeData, VendasBaixarValeResponse, VendasBaixarPagamentoMixData, VendasBaixarPagamentoMixResponse, VendasEstornarPagamentoMixData, VendasEstornarPagamentoMixResponse, VendasEstornarRecebimentoLegadoData, VendasEstornarRecebimentoLegadoResponse, VendasEditarVendaData, VendasEditarVendaResponse, VendasCancelarVendaData, VendasCancelarVendaResponse, VendasReadLivroAnosDisponiveisResponse, VendasReadLivroResumoData, VendasReadLivroResumoResponse, VendasReadLivroVendasData, VendasReadLivroVendasResponse, VendasReadRankingSemanaResponse, VendasReadInadimplentesAnosDisponiveisResponse, VendasReadInadimplentesMotoristasResponse, VendasReadInadimplentesResumoData, VendasReadInadimplentesResumoResponse, VendasReadInadimplentesData, VendasReadInadimplentesResponse, VendasReadVendaData, VendasReadVendaResponse } from './types.gen';
+
+export class AvisosMapaService {
+    /**
+     * List Avisos
+     * Lista todos os avisos ordenados por `ordem` asc, `created_at` asc.
+     * @returns AvisosMapaPublic Successful Response
+     * @throws ApiError
+     */
+    public static listAvisos(): CancelablePromise<AvisosMapaListAvisosResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/avisos-mapa/'
+        });
+    }
+    
+    /**
+     * Create Aviso
+     * Cria um novo aviso. A ordem é definida pelo cliente (drag-and-drop no frontend).
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns AvisoMapaPublic Successful Response
+     * @throws ApiError
+     */
+    public static createAviso(data: AvisosMapaCreateAvisoData): CancelablePromise<AvisosMapaCreateAvisoResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/avisos-mapa/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Avisos Ativos
+     * Lista apenas avisos ativos — consumido pelo player no PainelLateral (sem autenticação de permissão específica, pois roda na TV).
+     * @returns AvisosMapaPublic Successful Response
+     * @throws ApiError
+     */
+    public static listAvisosAtivos(): CancelablePromise<AvisosMapaListAvisosAtivosResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/avisos-mapa/ativos'
+        });
+    }
+    
+    /**
+     * Update Aviso
+     * Atualiza campos de um aviso existente. Campos não enviados são ignorados.
+     * @param data The data for the request.
+     * @param data.avisoId
+     * @param data.requestBody
+     * @returns AvisoMapaPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateAviso(data: AvisosMapaUpdateAvisoData): CancelablePromise<AvisosMapaUpdateAvisoResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/avisos-mapa/{aviso_id}',
+            path: {
+                aviso_id: data.avisoId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Aviso
+     * Remove permanentemente um aviso.
+     * @param data The data for the request.
+     * @param data.avisoId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deleteAviso(data: AvisosMapaDeleteAvisoData): CancelablePromise<AvisosMapaDeleteAvisoResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/avisos-mapa/{aviso_id}',
+            path: {
+                aviso_id: data.avisoId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Reordenar Avisos
+     * Recebe lista de IDs na nova ordem e atualiza o campo `ordem` de cada aviso.
+     * O frontend envia os IDs na ordem visual do drag-and-drop.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns AvisosMapaPublic Successful Response
+     * @throws ApiError
+     */
+    public static reordenarAvisos(data: AvisosMapaReordenarAvisosData): CancelablePromise<AvisosMapaReordenarAvisosResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/avisos-mapa/reordenar',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class CascosService {
     /**

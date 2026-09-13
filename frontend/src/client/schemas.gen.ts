@@ -15,6 +15,216 @@ export const AnosDisponiveisPublicSchema = {
     title: 'AnosDisponiveisPublic'
 } as const;
 
+export const AvisoMapaCreateSchema = {
+    properties: {
+        texto: {
+            type: 'string',
+            maxLength: 500,
+            minLength: 1,
+            title: 'Texto'
+        },
+        animacao_interna: {
+            type: 'string',
+            maxLength: 30,
+            title: 'Animacao Interna',
+            default: 'fade_up'
+        },
+        transicao_saida: {
+            type: 'string',
+            maxLength: 30,
+            title: 'Transicao Saida',
+            default: 'fade'
+        },
+        duracao_segundos: {
+            type: 'integer',
+            maximum: 60,
+            minimum: 3,
+            title: 'Duracao Segundos',
+            default: 6
+        },
+        cor_fundo: {
+            type: 'string',
+            maxLength: 7,
+            title: 'Cor Fundo',
+            default: '#1e293b'
+        },
+        ordem: {
+            type: 'integer',
+            title: 'Ordem',
+            default: 0
+        },
+        ativo: {
+            type: 'boolean',
+            title: 'Ativo',
+            default: true
+        }
+    },
+    type: 'object',
+    required: ['texto'],
+    title: 'AvisoMapaCreate'
+} as const;
+
+export const AvisoMapaPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        texto: {
+            type: 'string',
+            title: 'Texto'
+        },
+        animacao_interna: {
+            type: 'string',
+            title: 'Animacao Interna'
+        },
+        transicao_saida: {
+            type: 'string',
+            title: 'Transicao Saida'
+        },
+        duracao_segundos: {
+            type: 'integer',
+            title: 'Duracao Segundos'
+        },
+        cor_fundo: {
+            type: 'string',
+            title: 'Cor Fundo'
+        },
+        ordem: {
+            type: 'integer',
+            title: 'Ordem'
+        },
+        ativo: {
+            type: 'boolean',
+            title: 'Ativo'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'texto', 'animacao_interna', 'transicao_saida', 'duracao_segundos', 'cor_fundo', 'ordem', 'ativo', 'created_at', 'updated_at'],
+    title: 'AvisoMapaPublic'
+} as const;
+
+export const AvisoMapaUpdateSchema = {
+    properties: {
+        texto: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Texto'
+        },
+        animacao_interna: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 30
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Animacao Interna'
+        },
+        transicao_saida: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 30
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Transicao Saida'
+        },
+        duracao_segundos: {
+            anyOf: [
+                {
+                    type: 'integer',
+                    maximum: 60,
+                    minimum: 3
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Duracao Segundos'
+        },
+        cor_fundo: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 7
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Cor Fundo'
+        },
+        ordem: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Ordem'
+        },
+        ativo: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Ativo'
+        }
+    },
+    type: 'object',
+    title: 'AvisoMapaUpdate'
+} as const;
+
+export const AvisosMapaPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/AvisoMapaPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'AvisosMapaPublic'
+} as const;
+
 export const BairroPublicSchema = {
     properties: {
         id: {

@@ -1,13 +1,11 @@
-// [mcp-local harness] feature: letreiro-multiline | plano: 73842985 | 2026-09-11 20:58:38
+// [mcp-local harness] feature: avisos-mapa-service | plano: 88625901 | 2026-09-13 08:03:08
+// Remove re-exportação AvisoMapaPublic e import OpenAPI. AvisoMapaPublic vem direto do client gerado.
 // Letreiro: white-space pre (mantém \n, bloco desliza junto). Demais: pre-wrap.
-// [mcp-local harness] feature: letreiro-multiline | plano: 73842985
-// Letreiro aceita múltiplas linhas — bloco desliza junto como ticker (white-space: pre)
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { DelegacaoService, type DemandaVendaPublic, VendasService } from "@/client"
-import { OpenAPI } from "@/client/core/OpenAPI"
+import { AvisosMapaService, type AvisoMapaPublic, DelegacaoService, type DemandaVendaPublic, VendasService } from "@/client"
 
 const POLLING_RANKING_MS = 60_000
 const POLLING_CHAMADAS_MS = 12_000
@@ -31,28 +29,6 @@ function formatHoraBR(iso: string): string {
 
 function formatEnderecoCurto(demanda: DemandaVendaPublic): string {
   return `${demanda.endereco.rua_nome}, ${demanda.endereco.numero}`
-}
-
-export type AvisoMapaPublic = {
-  id: string
-  texto: string
-  animacao_interna: string
-  transicao_saida: string
-  duracao_segundos: number
-  cor_fundo: string
-  ordem: number
-  ativo: boolean
-  updated_at: string
-}
-
-async function fetchAvisosAtivos(): Promise<{ data: AvisoMapaPublic[]; count: number }> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
-  const base = OpenAPI.BASE ?? ""
-  const res = await fetch(`${base}/api/v1/avisos-mapa/ativos`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) return { data: [], count: 0 }
-  return res.json()
 }
 
 const TRANS_CSS: Record<string, string> = {
@@ -92,7 +68,7 @@ function injetarKeyframes() {
 function PlayerAvisos() {
   const { data } = useQuery({
     queryKey: ["avisosMapaAtivos"],
-    queryFn: fetchAvisosAtivos,
+    queryFn: () => AvisosMapaService.listAvisosAtivos(),
     refetchInterval: POLLING_AVISOS_MS,
   })
 
@@ -199,8 +175,6 @@ function PlayerAvisos() {
           color: "#f1f5f9",
           textShadow: "0 1px 3px rgba(0,0,0,0.4)",
           animation: msgAnim || undefined,
-          // Letreiro: "pre" — mantém quebras de linha, bloco inteiro desliza como ticker
-          // Demais modos: "pre-wrap" — mantém quebras com wrap
           whiteSpace: display.letreiro ? "pre" : "pre-wrap",
         }}
       >

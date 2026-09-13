@@ -4,6 +4,44 @@ export type AnosDisponiveisPublic = {
     anos: Array<(number)>;
 };
 
+export type AvisoMapaCreate = {
+    texto: string;
+    animacao_interna?: string;
+    transicao_saida?: string;
+    duracao_segundos?: number;
+    cor_fundo?: string;
+    ordem?: number;
+    ativo?: boolean;
+};
+
+export type AvisoMapaPublic = {
+    id: string;
+    texto: string;
+    animacao_interna: string;
+    transicao_saida: string;
+    duracao_segundos: number;
+    cor_fundo: string;
+    ordem: number;
+    ativo: boolean;
+    created_at: string;
+    updated_at: string;
+};
+
+export type AvisoMapaUpdate = {
+    texto?: (string | null);
+    animacao_interna?: (string | null);
+    transicao_saida?: (string | null);
+    duracao_segundos?: (number | null);
+    cor_fundo?: (string | null);
+    ordem?: (number | null);
+    ativo?: (boolean | null);
+};
+
+export type AvisosMapaPublic = {
+    data: Array<AvisoMapaPublic>;
+    count: number;
+};
+
 export type BairroPublic = {
     id: string;
     nome: string;
@@ -735,6 +773,35 @@ export type VendasPublic = {
     data: Array<VendaPublic>;
     count: number;
 };
+
+export type AvisosMapaListAvisosResponse = (AvisosMapaPublic);
+
+export type AvisosMapaCreateAvisoData = {
+    requestBody: AvisoMapaCreate;
+};
+
+export type AvisosMapaCreateAvisoResponse = (AvisoMapaPublic);
+
+export type AvisosMapaListAvisosAtivosResponse = (AvisosMapaPublic);
+
+export type AvisosMapaUpdateAvisoData = {
+    avisoId: string;
+    requestBody: AvisoMapaUpdate;
+};
+
+export type AvisosMapaUpdateAvisoResponse = (AvisoMapaPublic);
+
+export type AvisosMapaDeleteAvisoData = {
+    avisoId: string;
+};
+
+export type AvisosMapaDeleteAvisoResponse = (unknown);
+
+export type AvisosMapaReordenarAvisosData = {
+    requestBody: Array<(string)>;
+};
+
+export type AvisosMapaReordenarAvisosResponse = (AvisosMapaPublic);
 
 export type CascosListarCascosEmAbertoData = {
     motoristaId?: (string | null);

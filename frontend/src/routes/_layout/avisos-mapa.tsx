@@ -1,17 +1,17 @@
-// [mcp-local harness] feature: letreiro-multiline | plano: 73842985 | 2026-09-11 20:59:55
+// [mcp-local harness] feature: avisos-mapa-service | plano: e0bc5e0b | 2026-09-13 08:02:03
+// Fix: toLocal simplificado com spread operator (...a, dirty: false) — elimina necessidade de listar todos os campos manualmente. Remove import duplicado AvisoMapaPublicLocal.
 // v4: letreiro white-space pre (multi-linha), remove aviso amarelo, Enter funciona em todos os modos
 // Página /avisos-mapa — configuração dos slides de avisos exibidos na TV
-// v4: letreiro multi-linha (white-space: pre), Enter quebra linha em todos os modos
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { Eye, Plus, Save, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { UsersService } from "@/client"
-import { OpenAPI } from "@/client/core/OpenAPI"
-import { type AvisoMapaPublic } from "@/components/Mapa/PainelLateral"
+import { AvisosMapaService, type AvisoMapaPublic, UsersService } from "@/client"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+
+type SlideLocal = AvisoMapaPublic & { dirty: boolean }
 
 const MODULE = "mapa"
 
@@ -26,36 +26,6 @@ export const Route = createFileRoute("/_layout/avisos-mapa")({
   },
   head: () => ({ meta: [{ title: "Avisos do Mapa - GasFavero" }] }),
 })
-
-function getToken(): string | null {
-  try { return localStorage.getItem("access_token") } catch { return null }
-}
-function apiBase(): string { return OpenAPI.BASE ?? "" }
-function authHeaders(): HeadersInit {
-  return getToken()
-    ? { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" }
-}
-
-async function fetchAvisosTodos(): Promise<{ data: AvisoMapaPublic[]; count: number }> {
-  const res = await fetch(`${apiBase()}/api/v1/avisos-mapa/`, { headers: authHeaders() })
-  if (!res.ok) return { data: [], count: 0 }
-  return res.json()
-}
-async function criarAviso(body: Partial<AvisoMapaPublic>): Promise<AvisoMapaPublic> {
-  const res = await fetch(`${apiBase()}/api/v1/avisos-mapa/`, { method: "POST", headers: authHeaders(), body: JSON.stringify(body) })
-  return res.json()
-}
-async function atualizarAviso(id: string, patch: Partial<AvisoMapaPublic>): Promise<AvisoMapaPublic> {
-  const res = await fetch(`${apiBase()}/api/v1/avisos-mapa/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(patch) })
-  return res.json()
-}
-async function removerAviso(id: string): Promise<void> {
-  await fetch(`${apiBase()}/api/v1/avisos-mapa/${id}`, { method: "DELETE", headers: authHeaders() })
-}
-async function reordenarAvisos(ids: string[]): Promise<void> {
-  await fetch(`${apiBase()}/api/v1/avisos-mapa/reordenar`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(ids) })
-}
 
 const ANIMS = [
   { value: "estatico",    label: "Estático" },
@@ -95,26 +65,12 @@ function injetarKeyframes() {
   document.head.appendChild(s)
 }
 
-type SlideLocal = {
-  id: string
-  texto: string
-  animacao_interna: string
-  transicao_saida: string
-  duracao_segundos: number
-  cor_fundo: string
-  ativo: boolean
-  ordem: number
-  dirty: boolean
-}
-
 function toLocal(a: AvisoMapaPublic): SlideLocal {
-  return { id: a.id, texto: a.texto, animacao_interna: a.animacao_interna, transicao_saida: a.transicao_saida, duracao_segundos: a.duracao_segundos, cor_fundo: a.cor_fundo, ativo: a.ativo, ordem: a.ordem, dirty: false }
+  return { ...a, dirty: false }
 }
 
 // ---------------------------------------------------------------------------
 // Preview — fiel ao que aparece na TV
-// Letreiro: white-space "pre" — quebras mantidas, bloco desliza junto
-// Demais:   white-space "pre-wrap" — quebras com wrap
 // ---------------------------------------------------------------------------
 function PreviewPlayer({ slide, idxLabel }: { slide: SlideLocal | null; idxLabel: string }) {
   useEffect(() => { injetarKeyframes() }, [])
@@ -249,7 +205,10 @@ function SlideCard({
 
 function AvisosMapaPage() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ["avisosMapaTodos"], queryFn: fetchAvisosTodos })
+  const { data, isLoading } = useQuery({
+    queryKey: ["avisosMapaTodos"],
+    queryFn: () => AvisosMapaService.listAvisos(),
+  })
 
   const [slides, setSlides] = useState<SlideLocal[]>([])
   const [idxAtivo, setIdxAtivo] = useState(0)
@@ -272,17 +231,27 @@ function AvisosMapaPage() {
   }
 
   const criar = useMutation({
-    mutationFn: () => criarAviso({ texto: "Novo aviso", animacao_interna: "fade_up", transicao_saida: "fade", duracao_segundos: 6, cor_fundo: "#1e293b", ordem: slides.length, ativo: true }),
+    mutationFn: () => AvisosMapaService.createAviso({
+      requestBody: {
+        texto: "Novo aviso",
+        animacao_interna: "fade_up",
+        transicao_saida: "fade",
+        duracao_segundos: 6,
+        cor_fundo: "#1e293b",
+        ordem: slides.length,
+        ativo: true,
+      },
+    }),
     onSuccess: (novo) => { setSlides((prev) => [...prev, toLocal(novo)]); setIdxAtivo(slides.length); invalidate() },
   })
 
   const remover = useMutation({
-    mutationFn: (id: string) => removerAviso(id),
+    mutationFn: (id: string) => AvisosMapaService.deleteAviso({ avisoId: id }),
     onSuccess: (_, id) => { setSlides((prev) => prev.filter((s) => s.id !== id)); setIdxAtivo(0); invalidate() },
   })
 
   const reordenar = useMutation({
-    mutationFn: (ids: string[]) => reordenarAvisos(ids),
+    mutationFn: (ids: string[]) => AvisosMapaService.reordenarAvisos({ requestBody: ids }),
     onSuccess: invalidate,
   })
 
@@ -297,7 +266,17 @@ function AvisosMapaPage() {
     if (!slide) return
     setSalvandoId(id)
     try {
-      await atualizarAviso(id, { texto: slide.texto, animacao_interna: slide.animacao_interna, transicao_saida: slide.transicao_saida, duracao_segundos: slide.duracao_segundos, cor_fundo: slide.cor_fundo, ativo: slide.ativo })
+      await AvisosMapaService.updateAviso({
+        avisoId: id,
+        requestBody: {
+          texto: slide.texto,
+          animacao_interna: slide.animacao_interna,
+          transicao_saida: slide.transicao_saida,
+          duracao_segundos: slide.duracao_segundos,
+          cor_fundo: slide.cor_fundo,
+          ativo: slide.ativo,
+        },
+      })
       setSlides((prev) => prev.map((s) => s.id === id ? { ...s, dirty: false } : s))
       invalidate()
     } finally { setSalvandoId(null) }
